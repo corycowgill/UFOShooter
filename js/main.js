@@ -462,4 +462,9 @@ function gameOver() {
 }
 
 // ===== START =====
-window.addEventListener('DOMContentLoaded', init);
+// Module may load after DOMContentLoaded has already fired
+if (document.readyState === 'loading') {
+  window.addEventListener('DOMContentLoaded', init);
+} else {
+  init();
+}
