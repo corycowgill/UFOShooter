@@ -113,6 +113,9 @@ canvas#gameCanvas { display: block; width: 100vw; height: 100vh; }
   background: #0f0; color: #000;
   box-shadow: 0 0 20px #0f0, 0 0 40px #0f0;
 }
+.level-btn { width: 350px; text-align: center; }
+.level-btn:hover { background: #0f0; color: #000; }
+#btn-back-menu:hover { background: #f44; color: #000; box-shadow: 0 0 20px #f44; }
 #menu-canvas {
   position: absolute; top: 0; left: 0; width: 100%; height: 100%;
   z-index: -1;
@@ -248,7 +251,16 @@ canvas#gameCanvas { display: block; width: 100vw; height: 100vh; }
   <h1>UFO INVASION</h1>
   <div class="subtitle">DEFEND CHICAGO FROM THE ALIEN HORDE</div>
   <button class="menu-btn" id="btn-start">START GAME</button>
+  <button class="menu-btn" id="btn-select-level">SELECT LEVEL</button>
   <button class="menu-btn" id="btn-help">HELP / BESTIARY</button>
+</div>
+
+<div id="level-select" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,5,0,0.95);z-index:150;display:none;flex-direction:column;align-items:center;justify-content:center;">
+  <h2 style="font-size:36px;color:#0f0;text-shadow:0 0 20px #0f0;margin-bottom:30px;">SELECT LOCATION</h2>
+  <button class="menu-btn level-btn" data-level="0">1. DOWNTOWN CHICAGO</button>
+  <button class="menu-btn level-btn" data-level="1">2. LINCOLN PARK ZOO</button>
+  <button class="menu-btn level-btn" data-level="2">3. RAVENSWOOD</button>
+  <button class="menu-btn" id="btn-back-menu" style="margin-top:30px;border-color:#f44;color:#f44;">BACK</button>
 </div>
 
 <div id="game-over">

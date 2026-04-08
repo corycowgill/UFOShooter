@@ -23,6 +23,7 @@ let scene, camera, renderer;
 let controls, audio, particles, weapons, waveManager, player, hud, helpGuide;
 let currentLevelIndex = 0;
 let currentLevelData = null;
+let selectedStartLevel = 0;
 let clock;
 let menuScene, menuCamera, menuRenderer, menuUfo;
 
@@ -135,12 +136,31 @@ function initMenu() {
   menuScene.add(ground);
 }
 
+function startGameAtLevel(levelIdx) {
+  selectedStartLevel = levelIdx;
+  startGame();
+}
+
 function setupEventListeners() {
   // Start button
   document.getElementById('btn-start').addEventListener('click', startGame);
   document.getElementById('btn-help').addEventListener('click', () => helpGuide.open());
   document.getElementById('btn-restart').addEventListener('click', startGame);
   document.getElementById('btn-menu').addEventListener('click', returnToMenu);
+
+  // Level select
+  document.getElementById('btn-select-level').addEventListener('click', () => {
+    document.getElementById('level-select').style.display = 'flex';
+  });
+  document.getElementById('btn-back-menu').addEventListener('click', () => {
+    document.getElementById('level-select').style.display = 'none';
+  });
+  document.querySelectorAll('.level-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.getElementById('level-select').style.display = 'none';
+      startGameAtLevel(parseInt(btn.dataset.level));
+    });
+  });
 
   // Pointer lock
   document.getElementById('gameCanvas').addEventListener('click', () => {
@@ -208,7 +228,7 @@ function startGame() {
 
   // Reset state
   state = GameState.PLAYING;
-  currentLevelIndex = 0;
+  currentLevelIndex = selectedStartLevel;
 
   // Hide menus
   document.getElementById('main-menu').style.display = 'none';
@@ -237,8 +257,8 @@ function startGame() {
   // Wave manager
   waveManager = new WaveManager(scene, particles, audio);
 
-  // Load first level
-  loadLevel(0);
+  // Load selected level
+  loadLevel(currentLevelIndex);
 
   // Start music
   audio.startMusic();
@@ -284,8 +304,10 @@ function loadLevel(index) {
 
 function returnToMenu() {
   state = GameState.MENU;
+  selectedStartLevel = 0;
   document.getElementById('main-menu').style.display = 'flex';
   document.getElementById('game-over').style.display = 'none';
+  document.getElementById('level-select').style.display = 'none';
   document.getElementById('hud').style.display = 'none';
   document.getElementById('crosshair').style.display = 'none';
   document.getElementById('weapon-model').style.display = 'none';
@@ -403,7 +425,7 @@ function animate() {
 
   // Check enemy collisions with player
   for (const enemy of waveManager.enemies) {
-    const result = enemy.checkPlayerCollision(camera.position);
+    const result = enemy.checkPlayerCollision(camera.position, delta);
     if (result) {
       player.takeDamage(result.damage, audio);
       if (result.type === 'explosion') {

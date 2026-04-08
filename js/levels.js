@@ -49,7 +49,7 @@ function makeStreetLight(x, z) {
   );
   fixture.position.set(0, 5, 0);
   group.add(fixture);
-  const light = new THREE.PointLight(0xffdd88, 0.8, 15);
+  const light = new THREE.PointLight(0xffdd88, 2.0, 25);
   light.position.set(0, 4.9, 0);
   group.add(light);
   group.position.set(x, 0, z);
@@ -67,10 +67,10 @@ function addGround(group, size, color = 0x333333) {
 }
 
 function addSky(scene) {
-  // Dark invasion sky
+  // Twilight invasion sky - brighter so you can see
   const skyGeo = new THREE.SphereGeometry(500, 32, 32);
   const skyMat = new THREE.MeshBasicMaterial({
-    color: 0x0a0a1a,
+    color: 0x1a1a3a,
     side: THREE.BackSide
   });
   const sky = new THREE.Mesh(skyGeo, skyMat);
@@ -80,23 +80,29 @@ function addSky(scene) {
   const ufoGroup = new THREE.Group();
   const ufoBody = new THREE.Mesh(
     new THREE.CylinderGeometry(8, 12, 2, 16),
-    new THREE.MeshPhongMaterial({ color: 0x334455, emissive: 0x112233 })
+    new THREE.MeshPhongMaterial({ color: 0x445566, emissive: 0x223344 })
   );
   ufoGroup.add(ufoBody);
   const ufoTop = new THREE.Mesh(
     new THREE.SphereGeometry(5, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2),
-    new THREE.MeshPhongMaterial({ color: 0x445566, emissive: 0x112233 })
+    new THREE.MeshPhongMaterial({ color: 0x556677, emissive: 0x334455 })
   );
   ufoTop.position.y = 1;
   ufoGroup.add(ufoTop);
   // Lights under UFO
-  const ufoLight = new THREE.PointLight(0x00ff88, 2, 100);
+  const ufoLight = new THREE.PointLight(0x00ff88, 3, 150);
   ufoLight.position.y = -2;
   ufoGroup.add(ufoLight);
+  // Tractor beam cone
+  const beamGeo = new THREE.CylinderGeometry(1, 15, 80, 16, 1, true);
+  const beamMat = new THREE.MeshBasicMaterial({ color: 0x00ff88, transparent: true, opacity: 0.04, side: THREE.DoubleSide });
+  const beam = new THREE.Mesh(beamGeo, beamMat);
+  beam.position.y = -42;
+  ufoGroup.add(beam);
   for (let i = 0; i < 8; i++) {
     const angle = (i / 8) * Math.PI * 2;
     const light = new THREE.Mesh(
-      new THREE.SphereGeometry(0.3, 6, 6),
+      new THREE.SphereGeometry(0.4, 6, 6),
       new THREE.MeshBasicMaterial({ color: 0x00ff88 })
     );
     light.position.set(Math.cos(angle) * 10, -1, Math.sin(angle) * 10);
@@ -105,8 +111,8 @@ function addSky(scene) {
   ufoGroup.position.set(0, 80, -30);
   scene.add(ufoGroup);
 
-  // Eerie fog
-  scene.fog = new THREE.FogExp2(0x0a0a1a, 0.008);
+  // Light fog - much less dense
+  scene.fog = new THREE.FogExp2(0x1a1a3a, 0.003);
 
   return ufoGroup;
 }
@@ -124,11 +130,14 @@ function buildDowntownChicago(scene) {
   addGround(group, 100, 0x2a2a2a);
   const ufo = addSky(scene);
 
-  // Ambient
-  scene.add(new THREE.AmbientLight(0x223344, 0.4));
-  const dirLight = new THREE.DirectionalLight(0x8888ff, 0.3);
+  // Ambient - bright enough to see the city
+  scene.add(new THREE.AmbientLight(0x6677aa, 1.2));
+  const dirLight = new THREE.DirectionalLight(0xaabbff, 0.8);
   dirLight.position.set(10, 30, 10);
   scene.add(dirLight);
+  // Extra fill light from below (city glow)
+  const fillLight = new THREE.HemisphereLight(0x4466aa, 0x222244, 0.6);
+  scene.add(fillLight);
 
   // === Willis Tower (Sears Tower) - tall dark building ===
   const willis = makeBox(8, 45, 8, 0x222222, -30, 0, -40);
@@ -271,10 +280,12 @@ function buildLincolnParkZoo(scene) {
   addGround(group, 100, 0x1a3311);
   const ufo = addSky(scene);
 
-  scene.add(new THREE.AmbientLight(0x223322, 0.5));
-  const dirLight = new THREE.DirectionalLight(0x88ff88, 0.2);
+  scene.add(new THREE.AmbientLight(0x557755, 1.2));
+  const dirLight = new THREE.DirectionalLight(0xaaffaa, 0.8);
   dirLight.position.set(-10, 20, 10);
   scene.add(dirLight);
+  const fillLight = new THREE.HemisphereLight(0x446644, 0x223322, 0.6);
+  scene.add(fillLight);
 
   // === Zoo Entrance Gate ===
   const gateLeft = makeBox(1, 6, 1, 0x885533, -5, 0, 50);
@@ -394,10 +405,12 @@ function buildRavenswood(scene) {
   addGround(group, 100, 0x2a2a2a);
   const ufo = addSky(scene);
 
-  scene.add(new THREE.AmbientLight(0x222233, 0.4));
-  const dirLight = new THREE.DirectionalLight(0x9999ff, 0.3);
+  scene.add(new THREE.AmbientLight(0x667788, 1.2));
+  const dirLight = new THREE.DirectionalLight(0xbbbbff, 0.8);
   dirLight.position.set(5, 25, -10);
   scene.add(dirLight);
+  const fillLight = new THREE.HemisphereLight(0x445566, 0x222233, 0.6);
+  scene.add(fillLight);
 
   // === CTA Brown Line Elevated Tracks ===
   // Support pillars

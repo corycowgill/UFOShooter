@@ -44,207 +44,347 @@ export function createAlienModel(type) {
   const group = new THREE.Group();
 
   if (type === 'grunt') {
-    // Humanoid alien - tall with big head
-    // Body
-    const body = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.3, 0.25, 1.2, 6),
-      new THREE.MeshPhongMaterial({ color: data.color })
+    // === GRUNT: Tall humanoid alien soldier ===
+    // Torso - segmented armor
+    const torso = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.32, 0.28, 1.0, 8),
+      new THREE.MeshPhongMaterial({ color: 0x009933, emissive: 0x003311, shininess: 40 })
     );
-    body.position.y = 1.0;
-    group.add(body);
+    torso.position.y = 1.1;
+    group.add(torso);
+    // Chest armor plate
+    const chestPlate = new THREE.Mesh(
+      new THREE.BoxGeometry(0.5, 0.5, 0.15),
+      new THREE.MeshPhongMaterial({ color: 0x336633, emissive: 0x002200, shininess: 80 })
+    );
+    chestPlate.position.set(0, 1.3, 0.2);
+    group.add(chestPlate);
+    // Shoulder pads
+    for (const side of [-1, 1]) {
+      const pad = new THREE.Mesh(
+        new THREE.SphereGeometry(0.14, 8, 8),
+        new THREE.MeshPhongMaterial({ color: 0x336633, emissive: 0x002200 })
+      );
+      pad.scale.set(1.2, 0.7, 1);
+      pad.position.set(side * 0.42, 1.55, 0);
+      group.add(pad);
+    }
 
-    // Head - large elongated
+    // Head - large elongated cranium
     const head = new THREE.Mesh(
-      new THREE.SphereGeometry(0.35, 8, 8),
-      new THREE.MeshPhongMaterial({ color: 0x00ff55 })
+      new THREE.SphereGeometry(0.35, 12, 12),
+      new THREE.MeshPhongMaterial({ color: 0x00ee55, emissive: 0x004422 })
     );
-    head.scale.set(1, 1.3, 0.9);
-    head.position.y = 2.0;
+    head.scale.set(1, 1.4, 0.95);
+    head.position.y = 2.05;
     group.add(head);
-
-    // Eyes - large black
-    const eyeGeo = new THREE.SphereGeometry(0.1, 8, 8);
-    const eyeMat = new THREE.MeshPhongMaterial({ color: 0x000000, emissive: 0x003300 });
-    const leftEye = new THREE.Mesh(eyeGeo, eyeMat);
-    leftEye.position.set(-0.15, 2.05, 0.25);
-    group.add(leftEye);
-    const rightEye = new THREE.Mesh(eyeGeo, eyeMat);
-    rightEye.position.set(0.15, 2.05, 0.25);
-    group.add(rightEye);
-
-    // Arms
-    const armGeo = new THREE.CylinderGeometry(0.07, 0.06, 0.8, 6);
-    const armMat = new THREE.MeshPhongMaterial({ color: data.color });
-    const leftArm = new THREE.Mesh(armGeo, armMat);
-    leftArm.position.set(-0.45, 1.2, 0);
-    leftArm.rotation.z = 0.3;
-    group.add(leftArm);
-    const rightArm = new THREE.Mesh(armGeo, armMat);
-    rightArm.position.set(0.45, 1.0, 0.2);
-    rightArm.rotation.z = -0.3;
-    rightArm.rotation.x = -0.5;
-    group.add(rightArm);
-
-    // Blaster in right hand
-    const blaster = new THREE.Mesh(
-      new THREE.BoxGeometry(0.08, 0.08, 0.3),
-      new THREE.MeshPhongMaterial({ color: 0x444444 })
+    // Cranium ridge
+    const ridge = new THREE.Mesh(
+      new THREE.BoxGeometry(0.06, 0.3, 0.5),
+      new THREE.MeshPhongMaterial({ color: 0x007733, emissive: 0x003311 })
     );
-    blaster.position.set(0.5, 0.65, 0.35);
-    group.add(blaster);
+    ridge.position.set(0, 2.3, -0.05);
+    group.add(ridge);
+
+    // Eyes - large almond-shaped, glowing
+    const eyeGeo = new THREE.SphereGeometry(0.1, 10, 10);
+    const eyeMat = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
+    for (const side of [-1, 1]) {
+      const eye = new THREE.Mesh(eyeGeo, eyeMat);
+      eye.scale.set(1.3, 0.7, 0.5);
+      eye.position.set(side * 0.16, 2.08, 0.28);
+      group.add(eye);
+    }
+    // Mouth slit
+    const mouth = new THREE.Mesh(
+      new THREE.BoxGeometry(0.15, 0.03, 0.05),
+      new THREE.MeshBasicMaterial({ color: 0x003300 })
+    );
+    mouth.position.set(0, 1.88, 0.32);
+    group.add(mouth);
+
+    // Arms with elbow joints
+    const armMat = new THREE.MeshPhongMaterial({ color: data.color, emissive: 0x002211 });
+    for (const side of [-1, 1]) {
+      // Upper arm
+      const upper = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.06, 0.5, 6), armMat);
+      upper.position.set(side * 0.48, 1.35, 0);
+      upper.rotation.z = side * 0.3;
+      group.add(upper);
+      // Lower arm
+      const lower = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.05, 0.5, 6), armMat);
+      lower.position.set(side * 0.55, 0.95, side === 1 ? 0.2 : 0);
+      lower.rotation.z = side * 0.2;
+      lower.rotation.x = side === 1 ? -0.6 : 0;
+      group.add(lower);
+      // 3-fingered hand
+      for (let f = -1; f <= 1; f++) {
+        const finger = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.015, 0.01, 0.12, 4),
+          armMat
+        );
+        finger.position.set(side * 0.58 + f * 0.02, 0.68, side === 1 ? 0.32 : f * 0.03);
+        group.add(finger);
+      }
+    }
+
+    // Blaster in right hand - more detailed
+    const blasterBody = new THREE.Mesh(
+      new THREE.BoxGeometry(0.08, 0.07, 0.35),
+      new THREE.MeshPhongMaterial({ color: 0x555555, shininess: 60 })
+    );
+    blasterBody.position.set(0.58, 0.68, 0.38);
+    group.add(blasterBody);
+    const blasterTip = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.02, 0.03, 0.1, 6),
+      new THREE.MeshBasicMaterial({ color: 0x00ff44 })
+    );
+    blasterTip.rotation.x = Math.PI / 2;
+    blasterTip.position.set(0.58, 0.68, 0.57);
+    group.add(blasterTip);
 
     // Legs
-    const legGeo = new THREE.CylinderGeometry(0.08, 0.07, 0.7, 6);
-    const legMat = new THREE.MeshPhongMaterial({ color: 0x008833 });
-    const leftLeg = new THREE.Mesh(legGeo, legMat);
-    leftLeg.position.set(-0.15, 0.35, 0);
-    group.add(leftLeg);
-    const rightLeg = new THREE.Mesh(legGeo, legMat);
-    rightLeg.position.set(0.15, 0.35, 0);
-    group.add(rightLeg);
+    const legMat = new THREE.MeshPhongMaterial({ color: 0x008833, emissive: 0x002211 });
+    for (const side of [-1, 1]) {
+      const thigh = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.07, 0.45, 6), legMat);
+      thigh.position.set(side * 0.15, 0.55, 0);
+      group.add(thigh);
+      const shin = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.06, 0.4, 6), legMat);
+      shin.position.set(side * 0.15, 0.2, 0);
+      group.add(shin);
+      // Boot
+      const boot = new THREE.Mesh(
+        new THREE.BoxGeometry(0.1, 0.08, 0.18),
+        new THREE.MeshPhongMaterial({ color: 0x333333 })
+      );
+      boot.position.set(side * 0.15, 0.04, 0.03);
+      group.add(boot);
+    }
+
+    // Belt
+    const belt = new THREE.Mesh(
+      new THREE.TorusGeometry(0.28, 0.03, 6, 12),
+      new THREE.MeshPhongMaterial({ color: 0x444444, shininess: 60 })
+    );
+    belt.position.y = 0.7;
+    belt.rotation.x = Math.PI / 2;
+    group.add(belt);
 
   } else if (type === 'swarmer') {
-    // Small, spiky, insect-like
-    // Body - small sphere
-    const body = new THREE.Mesh(
-      new THREE.SphereGeometry(0.3, 8, 8),
-      new THREE.MeshPhongMaterial({ color: data.color })
+    // === SWARMER: Fast insectoid alien ===
+    // Abdomen
+    const abdomen = new THREE.Mesh(
+      new THREE.SphereGeometry(0.28, 10, 10),
+      new THREE.MeshPhongMaterial({ color: 0x7700cc, emissive: 0x220044 })
     );
-    body.position.y = 0.5;
-    body.scale.set(1, 0.7, 1.2);
-    group.add(body);
+    abdomen.scale.set(0.9, 0.6, 1.3);
+    abdomen.position.set(0, 0.4, -0.15);
+    group.add(abdomen);
 
-    // Head
-    const head = new THREE.Mesh(
-      new THREE.SphereGeometry(0.2, 8, 8),
-      new THREE.MeshPhongMaterial({ color: 0xbb44ff })
+    // Thorax
+    const thorax = new THREE.Mesh(
+      new THREE.SphereGeometry(0.22, 10, 10),
+      new THREE.MeshPhongMaterial({ color: data.color, emissive: 0x330066 })
     );
-    head.position.set(0, 0.65, 0.25);
+    thorax.scale.set(1, 0.7, 1.1);
+    thorax.position.set(0, 0.48, 0.15);
+    group.add(thorax);
+
+    // Head - angular
+    const head = new THREE.Mesh(
+      new THREE.SphereGeometry(0.18, 10, 10),
+      new THREE.MeshPhongMaterial({ color: 0xbb44ff, emissive: 0x330066 })
+    );
+    head.scale.set(1, 0.9, 1.1);
+    head.position.set(0, 0.58, 0.35);
     group.add(head);
 
-    // Glowing eyes
+    // Mandibles
+    for (const side of [-1, 1]) {
+      const mandible = new THREE.Mesh(
+        new THREE.ConeGeometry(0.02, 0.15, 4),
+        new THREE.MeshPhongMaterial({ color: 0xff44ff, emissive: 0x440044 })
+      );
+      mandible.position.set(side * 0.08, 0.52, 0.48);
+      mandible.rotation.x = -0.8;
+      mandible.rotation.z = side * 0.3;
+      group.add(mandible);
+    }
+
+    // Glowing compound eyes
     const eyeMat = new THREE.MeshBasicMaterial({ color: 0xff00ff });
-    const le = new THREE.Mesh(new THREE.SphereGeometry(0.05, 6, 6), eyeMat);
-    le.position.set(-0.1, 0.7, 0.4);
-    group.add(le);
-    const re = new THREE.Mesh(new THREE.SphereGeometry(0.05, 6, 6), eyeMat);
-    re.position.set(0.1, 0.7, 0.4);
-    group.add(re);
-
-    // Spikes/claws
-    const spikeMat = new THREE.MeshPhongMaterial({ color: 0xff00ff });
-    for (let i = 0; i < 4; i++) {
-      const spike = new THREE.Mesh(
-        new THREE.ConeGeometry(0.04, 0.25, 4),
-        spikeMat
-      );
-      const angle = (i / 4) * Math.PI * 2;
-      spike.position.set(Math.cos(angle) * 0.35, 0.5, Math.sin(angle) * 0.35);
-      spike.rotation.z = Math.cos(angle) * 0.5;
-      spike.rotation.x = Math.sin(angle) * 0.5;
-      group.add(spike);
+    for (const side of [-1, 1]) {
+      const eye = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 8), eyeMat);
+      eye.scale.set(0.8, 1, 0.6);
+      eye.position.set(side * 0.12, 0.63, 0.42);
+      group.add(eye);
     }
 
-    // Legs (4 insect legs)
-    for (let i = 0; i < 4; i++) {
-      const leg = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.02, 0.02, 0.4, 4),
-        new THREE.MeshPhongMaterial({ color: 0x7700aa })
-      );
-      const side = i < 2 ? -1 : 1;
-      const pos = i % 2 === 0 ? 0.1 : -0.1;
-      leg.position.set(side * 0.3, 0.15, pos);
-      leg.rotation.z = side * 0.8;
-      group.add(leg);
+    // Dorsal spines
+    const spineMat = new THREE.MeshPhongMaterial({ color: 0xff00ff, emissive: 0x660066 });
+    for (let i = 0; i < 5; i++) {
+      const spine = new THREE.Mesh(new THREE.ConeGeometry(0.025, 0.2 + i * 0.03, 4), spineMat);
+      spine.position.set(0, 0.55 + i * 0.01, -0.1 + i * 0.08);
+      spine.rotation.x = -0.3;
+      group.add(spine);
     }
 
-    // Front claws
-    const clawGeo = new THREE.ConeGeometry(0.03, 0.2, 4);
-    const clawMat = new THREE.MeshPhongMaterial({ color: 0xff44ff });
-    const lc = new THREE.Mesh(clawGeo, clawMat);
-    lc.position.set(-0.2, 0.4, 0.35);
-    lc.rotation.x = -1;
-    group.add(lc);
-    const rc = new THREE.Mesh(clawGeo, clawMat);
-    rc.position.set(0.2, 0.4, 0.35);
-    rc.rotation.x = -1;
-    group.add(rc);
+    // 6 insect legs (3 per side)
+    const legMat = new THREE.MeshPhongMaterial({ color: 0x7700aa, emissive: 0x220044 });
+    for (let i = 0; i < 6; i++) {
+      const side = i < 3 ? -1 : 1;
+      const idx = i % 3;
+      const legUpper = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.015, 0.35, 4), legMat);
+      const zOff = -0.1 + idx * 0.15;
+      legUpper.position.set(side * 0.25, 0.35, zOff);
+      legUpper.rotation.z = side * 1.0;
+      group.add(legUpper);
+      const legLower = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.01, 0.25, 4), legMat);
+      legLower.position.set(side * 0.42, 0.12, zOff);
+      legLower.rotation.z = side * 0.3;
+      group.add(legLower);
+    }
+
+    // Front attack claws - large and prominent
+    const clawMat = new THREE.MeshPhongMaterial({ color: 0xff44ff, emissive: 0x660044 });
+    for (const side of [-1, 1]) {
+      const clawArm = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.02, 0.25, 4), clawMat);
+      clawArm.position.set(side * 0.18, 0.45, 0.4);
+      clawArm.rotation.x = -0.7;
+      clawArm.rotation.z = side * 0.2;
+      group.add(clawArm);
+      const clawTip = new THREE.Mesh(new THREE.ConeGeometry(0.03, 0.18, 4), clawMat);
+      clawTip.position.set(side * 0.2, 0.35, 0.55);
+      clawTip.rotation.x = -1.2;
+      group.add(clawTip);
+    }
+
+    // Glowing energy along spine
+    const spineGlow = new THREE.Mesh(
+      new THREE.BoxGeometry(0.04, 0.04, 0.4),
+      new THREE.MeshBasicMaterial({ color: 0xcc00ff, transparent: true, opacity: 0.5 })
+    );
+    spineGlow.position.set(0, 0.55, 0.05);
+    group.add(spineGlow);
 
   } else if (type === 'bloater') {
-    // Large bloated sphere with pulsing glow
-    // Main body - big sphere
+    // === BLOATER: Massive volatile alien ===
+    // Main body - large pulsating sphere
     const body = new THREE.Mesh(
-      new THREE.SphereGeometry(0.9, 12, 12),
+      new THREE.SphereGeometry(0.95, 16, 16),
       new THREE.MeshPhongMaterial({
-        color: data.color,
-        emissive: 0x440000,
-        emissiveIntensity: 0.5,
+        color: 0xcc2200,
+        emissive: 0x661100,
+        emissiveIntensity: 0.8,
         transparent: true,
-        opacity: 0.9,
+        opacity: 0.85,
+        shininess: 30,
       })
     );
-    body.position.y = 1.0;
+    body.position.y = 1.1;
     group.add(body);
 
-    // Inner glow
+    // Inner plasma core
     const inner = new THREE.Mesh(
-      new THREE.SphereGeometry(0.6, 10, 10),
+      new THREE.SphereGeometry(0.65, 12, 12),
       new THREE.MeshBasicMaterial({
-        color: 0xff6600,
+        color: 0xff8800,
         transparent: true,
-        opacity: 0.3,
+        opacity: 0.4,
       })
     );
-    inner.position.y = 1.0;
+    inner.position.y = 1.1;
     group.add(inner);
 
-    // Small head on top
+    // Veins on surface (glowing lines)
+    const veinMat = new THREE.MeshBasicMaterial({ color: 0xff6600, transparent: true, opacity: 0.6 });
+    for (let i = 0; i < 8; i++) {
+      const vein = new THREE.Mesh(new THREE.TorusGeometry(0.9, 0.02, 4, 12), veinMat);
+      vein.position.y = 1.1;
+      vein.rotation.x = Math.random() * Math.PI;
+      vein.rotation.y = Math.random() * Math.PI;
+      group.add(vein);
+    }
+
+    // Small angry head
     const head = new THREE.Mesh(
-      new THREE.SphereGeometry(0.25, 8, 8),
-      new THREE.MeshPhongMaterial({ color: 0xcc2200 })
+      new THREE.SphereGeometry(0.28, 10, 10),
+      new THREE.MeshPhongMaterial({ color: 0xdd3300, emissive: 0x441100 })
     );
-    head.position.y = 2.0;
+    head.scale.set(1, 0.85, 0.9);
+    head.position.y = 2.15;
     group.add(head);
 
-    // Tiny angry eyes
+    // Glowing angry eyes
     const eyeMat = new THREE.MeshBasicMaterial({ color: 0xffff00 });
-    const le = new THREE.Mesh(new THREE.SphereGeometry(0.06, 6, 6), eyeMat);
-    le.position.set(-0.1, 2.05, 0.2);
-    group.add(le);
-    const re = new THREE.Mesh(new THREE.SphereGeometry(0.06, 6, 6), eyeMat);
-    re.position.set(0.1, 2.05, 0.2);
-    group.add(re);
+    for (const side of [-1, 1]) {
+      const eye = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 8), eyeMat);
+      eye.position.set(side * 0.12, 2.18, 0.22);
+      group.add(eye);
+    }
+    // Angry brow ridges
+    for (const side of [-1, 1]) {
+      const brow = new THREE.Mesh(
+        new THREE.BoxGeometry(0.15, 0.04, 0.08),
+        new THREE.MeshPhongMaterial({ color: 0x881100 })
+      );
+      brow.position.set(side * 0.1, 2.28, 0.2);
+      brow.rotation.z = side * -0.3;
+      group.add(brow);
+    }
+
+    // Stubby arms
+    const armMat = new THREE.MeshPhongMaterial({ color: 0xaa1100, emissive: 0x330000 });
+    for (const side of [-1, 1]) {
+      const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.08, 0.4, 6), armMat);
+      arm.position.set(side * 0.8, 1.0, 0.3);
+      arm.rotation.z = side * 0.8;
+      group.add(arm);
+    }
 
     // Stubby legs
-    const legGeo = new THREE.CylinderGeometry(0.15, 0.12, 0.4, 6);
-    const legMat = new THREE.MeshPhongMaterial({ color: 0xaa1100 });
-    const ll = new THREE.Mesh(legGeo, legMat);
-    ll.position.set(-0.4, 0.2, 0);
-    group.add(ll);
-    const rl = new THREE.Mesh(legGeo, legMat);
-    rl.position.set(0.4, 0.2, 0);
-    group.add(rl);
-
-    // Pustules / bumps
-    for (let i = 0; i < 6; i++) {
-      const bump = new THREE.Mesh(
-        new THREE.SphereGeometry(0.12 + Math.random() * 0.1, 6, 6),
-        new THREE.MeshPhongMaterial({ color: 0xff4400, emissive: 0x441100 })
+    const legMat = new THREE.MeshPhongMaterial({ color: 0xaa1100, emissive: 0x330000 });
+    for (const side of [-1, 1]) {
+      const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.14, 0.5, 6), legMat);
+      leg.position.set(side * 0.45, 0.25, 0);
+      group.add(leg);
+      // Foot
+      const foot = new THREE.Mesh(
+        new THREE.BoxGeometry(0.2, 0.08, 0.25),
+        new THREE.MeshPhongMaterial({ color: 0x771100 })
       );
+      foot.position.set(side * 0.45, 0.04, 0.05);
+      group.add(foot);
+    }
+
+    // Pustules / boils - larger, more prominent
+    const pustuleMat = new THREE.MeshPhongMaterial({ color: 0xff6600, emissive: 0x663300 });
+    for (let i = 0; i < 10; i++) {
+      const size = 0.08 + Math.random() * 0.14;
+      const bump = new THREE.Mesh(new THREE.SphereGeometry(size, 8, 8), pustuleMat);
       const theta = Math.random() * Math.PI * 2;
-      const phi = Math.random() * Math.PI * 0.6 + 0.2;
+      const phi = Math.random() * Math.PI * 0.7 + 0.15;
       bump.position.set(
-        Math.sin(phi) * Math.cos(theta) * 0.85,
-        1.0 + Math.cos(phi) * 0.85,
-        Math.sin(phi) * Math.sin(theta) * 0.85
+        Math.sin(phi) * Math.cos(theta) * 0.92,
+        1.1 + Math.cos(phi) * 0.92,
+        Math.sin(phi) * Math.sin(theta) * 0.92
       );
       group.add(bump);
     }
 
-    // Point light inside
-    const glow = new THREE.PointLight(0xff4400, 1, 5);
-    glow.position.y = 1.0;
+    // Point light inside - brighter
+    const glow = new THREE.PointLight(0xff4400, 2.5, 8);
+    glow.position.y = 1.1;
     group.add(glow);
+
+    // Warning glow ring at base
+    const warnRing = new THREE.Mesh(
+      new THREE.TorusGeometry(1.2, 0.05, 6, 16),
+      new THREE.MeshBasicMaterial({ color: 0xff2200, transparent: true, opacity: 0.4 })
+    );
+    warnRing.position.y = 0.05;
+    warnRing.rotation.x = Math.PI / 2;
+    group.add(warnRing);
   }
 
   return group;
@@ -372,14 +512,7 @@ export class Alien {
         this.projectiles.splice(i, 1);
         continue;
       }
-
-      // Check hit player
-      const distToPlayer = bolt.mesh.position.distanceTo(playerPos);
-      if (distToPlayer < 1.0) {
-        this.scene.remove(bolt.mesh);
-        this.projectiles.splice(i, 1);
-        return; // Will be handled by game loop checking projectile hits
-      }
+      // Do NOT check player hits here - let checkPlayerCollision handle it
     }
   }
 
@@ -422,15 +555,15 @@ export class Alien {
     }
   }
 
-  checkPlayerCollision(playerPos) {
+  checkPlayerCollision(playerPos, delta) {
     if (this.dead) return null;
     const dist = this.mesh.position.distanceTo(playerPos);
 
     // Swarmer melee attack
     if (this.type === 'swarmer' && dist < this.data.attackRange) {
-      this.attackCooldown -= 0.016; // Approximate
-      if (this.attackCooldown <= 0) {
-        this.attackCooldown = this.data.attackRate;
+      this.meleeCooldown = (this.meleeCooldown || 0) - (delta || 0.016);
+      if (this.meleeCooldown <= 0) {
+        this.meleeCooldown = this.data.attackRate;
         this.audio.playAlienGrowl();
         return { damage: this.data.damage, type: 'melee' };
       }
@@ -442,13 +575,15 @@ export class Alien {
       return { damage: this.data.damage, type: 'explosion', radius: this.data.explosionRadius };
     }
 
-    // Check projectile hits
+    // Check projectile hits (this is the authoritative check)
     for (let i = this.projectiles.length - 1; i >= 0; i--) {
       const bolt = this.projectiles[i];
-      if (bolt.mesh.position.distanceTo(playerPos) < 1.0) {
+      const boltDist = bolt.mesh.position.distanceTo(playerPos);
+      if (boltDist < 1.5) {
+        const dmg = bolt.damage;
         this.scene.remove(bolt.mesh);
         this.projectiles.splice(i, 1);
-        return { damage: bolt.damage, type: 'projectile' };
+        return { damage: dmg, type: 'projectile' };
       }
     }
 
