@@ -92,32 +92,80 @@ function initMenu() {
   const starMat = new THREE.PointsMaterial({ color: 0xffffff, size: 0.5 });
   menuScene.add(new THREE.Points(starGeo, starMat));
 
-  // UFO
+  // UFO - detailed
   menuUfo = new THREE.Group();
   const body = new THREE.Mesh(
-    new THREE.CylinderGeometry(3, 5, 1, 16),
-    new THREE.MeshPhongMaterial({ color: 0x334455, emissive: 0x112233 })
+    new THREE.CylinderGeometry(3, 5, 1, 24),
+    new THREE.MeshPhongMaterial({ color: 0x334455, emissive: 0x112233, shininess: 60 })
   );
   menuUfo.add(body);
+  // Bottom plate
+  const bottom = new THREE.Mesh(
+    new THREE.CylinderGeometry(4.8, 3.5, 0.3, 24),
+    new THREE.MeshPhongMaterial({ color: 0x2a3a4a, emissive: 0x0a1520 })
+  );
+  bottom.position.y = -0.65;
+  menuUfo.add(bottom);
+  // Dome - glass-like
   const dome = new THREE.Mesh(
-    new THREE.SphereGeometry(2, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2),
-    new THREE.MeshPhongMaterial({ color: 0x556677, emissive: 0x223344 })
+    new THREE.SphereGeometry(2, 16, 12, 0, Math.PI * 2, 0, Math.PI / 2),
+    new THREE.MeshPhongMaterial({ color: 0x556677, emissive: 0x223344, transparent: true, opacity: 0.7, shininess: 100 })
   );
   dome.position.y = 0.5;
   menuUfo.add(dome);
-  // Lights
-  for (let i = 0; i < 8; i++) {
-    const angle = (i / 8) * Math.PI * 2;
-    const light = new THREE.Mesh(
-      new THREE.SphereGeometry(0.15, 6, 6),
-      new THREE.MeshBasicMaterial({ color: 0x00ff88 })
+  // Dome inner glow
+  const domeInner = new THREE.Mesh(
+    new THREE.SphereGeometry(1.6, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2),
+    new THREE.MeshBasicMaterial({ color: 0x00ff88, transparent: true, opacity: 0.15 })
+  );
+  domeInner.position.y = 0.5;
+  menuUfo.add(domeInner);
+  // Window row around middle
+  for (let i = 0; i < 16; i++) {
+    const angle = (i / 16) * Math.PI * 2;
+    const win = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.3, 0.2),
+      new THREE.MeshBasicMaterial({ color: 0x88ffbb, transparent: true, opacity: 0.6, side: THREE.DoubleSide })
     );
-    light.position.set(Math.cos(angle) * 4.5, -0.5, Math.sin(angle) * 4.5);
-    menuUfo.add(light);
+    win.position.set(Math.cos(angle) * 4.2, 0, Math.sin(angle) * 4.2);
+    win.rotation.y = -angle + Math.PI / 2;
+    menuUfo.add(win);
   }
-  const beamLight = new THREE.PointLight(0x00ff88, 2, 30);
+  // Running lights ring
+  for (let i = 0; i < 12; i++) {
+    const angle = (i / 12) * Math.PI * 2;
+    const rlight = new THREE.Mesh(
+      new THREE.SphereGeometry(0.12, 6, 6),
+      new THREE.MeshBasicMaterial({ color: i % 2 === 0 ? 0x00ff88 : 0x00ffcc })
+    );
+    rlight.position.set(Math.cos(angle) * 4.5, -0.5, Math.sin(angle) * 4.5);
+    menuUfo.add(rlight);
+  }
+  // Antenna on top
+  const menuAntenna = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.02, 0.02, 0.8, 4),
+    new THREE.MeshPhongMaterial({ color: 0x888888 })
+  );
+  menuAntenna.position.y = 2.5;
+  menuUfo.add(menuAntenna);
+  const menuAntTip = new THREE.Mesh(
+    new THREE.SphereGeometry(0.06, 6, 6),
+    new THREE.MeshBasicMaterial({ color: 0xff4444 })
+  );
+  menuAntTip.position.y = 2.95;
+  menuUfo.add(menuAntTip);
+  // Tractor beam light
+  const beamLight = new THREE.PointLight(0x00ff88, 3, 30);
   beamLight.position.y = -1;
   menuUfo.add(beamLight);
+  // Decorative ring
+  const detailRing = new THREE.Mesh(
+    new THREE.TorusGeometry(3.8, 0.04, 6, 32),
+    new THREE.MeshBasicMaterial({ color: 0x00ff88, transparent: true, opacity: 0.3 })
+  );
+  detailRing.rotation.x = Math.PI / 2;
+  detailRing.position.y = -0.2;
+  menuUfo.add(detailRing);
   menuUfo.position.set(0, 8, -5);
   menuScene.add(menuUfo);
 

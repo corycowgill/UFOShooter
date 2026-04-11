@@ -33,27 +33,39 @@ export class WaveManager {
     const maxEnemies = Math.min(baseCount, 30);
 
     if (w <= 3) {
-      // Mostly grunts, few swarmers
-      const grunts = Math.ceil(maxEnemies * 0.7);
-      const swarmers = maxEnemies - grunts;
-      for (let i = 0; i < grunts; i++) queue.push('grunt');
-      for (let i = 0; i < swarmers; i++) queue.push('swarmer');
-    } else if (w <= 6) {
-      // Mix of all
-      const grunts = Math.ceil(maxEnemies * 0.4);
-      const swarmers = Math.ceil(maxEnemies * 0.35);
-      const bloaters = maxEnemies - grunts - swarmers;
-      for (let i = 0; i < grunts; i++) queue.push('grunt');
-      for (let i = 0; i < swarmers; i++) queue.push('swarmer');
-      for (let i = 0; i < bloaters; i++) queue.push('bloater');
-    } else {
-      // Heavy waves
-      const grunts = Math.ceil(maxEnemies * 0.3);
+      // Early waves: grunts, swarmers, first stalkers
+      const grunts = Math.ceil(maxEnemies * 0.55);
       const swarmers = Math.ceil(maxEnemies * 0.3);
-      const bloaters = maxEnemies - grunts - swarmers;
+      const stalkers = maxEnemies - grunts - swarmers;
+      for (let i = 0; i < grunts; i++) queue.push('grunt');
+      for (let i = 0; i < swarmers; i++) queue.push('swarmer');
+      for (let i = 0; i < Math.max(0, stalkers); i++) queue.push('stalker');
+    } else if (w <= 6) {
+      // Mid waves: introduce bloaters and spitters
+      const grunts = Math.ceil(maxEnemies * 0.25);
+      const swarmers = Math.ceil(maxEnemies * 0.2);
+      const bloaters = Math.ceil(maxEnemies * 0.15);
+      const stalkers = Math.ceil(maxEnemies * 0.2);
+      const spitters = maxEnemies - grunts - swarmers - bloaters - stalkers;
       for (let i = 0; i < grunts; i++) queue.push('grunt');
       for (let i = 0; i < swarmers; i++) queue.push('swarmer');
       for (let i = 0; i < bloaters; i++) queue.push('bloater');
+      for (let i = 0; i < stalkers; i++) queue.push('stalker');
+      for (let i = 0; i < Math.max(0, spitters); i++) queue.push('spitter');
+    } else {
+      // Late waves: full mix with drones
+      const grunts = Math.ceil(maxEnemies * 0.18);
+      const swarmers = Math.ceil(maxEnemies * 0.15);
+      const bloaters = Math.ceil(maxEnemies * 0.15);
+      const stalkers = Math.ceil(maxEnemies * 0.17);
+      const spitters = Math.ceil(maxEnemies * 0.15);
+      const drones = maxEnemies - grunts - swarmers - bloaters - stalkers - spitters;
+      for (let i = 0; i < grunts; i++) queue.push('grunt');
+      for (let i = 0; i < swarmers; i++) queue.push('swarmer');
+      for (let i = 0; i < bloaters; i++) queue.push('bloater');
+      for (let i = 0; i < stalkers; i++) queue.push('stalker');
+      for (let i = 0; i < spitters; i++) queue.push('spitter');
+      for (let i = 0; i < Math.max(0, drones); i++) queue.push('drone');
     }
 
     // Scale HP with wave

@@ -37,6 +37,43 @@ export const ALIEN_TYPES = {
     description: 'Large, slow alien filled with volatile plasma. Approaches the player and detonates, dealing massive area damage. Can also explode on death.',
     behavior: 'explosive',
   },
+  stalker: {
+    name: 'Stalker',
+    hp: 40,
+    speed: 9,
+    damage: 25,
+    attackRange: 2.5,
+    attackRate: 0.8,
+    scoreValue: 150,
+    color: 0x008888,
+    description: 'Semi-invisible predator that stalks from the shadows. Partially cloaked until it strikes with devastating claws.',
+    behavior: 'stealth',
+  },
+  spitter: {
+    name: 'Acid Spitter',
+    hp: 60,
+    speed: 3,
+    damage: 20,
+    attackRange: 50,
+    attackRate: 2.5,
+    scoreValue: 175,
+    color: 0x88cc00,
+    description: 'Hunched reptilian alien with toxic acid glands. Stays at extreme range and fires high-damage acid projectiles.',
+    behavior: 'sniper',
+  },
+  drone: {
+    name: 'Hover Drone',
+    hp: 30,
+    speed: 7,
+    damage: 10,
+    attackRange: 35,
+    attackRate: 0.8,
+    scoreValue: 125,
+    color: 0x4488ff,
+    flyHeight: 6,
+    description: 'Floating alien drone that attacks from above. Fast and evasive, raining energy bolts from the sky.',
+    behavior: 'aerial',
+  },
 };
 
 export function createAlienModel(type) {
@@ -385,6 +422,348 @@ export function createAlienModel(type) {
     warnRing.position.y = 0.05;
     warnRing.rotation.x = Math.PI / 2;
     group.add(warnRing);
+
+  } else if (type === 'stalker') {
+    // === STALKER: Semi-invisible predator ===
+    const stealthMat = (color, emissive = 0x000000) =>
+      new THREE.MeshPhongMaterial({ color, emissive, transparent: true, opacity: 0.4, shininess: 80 });
+
+    // Lean torso
+    const torso = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.2, 0.18, 1.1, 8),
+      stealthMat(0x006666, 0x003333)
+    );
+    torso.position.y = 1.3;
+    group.add(torso);
+
+    // Ribcage detail
+    for (let i = 0; i < 4; i++) {
+      const rib = new THREE.Mesh(
+        new THREE.TorusGeometry(0.2, 0.015, 4, 8, Math.PI),
+        stealthMat(0x005555)
+      );
+      rib.position.set(0, 1.0 + i * 0.2, 0);
+      rib.rotation.y = Math.PI / 2;
+      group.add(rib);
+    }
+
+    // Elongated head - smooth predator shape
+    const head = new THREE.Mesh(
+      new THREE.SphereGeometry(0.25, 12, 12),
+      stealthMat(0x00aaaa, 0x004444)
+    );
+    head.scale.set(0.8, 1.0, 1.5);
+    head.position.set(0, 2.1, 0.1);
+    group.add(head);
+
+    // Crest/crown
+    const crest = new THREE.Mesh(
+      new THREE.ConeGeometry(0.1, 0.4, 4),
+      stealthMat(0x00cccc, 0x004444)
+    );
+    crest.position.set(0, 2.4, -0.1);
+    crest.rotation.x = 0.3;
+    group.add(crest);
+
+    // Large reflective eyes
+    const eyeMat = new THREE.MeshBasicMaterial({ color: 0x00ffff, transparent: true, opacity: 0.9 });
+    for (const side of [-1, 1]) {
+      const eye = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 8), eyeMat);
+      eye.scale.set(1.5, 0.8, 0.5);
+      eye.position.set(side * 0.12, 2.12, 0.3);
+      group.add(eye);
+    }
+
+    // Long arms with curved claws
+    const armMat = stealthMat(0x007777, 0x003333);
+    for (const side of [-1, 1]) {
+      const upper = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.04, 0.6, 6), armMat);
+      upper.position.set(side * 0.3, 1.5, 0);
+      upper.rotation.z = side * 0.4;
+      group.add(upper);
+      const lower = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.035, 0.7, 6), armMat);
+      lower.position.set(side * 0.45, 1.0, 0.1);
+      lower.rotation.z = side * 0.2;
+      group.add(lower);
+      // Curved claws (3 per hand)
+      for (let f = -1; f <= 1; f++) {
+        const claw = new THREE.Mesh(
+          new THREE.ConeGeometry(0.015, 0.25, 4),
+          new THREE.MeshPhongMaterial({ color: 0x00ffff, emissive: 0x006666, transparent: true, opacity: 0.7 })
+        );
+        claw.position.set(side * 0.5 + f * 0.025, 0.6, 0.15);
+        claw.rotation.x = -0.5;
+        group.add(claw);
+      }
+    }
+
+    // Digitigrade legs (reverse-knee)
+    const legMat = stealthMat(0x006666, 0x002222);
+    for (const side of [-1, 1]) {
+      const thigh = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.05, 0.5, 6), legMat);
+      thigh.position.set(side * 0.15, 0.8, -0.05);
+      thigh.rotation.x = 0.3;
+      group.add(thigh);
+      const shin = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.035, 0.6, 6), legMat);
+      shin.position.set(side * 0.15, 0.3, 0.1);
+      shin.rotation.x = -0.4;
+      group.add(shin);
+      const talon = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.15, 5), stealthMat(0x009999));
+      talon.position.set(side * 0.15, 0.05, 0.15);
+      talon.rotation.x = Math.PI;
+      group.add(talon);
+    }
+
+    // Tail
+    const tail = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.015, 0.04, 0.8, 6),
+      stealthMat(0x007777)
+    );
+    tail.position.set(0, 0.9, -0.35);
+    tail.rotation.x = 0.6;
+    group.add(tail);
+
+    // Energy shimmer along spine
+    const shimmer = new THREE.Mesh(
+      new THREE.BoxGeometry(0.03, 0.8, 0.03),
+      new THREE.MeshBasicMaterial({ color: 0x00ffff, transparent: true, opacity: 0.3 })
+    );
+    shimmer.position.set(0, 1.5, -0.15);
+    group.add(shimmer);
+
+  } else if (type === 'spitter') {
+    // === SPITTER: Hunched reptilian acid alien ===
+    // Hunched body
+    const body = new THREE.Mesh(
+      new THREE.SphereGeometry(0.4, 10, 10),
+      new THREE.MeshPhongMaterial({ color: 0x669900, emissive: 0x334400, shininess: 30 })
+    );
+    body.scale.set(1, 0.8, 1.2);
+    body.position.set(0, 1.0, -0.1);
+    group.add(body);
+
+    // Lower torso
+    const lowerBody = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.3, 0.25, 0.5, 8),
+      new THREE.MeshPhongMaterial({ color: 0x557700, emissive: 0x223300 })
+    );
+    lowerBody.position.y = 0.6;
+    group.add(lowerBody);
+
+    // Head - wide jaw
+    const head = new THREE.Mesh(
+      new THREE.SphereGeometry(0.3, 10, 10),
+      new THREE.MeshPhongMaterial({ color: 0x88aa00, emissive: 0x334400 })
+    );
+    head.scale.set(1.1, 0.9, 1);
+    head.position.set(0, 1.55, 0.2);
+    group.add(head);
+
+    // Wide jaw/mandible
+    const jaw = new THREE.Mesh(
+      new THREE.BoxGeometry(0.3, 0.1, 0.25),
+      new THREE.MeshPhongMaterial({ color: 0x99bb00, emissive: 0x445500 })
+    );
+    jaw.position.set(0, 1.35, 0.35);
+    group.add(jaw);
+
+    // Teeth
+    for (let i = -2; i <= 2; i++) {
+      const tooth = new THREE.Mesh(
+        new THREE.ConeGeometry(0.015, 0.08, 4),
+        new THREE.MeshPhongMaterial({ color: 0xcccc66 })
+      );
+      tooth.position.set(i * 0.06, 1.3, 0.42);
+      tooth.rotation.x = Math.PI;
+      group.add(tooth);
+    }
+
+    // Eyes - reptilian slits
+    const eyeMat = new THREE.MeshBasicMaterial({ color: 0xffff00 });
+    for (const side of [-1, 1]) {
+      const eye = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 8), eyeMat);
+      eye.scale.set(0.6, 1.2, 0.5);
+      eye.position.set(side * 0.15, 1.6, 0.32);
+      group.add(eye);
+    }
+
+    // Acid sacs on back (3 bulbous glowing spheres)
+    const sacMat = new THREE.MeshPhongMaterial({
+      color: 0xaaee00, emissive: 0x668800,
+      transparent: true, opacity: 0.7, shininess: 60,
+    });
+    const sacPositions = [[0, 1.35, -0.35], [-0.2, 1.15, -0.3], [0.2, 1.15, -0.3]];
+    for (const [sx, sy, sz] of sacPositions) {
+      const sac = new THREE.Mesh(new THREE.SphereGeometry(0.15, 8, 8), sacMat);
+      sac.position.set(sx, sy, sz);
+      group.add(sac);
+      const sacInner = new THREE.Mesh(
+        new THREE.SphereGeometry(0.08, 6, 6),
+        new THREE.MeshBasicMaterial({ color: 0xccff00, transparent: true, opacity: 0.5 })
+      );
+      sacInner.position.set(sx, sy, sz);
+      group.add(sacInner);
+    }
+
+    // Arms - shorter, hunched
+    const armMat = new THREE.MeshPhongMaterial({ color: 0x669900, emissive: 0x223300 });
+    for (const side of [-1, 1]) {
+      const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.05, 0.45, 6), armMat);
+      arm.position.set(side * 0.35, 0.95, 0.15);
+      arm.rotation.z = side * 0.6;
+      arm.rotation.x = -0.3;
+      group.add(arm);
+      for (let f = -1; f <= 1; f++) {
+        const claw = new THREE.Mesh(
+          new THREE.ConeGeometry(0.012, 0.1, 4),
+          new THREE.MeshPhongMaterial({ color: 0xaaaa33 })
+        );
+        claw.position.set(side * 0.45 + f * 0.02, 0.72, 0.2);
+        group.add(claw);
+      }
+    }
+
+    // Thick legs - wide stance
+    const legMat = new THREE.MeshPhongMaterial({ color: 0x557700, emissive: 0x223300 });
+    for (const side of [-1, 1]) {
+      const thigh = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.08, 0.4, 6), legMat);
+      thigh.position.set(side * 0.2, 0.45, 0);
+      group.add(thigh);
+      const shin = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.07, 0.35, 6), legMat);
+      shin.position.set(side * 0.2, 0.18, 0.05);
+      group.add(shin);
+      const foot = new THREE.Mesh(
+        new THREE.BoxGeometry(0.14, 0.06, 0.2),
+        new THREE.MeshPhongMaterial({ color: 0x445500 })
+      );
+      foot.position.set(side * 0.2, 0.03, 0.05);
+      group.add(foot);
+    }
+
+    // Dripping acid indicator
+    const drip = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.01, 0.03, 0.15, 6),
+      new THREE.MeshBasicMaterial({ color: 0xaaff00, transparent: true, opacity: 0.6 })
+    );
+    drip.position.set(0, 1.22, 0.45);
+    group.add(drip);
+
+    // Scale plates on back
+    for (let i = 0; i < 5; i++) {
+      const plate = new THREE.Mesh(
+        new THREE.BoxGeometry(0.15, 0.04, 0.08),
+        new THREE.MeshPhongMaterial({ color: 0x778800, emissive: 0x223300 })
+      );
+      plate.position.set(0, 1.0 + i * 0.12, -0.42);
+      plate.rotation.x = 0.3;
+      group.add(plate);
+    }
+
+  } else if (type === 'drone') {
+    // === DRONE: Floating alien drone ===
+    // Central disc body
+    const disc = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.5, 0.6, 0.3, 12),
+      new THREE.MeshPhongMaterial({ color: 0x335588, emissive: 0x112244, shininess: 70 })
+    );
+    group.add(disc);
+
+    // Dome top
+    const dome = new THREE.Mesh(
+      new THREE.SphereGeometry(0.35, 10, 10, 0, Math.PI * 2, 0, Math.PI / 2),
+      new THREE.MeshPhongMaterial({ color: 0x4466aa, emissive: 0x223366, shininess: 80 })
+    );
+    dome.position.y = 0.15;
+    group.add(dome);
+
+    // Central eye
+    const eye = new THREE.Mesh(
+      new THREE.SphereGeometry(0.15, 10, 10),
+      new THREE.MeshBasicMaterial({ color: 0x44aaff })
+    );
+    eye.scale.set(1, 0.7, 0.5);
+    eye.position.set(0, 0.05, 0.45);
+    group.add(eye);
+
+    // Eye ring
+    const eyeRing = new THREE.Mesh(
+      new THREE.TorusGeometry(0.17, 0.02, 6, 12),
+      new THREE.MeshPhongMaterial({ color: 0x6688cc, emissive: 0x334466 })
+    );
+    eyeRing.position.set(0, 0.05, 0.42);
+    eyeRing.rotation.x = Math.PI / 2;
+    group.add(eyeRing);
+
+    // Decorative orbit ring
+    const orbitRing = new THREE.Mesh(
+      new THREE.TorusGeometry(0.65, 0.02, 6, 24),
+      new THREE.MeshBasicMaterial({ color: 0x4488ff, transparent: true, opacity: 0.4 })
+    );
+    orbitRing.rotation.x = Math.PI / 2;
+    group.add(orbitRing);
+
+    // 4 hover engines underneath
+    for (let i = 0; i < 4; i++) {
+      const angle = (i / 4) * Math.PI * 2;
+      const engineGroup = new THREE.Group();
+      const pod = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.08, 0.1, 0.15, 8),
+        new THREE.MeshPhongMaterial({ color: 0x445566, emissive: 0x112233 })
+      );
+      engineGroup.add(pod);
+      const engineGlow = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.06, 0.09, 0.05, 8),
+        new THREE.MeshBasicMaterial({ color: 0x4488ff, transparent: true, opacity: 0.7 })
+      );
+      engineGlow.position.y = -0.1;
+      engineGroup.add(engineGlow);
+      const eLight = new THREE.PointLight(0x4488ff, 0.3, 3);
+      eLight.position.y = -0.15;
+      engineGroup.add(eLight);
+      engineGroup.position.set(Math.cos(angle) * 0.45, -0.2, Math.sin(angle) * 0.45);
+      group.add(engineGroup);
+    }
+
+    // Antenna on top
+    const antenna = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.01, 0.01, 0.3, 4),
+      new THREE.MeshPhongMaterial({ color: 0x888888 })
+    );
+    antenna.position.y = 0.45;
+    group.add(antenna);
+    const antennaTip = new THREE.Mesh(
+      new THREE.SphereGeometry(0.03, 6, 6),
+      new THREE.MeshBasicMaterial({ color: 0xff4444 })
+    );
+    antennaTip.position.y = 0.62;
+    group.add(antennaTip);
+
+    // Side armor panels
+    for (let i = 0; i < 6; i++) {
+      const angle = (i / 6) * Math.PI * 2;
+      const panel = new THREE.Mesh(
+        new THREE.BoxGeometry(0.15, 0.08, 0.04),
+        new THREE.MeshPhongMaterial({ color: 0x556688, emissive: 0x112233 })
+      );
+      panel.position.set(Math.cos(angle) * 0.55, 0, Math.sin(angle) * 0.55);
+      panel.rotation.y = -angle;
+      group.add(panel);
+    }
+
+    // Bottom sensor
+    const sensor = new THREE.Mesh(
+      new THREE.ConeGeometry(0.08, 0.15, 6),
+      new THREE.MeshPhongMaterial({ color: 0x334466, emissive: 0x112244 })
+    );
+    sensor.position.y = -0.25;
+    sensor.rotation.x = Math.PI;
+    group.add(sensor);
+    const sensorGlow = new THREE.Mesh(
+      new THREE.SphereGeometry(0.04, 6, 6),
+      new THREE.MeshBasicMaterial({ color: 0x44aaff })
+    );
+    sensorGlow.position.y = -0.32;
+    group.add(sensorGlow);
   }
 
   return group;
@@ -443,6 +822,12 @@ export class Alien {
       this._swarmerBehavior(delta, dist, toPlayer, playerPos);
     } else if (this.data.behavior === 'explosive') {
       this._bloaterBehavior(delta, dist, toPlayer, playerPos);
+    } else if (this.data.behavior === 'stealth') {
+      this._stalkerBehavior(delta, dist, toPlayer, playerPos);
+    } else if (this.data.behavior === 'sniper') {
+      this._spitterBehavior(delta, dist, toPlayer, playerPos);
+    } else if (this.data.behavior === 'aerial') {
+      this._droneBehavior(delta, dist, toPlayer, playerPos);
     }
 
     // Update projectiles
@@ -491,6 +876,71 @@ export class Alien {
     // Scale pulse
     const scale = 1 + Math.sin(this.pulseTime * 2) * 0.05;
     this.mesh.children[0].scale.set(scale, scale, scale);
+  }
+
+  _stalkerBehavior(delta, dist, toPlayer, playerPos) {
+    // Rush at player with zigzag, cloaked
+    const zigzag = new THREE.Vector3(-toPlayer.z, 0, toPlayer.x)
+      .multiplyScalar(Math.sin(this.pulseTime * 5) * 2 * delta);
+    this.mesh.position.add(toPlayer.clone().multiplyScalar(this.data.speed * delta));
+    this.mesh.position.add(zigzag);
+
+    // Cloaking effect - more transparent when far, visible when close
+    const cloakOpacity = dist < 8 ? 0.8 : dist < 20 ? 0.3 : 0.1;
+    this.mesh.traverse(child => {
+      if (child.material) {
+        child.material.transparent = true;
+        child.material.opacity = cloakOpacity;
+      }
+    });
+  }
+
+  _spitterBehavior(delta, dist, toPlayer, playerPos) {
+    // Stay far away, like a sniper
+    const preferredDist = 35;
+    if (dist > preferredDist + 5) {
+      this.mesh.position.add(toPlayer.clone().multiplyScalar(this.data.speed * delta));
+    } else if (dist < preferredDist - 5) {
+      this.mesh.position.add(toPlayer.clone().multiplyScalar(-this.data.speed * delta));
+    }
+    // Slow strafe
+    const strafe = new THREE.Vector3(-toPlayer.z, 0, toPlayer.x);
+    this.mesh.position.add(strafe.multiplyScalar(Math.sin(this.pulseTime * 1.5) * 1.5 * delta));
+
+    // Shoot acid
+    this.attackCooldown -= delta;
+    if (this.attackCooldown <= 0 && dist < this.data.attackRange) {
+      this.attackCooldown = this.data.attackRate;
+      this._shootAtPlayer(playerPos);
+    }
+  }
+
+  _droneBehavior(delta, dist, toPlayer, playerPos) {
+    // Fly at fixed height
+    const targetY = this.data.flyHeight || 6;
+    this.mesh.position.y += (targetY - this.mesh.position.y) * 3 * delta;
+
+    // Circle/strafe around player
+    const strafe = new THREE.Vector3(-toPlayer.z, 0, toPlayer.x);
+    this.mesh.position.add(strafe.multiplyScalar(Math.sin(this.pulseTime * 2) * 3 * delta));
+
+    // Approach to preferred range
+    const preferredDist = 20;
+    if (dist > preferredDist + 5) {
+      this.mesh.position.add(toPlayer.clone().multiplyScalar(this.data.speed * delta));
+    } else if (dist < preferredDist - 5) {
+      this.mesh.position.add(toPlayer.clone().multiplyScalar(-this.data.speed * 0.5 * delta));
+    }
+
+    // Bob up and down
+    this.mesh.position.y += Math.sin(this.pulseTime * 4) * 0.5 * delta;
+
+    // Shoot
+    this.attackCooldown -= delta;
+    if (this.attackCooldown <= 0 && dist < this.data.attackRange) {
+      this.attackCooldown = this.data.attackRate;
+      this._shootAtPlayer(playerPos);
+    }
   }
 
   _shootAtPlayer(playerPos) {
@@ -559,8 +1009,8 @@ export class Alien {
     if (this.dead) return null;
     const dist = this.mesh.position.distanceTo(playerPos);
 
-    // Swarmer melee attack
-    if (this.type === 'swarmer' && dist < this.data.attackRange) {
+    // Swarmer/Stalker melee attack
+    if ((this.type === 'swarmer' || this.type === 'stalker') && dist < this.data.attackRange) {
       this.meleeCooldown = (this.meleeCooldown || 0) - (delta || 0.016);
       if (this.meleeCooldown <= 0) {
         this.meleeCooldown = this.data.attackRate;
@@ -596,7 +1046,8 @@ export class Alien {
   }
 
   getBoundingSphere() {
-    const r = this.type === 'bloater' ? 1.2 : this.type === 'grunt' ? 0.6 : 0.4;
+    const sizes = { bloater: 1.2, grunt: 0.6, spitter: 0.7, drone: 0.5, stalker: 0.5, swarmer: 0.4 };
+    const r = sizes[this.type] || 0.5;
     return { center: this.mesh.position.clone(), radius: r };
   }
 }

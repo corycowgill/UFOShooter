@@ -19,40 +19,166 @@ function makeBox(w, h, d, color, x, y, z) {
 
 function makeTree(x, z, scale = 1) {
   const group = new THREE.Group();
+  const trunkMat = makeMaterial(0x553311);
+  // Main trunk - tapered
   const trunk = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.15 * scale, 0.2 * scale, 2 * scale, 6),
-    makeMaterial(0x553311)
+    new THREE.CylinderGeometry(0.12 * scale, 0.22 * scale, 2.5 * scale, 8),
+    trunkMat
   );
-  trunk.position.y = scale;
+  trunk.position.y = 1.25 * scale;
   group.add(trunk);
-  const canopy = new THREE.Mesh(
-    new THREE.SphereGeometry(1.2 * scale, 8, 8),
-    makeMaterial(0x116622)
-  );
-  canopy.position.y = 2.5 * scale;
-  group.add(canopy);
+  // Branches
+  for (let i = 0; i < 3; i++) {
+    const angle = (i / 3) * Math.PI * 2 + Math.random() * 0.5;
+    const branch = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.03 * scale, 0.06 * scale, 0.8 * scale, 5),
+      trunkMat
+    );
+    branch.position.set(
+      Math.cos(angle) * 0.3 * scale,
+      (1.5 + i * 0.4) * scale,
+      Math.sin(angle) * 0.3 * scale
+    );
+    branch.rotation.z = Math.cos(angle) * 0.8;
+    branch.rotation.x = Math.sin(angle) * 0.8;
+    group.add(branch);
+  }
+  // Multiple foliage clusters
+  const foliageMat1 = makeMaterial(0x116622);
+  const foliageMat2 = makeMaterial(0x0e5519);
+  const mainCanopy = new THREE.Mesh(new THREE.SphereGeometry(1.0 * scale, 8, 8), foliageMat1);
+  mainCanopy.position.y = 2.8 * scale;
+  group.add(mainCanopy);
+  const cluster1 = new THREE.Mesh(new THREE.SphereGeometry(0.7 * scale, 7, 7), foliageMat2);
+  cluster1.position.set(-0.5 * scale, 2.5 * scale, 0.3 * scale);
+  group.add(cluster1);
+  const cluster2 = new THREE.Mesh(new THREE.SphereGeometry(0.65 * scale, 7, 7), foliageMat1);
+  cluster2.position.set(0.4 * scale, 2.6 * scale, -0.4 * scale);
+  group.add(cluster2);
+  const top = new THREE.Mesh(new THREE.SphereGeometry(0.5 * scale, 6, 6), foliageMat2);
+  top.position.set(0.1 * scale, 3.3 * scale, 0.1 * scale);
+  group.add(top);
   group.position.set(x, 0, z);
   return group;
 }
 
 function makeStreetLight(x, z) {
   const group = new THREE.Group();
-  const pole = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.05, 0.05, 5, 6),
-    makeMaterial(0x555555)
+  const poleMat = makeMaterial(0x555555);
+  // Base plate
+  const base = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.15, 0.2, 0.3, 8),
+    makeMaterial(0x444444)
   );
-  pole.position.y = 2.5;
+  base.position.y = 0.15;
+  group.add(base);
+  // Pole - tapered
+  const pole = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.04, 0.06, 5, 8),
+    poleMat
+  );
+  pole.position.y = 2.8;
   group.add(pole);
+  // Curved arm
+  const arm = new THREE.Mesh(
+    new THREE.TorusGeometry(0.6, 0.025, 6, 8, Math.PI / 2),
+    poleMat
+  );
+  arm.position.set(0.6, 5.0, 0);
+  arm.rotation.z = Math.PI;
+  arm.rotation.y = Math.PI / 2;
+  group.add(arm);
+  // Lantern fixture
   const fixture = new THREE.Mesh(
-    new THREE.BoxGeometry(0.3, 0.1, 0.15),
+    new THREE.CylinderGeometry(0.12, 0.18, 0.25, 8),
     makeMaterial(0x666666)
   );
-  fixture.position.set(0, 5, 0);
+  fixture.position.set(1.2, 4.7, 0);
   group.add(fixture);
+  // Bulb
+  const bulb = new THREE.Mesh(
+    new THREE.SphereGeometry(0.08, 6, 6),
+    new THREE.MeshBasicMaterial({ color: 0xffdd88 })
+  );
+  bulb.position.set(1.2, 4.55, 0);
+  group.add(bulb);
   const light = new THREE.PointLight(0xffdd88, 2.0, 25);
-  light.position.set(0, 4.9, 0);
+  light.position.set(1.2, 4.5, 0);
   group.add(light);
   group.position.set(x, 0, z);
+  return group;
+}
+
+function makeCar(x, z, color, rotation = 0) {
+  const group = new THREE.Group();
+  // Body
+  const body = new THREE.Mesh(
+    new THREE.BoxGeometry(1.8, 0.7, 4),
+    makeMaterial(color)
+  );
+  body.position.y = 0.55;
+  group.add(body);
+  // Cabin/roof
+  const cabin = new THREE.Mesh(
+    new THREE.BoxGeometry(1.5, 0.6, 2.0),
+    makeMaterial(color)
+  );
+  cabin.position.set(0, 1.15, -0.3);
+  group.add(cabin);
+  // Windshield
+  const windshield = new THREE.Mesh(
+    new THREE.PlaneGeometry(1.4, 0.6),
+    new THREE.MeshPhongMaterial({ color: 0x334466, transparent: true, opacity: 0.6, shininess: 100 })
+  );
+  windshield.position.set(0, 1.1, 0.65);
+  windshield.rotation.x = -0.3;
+  group.add(windshield);
+  // Rear window
+  const rearWin = new THREE.Mesh(
+    new THREE.PlaneGeometry(1.4, 0.5),
+    new THREE.MeshPhongMaterial({ color: 0x334466, transparent: true, opacity: 0.6 })
+  );
+  rearWin.position.set(0, 1.1, -1.35);
+  rearWin.rotation.x = 0.3;
+  rearWin.rotation.y = Math.PI;
+  group.add(rearWin);
+  // Wheels
+  const wheelGeo = new THREE.CylinderGeometry(0.3, 0.3, 0.2, 12);
+  const wheelMat = makeMaterial(0x111111);
+  const wheelPos = [[-0.9,0.3,1.2],[0.9,0.3,1.2],[-0.9,0.3,-1.2],[0.9,0.3,-1.2]];
+  for (const [wx,wy,wz] of wheelPos) {
+    const wheel = new THREE.Mesh(wheelGeo, wheelMat);
+    wheel.rotation.z = Math.PI / 2;
+    wheel.position.set(wx, wy, wz);
+    group.add(wheel);
+    const hub = new THREE.Mesh(new THREE.CircleGeometry(0.15, 8), makeMaterial(0x888888));
+    hub.position.set(wx > 0 ? wx+0.11 : wx-0.11, wy, wz);
+    hub.rotation.y = wx > 0 ? Math.PI/2 : -Math.PI/2;
+    group.add(hub);
+  }
+  // Headlights
+  for (const side of [-0.6, 0.6]) {
+    const hl = new THREE.Mesh(new THREE.CircleGeometry(0.1, 8), new THREE.MeshBasicMaterial({ color: 0xffffaa }));
+    hl.position.set(side, 0.6, 2.01);
+    group.add(hl);
+  }
+  // Taillights
+  for (const side of [-0.6, 0.6]) {
+    const tl = new THREE.Mesh(new THREE.CircleGeometry(0.08, 6), new THREE.MeshBasicMaterial({ color: 0xff0000 }));
+    tl.position.set(side, 0.6, -2.01);
+    tl.rotation.y = Math.PI;
+    group.add(tl);
+  }
+  // Bumpers
+  const bumperMat = makeMaterial(0x444444);
+  const fb = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.15, 0.15), bumperMat);
+  fb.position.set(0, 0.28, 2.0);
+  group.add(fb);
+  const rb = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.15, 0.15), bumperMat);
+  rb.position.set(0, 0.28, -2.0);
+  group.add(rb);
+  group.position.set(x, 0, z);
+  group.rotation.y = rotation;
   return group;
 }
 
@@ -258,12 +384,14 @@ function buildDowntownChicago(scene) {
     group.add(makeStreetLight(-8, z));
   }
 
-  // Some scattered cars (simple boxes)
+  // Scattered cars with detail
   for (let i = 0; i < 8; i++) {
     const carColors = [0xcc0000, 0x0044cc, 0x333333, 0xffffff, 0xcccc00];
-    const car = makeBox(1.8, 1.2, 4, carColors[Math.floor(Math.random() * carColors.length)],
-      (Math.random() - 0.5) * 8, 0, -70 + i * 20);
-    car.rotation.y = Math.random() * 0.3;
+    const car = makeCar(
+      (Math.random() - 0.5) * 8, -70 + i * 20,
+      carColors[Math.floor(Math.random() * carColors.length)],
+      Math.random() * 0.3
+    );
     group.add(car);
     addCollider(colliders, car);
   }
@@ -541,12 +669,15 @@ function buildRavenswood(scene) {
     group.add(makeStreetLight(7, z));
   }
 
-  // Parked cars
+  // Parked cars with detail
   for (let i = 0; i < 6; i++) {
     const carColors = [0xcc0000, 0x333333, 0x0044aa, 0xeeeeee, 0x444400];
     const side = i % 2 === 0 ? -7.5 : 7.5;
-    const car = makeBox(1.8, 1.2, 4, carColors[Math.floor(Math.random() * carColors.length)],
-      side, 0, -50 + i * 20);
+    const car = makeCar(
+      side, -50 + i * 20,
+      carColors[Math.floor(Math.random() * carColors.length)],
+      0
+    );
     group.add(car);
     addCollider(colliders, car);
   }
