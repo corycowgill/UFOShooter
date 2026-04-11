@@ -182,6 +182,211 @@ function makeCar(x, z, color, rotation = 0) {
   return group;
 }
 
+function makeBench(x, z) {
+  const group = new THREE.Group();
+  const woodMat = makeMaterial(0x664422);
+  const metalMat = makeMaterial(0x444444);
+  // Seat
+  const seat = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.08, 0.5), woodMat);
+  seat.position.y = 0.5;
+  group.add(seat);
+  // Seat slats
+  for (let i = 0; i < 4; i++) {
+    const slat = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.04, 0.08), woodMat);
+    slat.position.set(0, 0.52, -0.18 + i * 0.12);
+    group.add(slat);
+  }
+  // Backrest
+  const back = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.5, 0.06), woodMat);
+  back.position.set(0, 0.85, -0.25);
+  back.rotation.x = -0.15;
+  group.add(back);
+  // Legs (metal)
+  for (const sx of [-0.6, 0.6]) {
+    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.5, 0.4), metalMat);
+    leg.position.set(sx, 0.25, 0);
+    group.add(leg);
+    // Armrest support
+    const armSupport = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.4, 0.06), metalMat);
+    armSupport.position.set(sx, 0.7, -0.22);
+    group.add(armSupport);
+    // Armrest
+    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.04, 0.4), metalMat);
+    arm.position.set(sx, 0.9, -0.05);
+    group.add(arm);
+  }
+  group.position.set(x, 0, z);
+  return group;
+}
+
+function makeTrafficLight(x, z) {
+  const group = new THREE.Group();
+  const poleMat = makeMaterial(0x444444);
+  // Pole
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.08, 5.5, 6), poleMat);
+  pole.position.y = 2.75;
+  group.add(pole);
+  // Horizontal arm
+  const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 3, 6), poleMat);
+  arm.position.set(1.5, 5.3, 0);
+  arm.rotation.z = Math.PI / 2;
+  group.add(arm);
+  // Signal housing
+  const housing = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.9, 0.25), makeMaterial(0x222222));
+  housing.position.set(2.5, 5.3, 0);
+  group.add(housing);
+  // Visor on top
+  const visor = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.06, 0.3), makeMaterial(0x222222));
+  visor.position.set(2.5, 5.78, 0);
+  group.add(visor);
+  // Lights (red, yellow, green)
+  const lightColors = [0xff0000, 0xffaa00, 0x00ff00];
+  for (let i = 0; i < 3; i++) {
+    const bulb = new THREE.Mesh(
+      new THREE.CircleGeometry(0.08, 8),
+      new THREE.MeshBasicMaterial({ color: lightColors[i], transparent: true, opacity: i === 0 ? 1.0 : 0.3 })
+    );
+    bulb.position.set(2.5, 5.55 - i * 0.25, 0.13);
+    group.add(bulb);
+  }
+  // Walk signal on pole
+  const walkBox = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.25, 0.15), makeMaterial(0x222222));
+  walkBox.position.set(0, 3.5, 0.1);
+  group.add(walkBox);
+  const walkLight = new THREE.Mesh(
+    new THREE.CircleGeometry(0.06, 6),
+    new THREE.MeshBasicMaterial({ color: 0xffffff })
+  );
+  walkLight.position.set(0, 3.5, 0.18);
+  group.add(walkLight);
+  group.position.set(x, 0, z);
+  return group;
+}
+
+function makeFireHydrant(x, z) {
+  const group = new THREE.Group();
+  const hydrantMat = makeMaterial(0xcc2200);
+  // Body
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.15, 0.6, 8), hydrantMat);
+  body.position.y = 0.3;
+  group.add(body);
+  // Top cap
+  const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.12, 0.12, 8), hydrantMat);
+  cap.position.y = 0.66;
+  group.add(cap);
+  // Bonnet
+  const bonnet = new THREE.Mesh(new THREE.SphereGeometry(0.1, 6, 6), hydrantMat);
+  bonnet.position.y = 0.75;
+  group.add(bonnet);
+  // Side nozzles
+  for (const side of [-1, 1]) {
+    const nozzle = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.12, 6), hydrantMat);
+    nozzle.rotation.z = Math.PI / 2;
+    nozzle.position.set(side * 0.16, 0.42, 0);
+    group.add(nozzle);
+    const nozzleCap = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.03, 6),
+      makeMaterial(0xcc9900));
+    nozzleCap.rotation.z = Math.PI / 2;
+    nozzleCap.position.set(side * 0.22, 0.42, 0);
+    group.add(nozzleCap);
+  }
+  // Base plate
+  const base = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 0.04, 8), makeMaterial(0x999999));
+  base.position.y = 0.02;
+  group.add(base);
+  group.position.set(x, 0, z);
+  return group;
+}
+
+function makeTrashCan(x, z) {
+  const group = new THREE.Group();
+  const canMat = makeMaterial(0x336633);
+  // Body
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.22, 0.9, 8), canMat);
+  body.position.y = 0.45;
+  group.add(body);
+  // Rim
+  const rim = new THREE.Mesh(new THREE.TorusGeometry(0.26, 0.02, 4, 8), canMat);
+  rim.position.y = 0.9;
+  group.add(rim);
+  // Lid (dome)
+  const lid = new THREE.Mesh(new THREE.SphereGeometry(0.25, 8, 4, 0, Math.PI * 2, 0, Math.PI / 3),
+    makeMaterial(0x338833));
+  lid.position.y = 0.92;
+  group.add(lid);
+  // Opening slot
+  const slot = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.03, 0.06), makeMaterial(0x111111));
+  slot.position.set(0, 0.95, 0.15);
+  group.add(slot);
+  group.position.set(x, 0, z);
+  return group;
+}
+
+function makeNewsBox(x, z) {
+  const group = new THREE.Group();
+  const boxMat = makeMaterial(0x2244aa);
+  // Body
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.9, 0.4), boxMat);
+  body.position.y = 0.45;
+  group.add(body);
+  // Coin slot panel
+  const panel = new THREE.Mesh(new THREE.PlaneGeometry(0.3, 0.15),
+    makeMaterial(0x888888));
+  panel.position.set(0, 0.65, 0.201);
+  group.add(panel);
+  // Window
+  const window = new THREE.Mesh(new THREE.PlaneGeometry(0.35, 0.25),
+    new THREE.MeshPhongMaterial({ color: 0x334466, transparent: true, opacity: 0.6 }));
+  window.position.set(0, 0.35, 0.201);
+  group.add(window);
+  // Legs
+  for (const [lx, lz] of [[-0.2, -0.15], [0.2, -0.15], [-0.2, 0.15], [0.2, 0.15]]) {
+    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.1, 0.04), makeMaterial(0x222222));
+    leg.position.set(lx, 0.05, lz);
+    group.add(leg);
+  }
+  group.position.set(x, 0, z);
+  return group;
+}
+
+function makePlanter(x, z) {
+  const group = new THREE.Group();
+  // Concrete planter box
+  const pot = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.4, 0.3, 0.5, 8),
+    makeMaterial(0x777777)
+  );
+  pot.position.y = 0.25;
+  group.add(pot);
+  // Soil
+  const soil = new THREE.Mesh(
+    new THREE.CircleGeometry(0.35, 8),
+    makeMaterial(0x3a2a1a)
+  );
+  soil.rotation.x = -Math.PI / 2;
+  soil.position.y = 0.5;
+  group.add(soil);
+  // Small bush
+  const bush = new THREE.Mesh(
+    new THREE.SphereGeometry(0.35, 6, 6),
+    makeMaterial(0x2a6622)
+  );
+  bush.position.y = 0.8;
+  group.add(bush);
+  // Some flowers
+  for (let i = 0; i < 4; i++) {
+    const angle = (i / 4) * Math.PI * 2;
+    const flower = new THREE.Mesh(
+      new THREE.SphereGeometry(0.05, 4, 4),
+      new THREE.MeshBasicMaterial({ color: [0xff4488, 0xffaa22, 0xff66aa, 0xffdd00][i] })
+    );
+    flower.position.set(Math.cos(angle) * 0.25, 0.9, Math.sin(angle) * 0.25);
+    group.add(flower);
+  }
+  group.position.set(x, 0, z);
+  return group;
+}
+
 function addGround(group, size, color = 0x333333) {
   const ground = new THREE.Mesh(
     new THREE.PlaneGeometry(size * 2, size * 2),
@@ -261,114 +466,24 @@ function buildDowntownChicago(scene) {
   const dirLight = new THREE.DirectionalLight(0xaabbff, 0.8);
   dirLight.position.set(10, 30, 10);
   scene.add(dirLight);
-  // Extra fill light from below (city glow)
   const fillLight = new THREE.HemisphereLight(0x4466aa, 0x222244, 0.6);
   scene.add(fillLight);
 
-  // === Willis Tower (Sears Tower) - tall dark building ===
-  const willis = makeBox(8, 45, 8, 0x222222, -30, 0, -40);
-  group.add(willis);
-  addCollider(colliders, willis);
-  // Antenna
-  const antenna = makeBox(0.3, 10, 0.3, 0x444444, -30, 45, -40);
-  group.add(antenna);
-  // Window lights
-  for (let y = 2; y < 44; y += 3) {
-    for (let side = 0; side < 4; side++) {
-      if (Math.random() > 0.4) {
-        const win = new THREE.Mesh(
-          new THREE.PlaneGeometry(0.8, 1.2),
-          new THREE.MeshBasicMaterial({ color: 0xffdd66, transparent: true, opacity: 0.5 + Math.random() * 0.5 })
-        );
-        const angle = side * Math.PI / 2;
-        const offset = 4.01;
-        win.position.set(
-          -30 + Math.sin(angle) * offset + (Math.random() - 0.5) * 3,
-          y,
-          -40 + Math.cos(angle) * offset + (Math.random() - 0.5) * 3
-        );
-        win.rotation.y = angle;
-        group.add(win);
-      }
-    }
-  }
+  const sidewalkMat = makeMaterial(0x888888);
+  const curbMat = makeMaterial(0x999999);
+  const roadMat = makeMaterial(0x1e1e1e);
 
-  // === Trump Tower ===
-  const trump = makeBox(6, 38, 6, 0x888899, 25, 0, -35);
-  group.add(trump);
-  addCollider(colliders, trump);
-  // Glass facade hint
-  const trumpGlass = makeBox(6.1, 38, 6.1, 0x4466aa, 25, 0, -35);
-  trumpGlass.material.transparent = true;
-  trumpGlass.material.opacity = 0.15;
-  group.add(trumpGlass);
+  // =============================================
+  // === MICHIGAN AVENUE (north-south, z-axis) ===
+  // =============================================
+  // Road: 14 wide centered at x=0
+  const michiganAve = new THREE.Mesh(new THREE.PlaneGeometry(14, 200), roadMat);
+  michiganAve.rotation.x = -Math.PI / 2;
+  michiganAve.position.set(0, 0.02, 0);
+  group.add(michiganAve);
 
-  // === The Bean (Cloud Gate) ===
-  const bean = new THREE.Mesh(
-    new THREE.SphereGeometry(3, 16, 16),
-    new THREE.MeshPhongMaterial({
-      color: 0xaaaacc,
-      emissive: 0x222233,
-      shininess: 100,
-      envMap: null,
-    })
-  );
-  bean.scale.set(1.5, 0.8, 1);
-  bean.position.set(0, 2.4, 15);
-  group.add(bean);
-  addCollider(colliders, bean);
-
-  // Bean plaza
-  const plaza = new THREE.Mesh(
-    new THREE.PlaneGeometry(20, 20),
-    makeMaterial(0x999999)
-  );
-  plaza.rotation.x = -Math.PI / 2;
-  plaza.position.set(0, 0.01, 15);
-  group.add(plaza);
-
-  // === Chicago River ===
-  const river = new THREE.Mesh(
-    new THREE.PlaneGeometry(10, 200),
-    new THREE.MeshPhongMaterial({ color: 0x114477, transparent: true, opacity: 0.7, emissive: 0x001122 })
-  );
-  river.rotation.x = -Math.PI / 2;
-  river.position.set(0, 0.05, 0);
-  group.add(river);
-
-  // === Michigan Avenue buildings ===
-  for (let i = 0; i < 12; i++) {
-    const side = i % 2 === 0 ? 1 : -1;
-    const h = 10 + Math.random() * 25;
-    const w = 4 + Math.random() * 4;
-    const d = 4 + Math.random() * 4;
-    const z = -80 + i * 14;
-    const bldg = makeBox(w, h, d, 0x333344 + Math.floor(Math.random() * 0x111111), side * (15 + w/2 + 5), 0, z);
-    group.add(bldg);
-    addCollider(colliders, bldg);
-    // Some window lights
-    for (let y = 2; y < h; y += 4) {
-      const win = new THREE.Mesh(
-        new THREE.PlaneGeometry(1, 1.5),
-        new THREE.MeshBasicMaterial({ color: 0xffdd44, transparent: true, opacity: Math.random() * 0.8 })
-      );
-      win.position.set(side * (15 + 5), y, z);
-      win.rotation.y = side > 0 ? -Math.PI / 2 : Math.PI / 2;
-      group.add(win);
-    }
-  }
-
-  // === Street / Roads ===
-  // Michigan Ave road
-  const road = new THREE.Mesh(
-    new THREE.PlaneGeometry(12, 200),
-    makeMaterial(0x222222)
-  );
-  road.rotation.x = -Math.PI / 2;
-  road.position.set(0, 0.02, -10);
-  group.add(road);
-  // Road lines
-  for (let z = -90; z < 90; z += 6) {
+  // Center line (dashed yellow)
+  for (let z = -95; z < 95; z += 6) {
     const line = new THREE.Mesh(
       new THREE.PlaneGeometry(0.2, 3),
       new THREE.MeshBasicMaterial({ color: 0xffff00 })
@@ -377,23 +492,474 @@ function buildDowntownChicago(scene) {
     line.position.set(0, 0.03, z);
     group.add(line);
   }
+  // Lane markings (white dashed)
+  for (const lx of [-3.5, 3.5]) {
+    for (let z = -95; z < 95; z += 8) {
+      const dash = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.12, 4),
+        new THREE.MeshBasicMaterial({ color: 0xaaaaaa })
+      );
+      dash.rotation.x = -Math.PI / 2;
+      dash.position.set(lx, 0.03, z);
+      group.add(dash);
+    }
+  }
 
-  // Street lights
-  for (let z = -80; z < 80; z += 20) {
+  // === SIDEWALKS along Michigan Ave ===
+  for (const side of [-1, 1]) {
+    // Sidewalk (4 wide, just outside road edge at ±7)
+    const sw = new THREE.Mesh(new THREE.PlaneGeometry(4, 200), sidewalkMat);
+    sw.rotation.x = -Math.PI / 2;
+    sw.position.set(side * 9, 0.04, 0);
+    group.add(sw);
+    // Inner curb (road edge)
+    const innerCurb = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.15, 200), curbMat);
+    innerCurb.position.set(side * 7, 0.075, 0);
+    group.add(innerCurb);
+    // Outer curb (building edge)
+    const outerCurb = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.15, 200), curbMat);
+    outerCurb.position.set(side * 11, 0.075, 0);
+    group.add(outerCurb);
+  }
+
+  // === CROSS STREET at z = -35 ===
+  const crossRoad1 = new THREE.Mesh(new THREE.PlaneGeometry(200, 10), roadMat);
+  crossRoad1.rotation.x = -Math.PI / 2;
+  crossRoad1.position.set(0, 0.025, -35);
+  group.add(crossRoad1);
+  // Cross street center line
+  for (let x = -90; x < 90; x += 6) {
+    const cl = new THREE.Mesh(
+      new THREE.PlaneGeometry(3, 0.2),
+      new THREE.MeshBasicMaterial({ color: 0xffff00 })
+    );
+    cl.rotation.x = -Math.PI / 2;
+    cl.position.set(x, 0.035, -35);
+    group.add(cl);
+  }
+
+  // === CROSS STREET at z = 35 ===
+  const crossRoad2 = new THREE.Mesh(new THREE.PlaneGeometry(200, 10), roadMat);
+  crossRoad2.rotation.x = -Math.PI / 2;
+  crossRoad2.position.set(0, 0.025, 35);
+  group.add(crossRoad2);
+  for (let x = -90; x < 90; x += 6) {
+    const cl = new THREE.Mesh(
+      new THREE.PlaneGeometry(3, 0.2),
+      new THREE.MeshBasicMaterial({ color: 0xffff00 })
+    );
+    cl.rotation.x = -Math.PI / 2;
+    cl.position.set(x, 0.035, 35);
+    group.add(cl);
+  }
+
+  // === CROSSWALKS at intersections ===
+  for (const zInt of [-35, 35]) {
+    // Crosswalks across Michigan Ave (north & south side of intersection)
+    for (const zSide of [-6, 6]) {
+      for (let i = 0; i < 8; i++) {
+        const stripe = new THREE.Mesh(
+          new THREE.PlaneGeometry(1.2, 0.4),
+          new THREE.MeshBasicMaterial({ color: 0xffffff })
+        );
+        stripe.rotation.x = -Math.PI / 2;
+        stripe.position.set(-5.5 + i * 1.6, 0.035, zInt + zSide);
+        group.add(stripe);
+      }
+    }
+    // Crosswalks across cross street (east & west side)
+    for (const xSide of [-8, 8]) {
+      for (let i = 0; i < 6; i++) {
+        const stripe = new THREE.Mesh(
+          new THREE.PlaneGeometry(0.4, 1.2),
+          new THREE.MeshBasicMaterial({ color: 0xffffff })
+        );
+        stripe.rotation.x = -Math.PI / 2;
+        stripe.position.set(xSide, 0.035, zInt - 3.5 + i * 1.4);
+        group.add(stripe);
+      }
+    }
+  }
+
+  // ========================================
+  // === CHICAGO RIVER (east-west at z=0) ===
+  // ========================================
+  const river = new THREE.Mesh(
+    new THREE.PlaneGeometry(200, 12),
+    new THREE.MeshPhongMaterial({ color: 0x0d3d5c, transparent: true, opacity: 0.8, emissive: 0x001122 })
+  );
+  river.rotation.x = -Math.PI / 2;
+  river.position.set(0, 0.01, 0);
+  group.add(river);
+
+  // Riverwalk (stone embankment along both banks)
+  for (const zSide of [-1, 1]) {
+    const bankZ = zSide * 6.5;
+    // Stone wall
+    const wall = new THREE.Mesh(
+      new THREE.BoxGeometry(200, 1.5, 0.6),
+      makeMaterial(0x555555)
+    );
+    wall.position.set(0, 0.75, bankZ);
+    group.add(wall);
+    // Railing on top
+    const railing = new THREE.Mesh(
+      new THREE.BoxGeometry(200, 0.1, 0.08),
+      makeMaterial(0x333333)
+    );
+    railing.position.set(0, 1.55, bankZ);
+    group.add(railing);
+    // Railing posts
+    for (let x = -90; x < 90; x += 4) {
+      const post = new THREE.Mesh(
+        new THREE.BoxGeometry(0.06, 0.5, 0.06),
+        makeMaterial(0x333333)
+      );
+      post.position.set(x, 1.3, bankZ);
+      group.add(post);
+    }
+    // Walkway along the river
+    const walkway = new THREE.Mesh(
+      new THREE.PlaneGeometry(200, 2),
+      makeMaterial(0x776655)
+    );
+    walkway.rotation.x = -Math.PI / 2;
+    walkway.position.set(0, 0.05, bankZ + zSide * 1.3);
+    group.add(walkway);
+  }
+
+  // === MICHIGAN AVE BRIDGE over the river ===
+  // Bridge deck (raises the road over the river)
+  const bridgeDeck = new THREE.Mesh(
+    new THREE.BoxGeometry(16, 0.8, 14),
+    makeMaterial(0x555555)
+  );
+  bridgeDeck.position.set(0, 0.4, 0);
+  group.add(bridgeDeck);
+  addCollider(colliders, bridgeDeck);
+  // Bridge road surface
+  const bridgeRoad = new THREE.Mesh(
+    new THREE.PlaneGeometry(14, 12),
+    roadMat
+  );
+  bridgeRoad.rotation.x = -Math.PI / 2;
+  bridgeRoad.position.set(0, 0.81, 0);
+  group.add(bridgeRoad);
+  // Bridge railings
+  for (const xSide of [-8, 8]) {
+    const bridgeRail = new THREE.Mesh(
+      new THREE.BoxGeometry(0.15, 1.2, 14),
+      makeMaterial(0x444444)
+    );
+    bridgeRail.position.set(xSide, 1.4, 0);
+    group.add(bridgeRail);
+    // Decorative posts
+    for (let z = -6; z <= 6; z += 3) {
+      const bPost = new THREE.Mesh(
+        new THREE.BoxGeometry(0.2, 1.5, 0.2),
+        makeMaterial(0x555555)
+      );
+      bPost.position.set(xSide, 1.5, z);
+      group.add(bPost);
+    }
+  }
+  // Bridge support arches
+  for (const zOff of [-3, 3]) {
+    const arch = new THREE.Mesh(
+      new THREE.TorusGeometry(2.5, 0.3, 6, 12, Math.PI),
+      makeMaterial(0x444444)
+    );
+    arch.position.set(0, -0.5, zOff);
+    arch.rotation.y = Math.PI / 2;
+    group.add(arch);
+  }
+
+  // ============================================
+  // === MILLENNIUM PARK (east of Michigan Ave) ==
+  // ============================================
+  // Park ground (east side, z = 15 to 55)
+  const parkGround = new THREE.Mesh(
+    new THREE.PlaneGeometry(40, 35),
+    makeMaterial(0x3a6633)
+  );
+  parkGround.rotation.x = -Math.PI / 2;
+  parkGround.position.set(32, 0.03, 20);
+  group.add(parkGround);
+
+  // Bean plaza (paved area within the park)
+  const beanPlaza = new THREE.Mesh(
+    new THREE.PlaneGeometry(22, 22),
+    makeMaterial(0x999999)
+  );
+  beanPlaza.rotation.x = -Math.PI / 2;
+  beanPlaza.position.set(30, 0.04, 20);
+  group.add(beanPlaza);
+  // Plaza border tiles
+  const borderMat = makeMaterial(0x777777);
+  for (const side of [[-1,0],[1,0],[0,-1],[0,1]]) {
+    const border = new THREE.Mesh(
+      new THREE.PlaneGeometry(side[0] !== 0 ? 0.5 : 22, side[1] !== 0 ? 0.5 : 22),
+      borderMat
+    );
+    border.rotation.x = -Math.PI / 2;
+    border.position.set(30 + side[0] * 11.25, 0.045, 20 + side[1] * 11.25);
+    group.add(border);
+  }
+
+  // === THE BEAN (Cloud Gate) - now in Millennium Park ===
+  const bean = new THREE.Mesh(
+    new THREE.SphereGeometry(3, 24, 24),
+    new THREE.MeshPhongMaterial({
+      color: 0xbbbbdd,
+      emissive: 0x222233,
+      shininess: 120,
+    })
+  );
+  bean.scale.set(1.5, 0.8, 1);
+  bean.position.set(30, 2.4, 20);
+  group.add(bean);
+  addCollider(colliders, bean);
+  // Bean reflection on ground
+  const beanReflect = new THREE.Mesh(
+    new THREE.CircleGeometry(4, 16),
+    new THREE.MeshBasicMaterial({ color: 0x334455, transparent: true, opacity: 0.3 })
+  );
+  beanReflect.rotation.x = -Math.PI / 2;
+  beanReflect.position.set(30, 0.045, 20);
+  group.add(beanReflect);
+
+  // Park benches around the Bean
+  for (let i = 0; i < 8; i++) {
+    const angle = (i / 8) * Math.PI * 2;
+    const bx = 30 + Math.cos(angle) * 9;
+    const bz = 20 + Math.sin(angle) * 9;
+    const bench = makeBench(bx, bz);
+    bench.rotation.y = angle + Math.PI;
+    group.add(bench);
+  }
+
+  // Park trees
+  const parkTreePositions = [
+    [16, 12], [16, 28], [44, 12], [44, 28],
+    [20, 6], [40, 6], [20, 34], [40, 34],
+    [14, 20], [46, 20],
+  ];
+  for (const [tx, tz] of parkTreePositions) {
+    group.add(makeTree(tx, tz, 0.8 + Math.random() * 0.4));
+  }
+
+  // Park path from sidewalk to Bean
+  const parkPath = new THREE.Mesh(
+    new THREE.PlaneGeometry(3, 20),
+    makeMaterial(0x887766)
+  );
+  parkPath.rotation.x = -Math.PI / 2;
+  parkPath.position.set(20, 0.04, 20);
+  group.add(parkPath);
+
+  // Park lamp posts
+  for (const [lx, lz] of [[20, 10], [20, 30], [40, 10], [40, 30]]) {
+    group.add(makeStreetLight(lx, lz));
+  }
+
+  // ================================================
+  // === WILLIS TOWER (Sears Tower) - west side ===
+  // ================================================
+  const willis = makeBox(8, 45, 8, 0x222222, -30, 0, -55);
+  group.add(willis);
+  addCollider(colliders, willis);
+  // Setback tiers (Willis has stepped profile)
+  const willisT2 = makeBox(6, 8, 6, 0x222222, -30, 45, -55);
+  group.add(willisT2);
+  const willisT3 = makeBox(4, 6, 4, 0x222222, -30, 53, -55);
+  group.add(willisT3);
+  // Antennas
+  const ant1 = makeBox(0.2, 12, 0.2, 0x444444, -30, 59, -55);
+  group.add(ant1);
+  const ant2 = makeBox(0.2, 10, 0.2, 0x444444, -28, 59, -55);
+  group.add(ant2);
+  // Antenna tip lights
+  for (const [ax, ah] of [[-30, 65], [-28, 64]]) {
+    const tipLight = new THREE.Mesh(
+      new THREE.SphereGeometry(0.2, 6, 6),
+      new THREE.MeshBasicMaterial({ color: 0xff0000 })
+    );
+    tipLight.position.set(ax, ah, -55);
+    group.add(tipLight);
+  }
+  // Window lights
+  for (let y = 2; y < 44; y += 3) {
+    for (let side = 0; side < 4; side++) {
+      if (Math.random() > 0.35) {
+        const win = new THREE.Mesh(
+          new THREE.PlaneGeometry(0.8, 1.2),
+          new THREE.MeshBasicMaterial({ color: 0xffdd66, transparent: true, opacity: 0.4 + Math.random() * 0.6 })
+        );
+        const angle = side * Math.PI / 2;
+        const offset = 4.01;
+        win.position.set(
+          -30 + Math.sin(angle) * offset + (Math.random() - 0.5) * 3,
+          y,
+          -55 + Math.cos(angle) * offset + (Math.random() - 0.5) * 3
+        );
+        win.rotation.y = angle;
+        group.add(win);
+      }
+    }
+  }
+
+  // ====================================
+  // === TRUMP TOWER - east of river ===
+  // ====================================
+  const trump = makeBox(6, 38, 6, 0x888899, 30, 0, -15);
+  group.add(trump);
+  addCollider(colliders, trump);
+  // Glass facade
+  const trumpGlass = makeBox(6.1, 38, 6.1, 0x4466aa, 30, 0, -15);
+  trumpGlass.material.transparent = true;
+  trumpGlass.material.opacity = 0.15;
+  group.add(trumpGlass);
+  // Spire
+  const spire = makeBox(0.4, 8, 0.4, 0x999999, 30, 38, -15);
+  group.add(spire);
+
+  // =========================================
+  // === MICHIGAN AVE BUILDINGS (both sides) ==
+  // =========================================
+  // West side buildings (x < -11)
+  const westBldgData = [
+    { x: -20, z: -70, w: 7, d: 6, h: 18 },
+    { x: -22, z: -55, w: 8, d: 7, h: 28 },
+    { x: -18, z: -20, w: 6, d: 6, h: 15 },
+    { x: -22, z: -10, w: 8, d: 5, h: 22 },
+    { x: -20, z: 15, w: 7, d: 6, h: 20 },
+    { x: -22, z: 30, w: 8, d: 7, h: 25 },
+    { x: -18, z: 50, w: 6, d: 5, h: 14 },
+    { x: -22, z: 65, w: 8, d: 6, h: 30 },
+  ];
+  // East side buildings (x > 11) — skip where park is (z 5 to 38)
+  const eastBldgData = [
+    { x: 20, z: -70, w: 7, d: 6, h: 20 },
+    { x: 22, z: -55, w: 8, d: 7, h: 32 },
+    { x: 18, z: -20, w: 6, d: 5, h: 16 },
+    { x: 20, z: 50, w: 7, d: 6, h: 22 },
+    { x: 22, z: 65, w: 8, d: 7, h: 26 },
+  ];
+
+  function addBuilding(bd, facingSide) {
+    const colors = [0x333344, 0x3a3a4a, 0x2e2e3e, 0x404050, 0x353545];
+    const bldg = makeBox(bd.w, bd.h, bd.d, colors[Math.floor(Math.random() * colors.length)], bd.x, 0, bd.z);
+    group.add(bldg);
+    addCollider(colliders, bldg);
+    // Window grid
+    for (let y = 2; y < bd.h; y += 3) {
+      for (let wOff = -bd.d / 3; wOff <= bd.d / 3; wOff += bd.d / 3) {
+        if (Math.random() > 0.3) {
+          const win = new THREE.Mesh(
+            new THREE.PlaneGeometry(0.8, 1.5),
+            new THREE.MeshBasicMaterial({ color: Math.random() > 0.4 ? 0xffdd44 : 0x222244, transparent: true, opacity: 0.6 + Math.random() * 0.4 })
+          );
+          win.position.set(
+            bd.x + facingSide * (bd.w / 2 + 0.01),
+            y,
+            bd.z + wOff
+          );
+          win.rotation.y = facingSide > 0 ? -Math.PI / 2 : Math.PI / 2;
+          group.add(win);
+        }
+      }
+    }
+    // Rooftop details
+    if (bd.h > 20) {
+      // AC units on roof
+      const ac = makeBox(1.5, 1, 1.5, 0x666666, bd.x + 1, bd.h, bd.z);
+      group.add(ac);
+      const ac2 = makeBox(1, 0.8, 1, 0x666666, bd.x - 1.5, bd.h, bd.z + 1);
+      group.add(ac2);
+    }
+  }
+
+  for (const bd of westBldgData) addBuilding(bd, 1);
+  for (const bd of eastBldgData) addBuilding(bd, -1);
+
+  // === STREET LIGHTS along Michigan Ave ===
+  for (let z = -80; z < 80; z += 15) {
+    // Skip river zone (-7 to 7)
+    if (z > -8 && z < 8) continue;
     group.add(makeStreetLight(8, z));
     group.add(makeStreetLight(-8, z));
   }
 
-  // Scattered cars with detail
-  for (let i = 0; i < 8; i++) {
-    const carColors = [0xcc0000, 0x0044cc, 0x333333, 0xffffff, 0xcccc00];
-    const car = makeCar(
-      (Math.random() - 0.5) * 8, -70 + i * 20,
-      carColors[Math.floor(Math.random() * carColors.length)],
-      Math.random() * 0.3
-    );
+  // === TRAFFIC LIGHTS at intersections ===
+  for (const zInt of [-35, 35]) {
+    for (const xSide of [-7.5, 7.5]) {
+      const tl = makeTrafficLight(xSide, zInt);
+      group.add(tl);
+    }
+  }
+
+  // === FIRE HYDRANTS along sidewalks ===
+  for (const [fx, fz] of [[-8, -50], [8, -50], [-8, -15], [8, -15], [-8, 45], [8, 45], [-8, 60], [8, 60]]) {
+    group.add(makeFireHydrant(fx, fz));
+  }
+
+  // === NEWSPAPER BOXES / TRASH CANS on sidewalks ===
+  for (let z = -70; z < 70; z += 20) {
+    if (z > -8 && z < 8) continue;
+    // West sidewalk trash can
+    group.add(makeTrashCan(-9.5, z));
+    // East sidewalk newspaper box
+    group.add(makeNewsBox(9.5, z + 5));
+  }
+
+  // === PLANTERS on sidewalks ===
+  for (let z = -65; z < 70; z += 25) {
+    if (z > -10 && z < 10) continue;
+    group.add(makePlanter(-8.5, z));
+    group.add(makePlanter(8.5, z));
+  }
+
+  // === PARKED CARS (along curbs, not in road center) ===
+  const carColors = [0xcc0000, 0x0044cc, 0x333333, 0xffffff, 0xcccc00, 0x228822, 0x666666];
+  // West side parked cars (in the parking lane area near curb)
+  for (let i = 0; i < 6; i++) {
+    const cz = -65 + i * 22;
+    if (cz > -8 && cz < 8) continue; // skip river
+    if (cz > 28 && cz < 42) continue; // skip cross street
+    const car = makeCar(-5.5, cz, carColors[Math.floor(Math.random() * carColors.length)], 0);
     group.add(car);
     addCollider(colliders, car);
+  }
+  // East side parked cars
+  for (let i = 0; i < 5; i++) {
+    const cz = -55 + i * 22;
+    if (cz > -8 && cz < 8) continue;
+    if (cz > 28 && cz < 42) continue;
+    const car = makeCar(5.5, cz, carColors[Math.floor(Math.random() * carColors.length)], 0);
+    group.add(car);
+    addCollider(colliders, car);
+  }
+
+  // === ADDITIONAL BUILDINGS further back ===
+  // Deep west block
+  for (let z = -80; z < 80; z += 16) {
+    const h = 12 + Math.random() * 20;
+    const bldg = makeBox(6, h, 6, 0x3a3a4a, -38 - Math.random() * 8, 0, z);
+    group.add(bldg);
+    addCollider(colliders, bldg);
+  }
+  // Deep east block (behind park area)
+  for (let z = -80; z < -5; z += 16) {
+    const h = 12 + Math.random() * 20;
+    const bldg = makeBox(6, h, 6, 0x3a3a4a, 42 + Math.random() * 8, 0, z);
+    group.add(bldg);
+    addCollider(colliders, bldg);
+  }
+  for (let z = 45; z < 80; z += 16) {
+    const h = 12 + Math.random() * 20;
+    const bldg = makeBox(6, h, 6, 0x3a3a4a, 42 + Math.random() * 8, 0, z);
+    group.add(bldg);
+    addCollider(colliders, bldg);
   }
 
   scene.add(group);
