@@ -142,6 +142,11 @@ export class WaveManager {
     enemy.hp = Math.floor(enemy.hp * this.hpMultiplier);
     enemy.maxHp = enemy.hp;
     this.enemies.push(enemy);
+
+    // Spawn teleport effect
+    if (this.vfx) {
+      this.vfx.createSpawnEffect(spawnPos.clone());
+    }
   }
 
   getAliveCount() {

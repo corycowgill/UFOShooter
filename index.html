@@ -192,6 +192,67 @@ canvas#gameCanvas { display: block; width: 100vw; height: 100vh; }
 }
 #weapon-canvas { width: 500px; height: 400px; }
 
+/* Hit Marker */
+#hit-marker {
+  position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  width: 24px; height: 24px; pointer-events: none; z-index: 16;
+  opacity: 0; transition: opacity 0.05s;
+}
+#hit-marker.active { opacity: 1; }
+#hit-marker::before, #hit-marker::after {
+  content: ''; position: absolute; background: #fff;
+}
+#hit-marker::before {
+  width: 2px; height: 10px;
+  top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(45deg);
+}
+#hit-marker::after {
+  width: 2px; height: 10px;
+  top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-45deg);
+}
+#hit-marker.kill::before, #hit-marker.kill::after { background: #f44; }
+#hit-marker.kill { transform: translate(-50%, -50%) scale(1.5); }
+
+/* Damage Numbers */
+#damage-numbers {
+  position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+  pointer-events: none; z-index: 17; overflow: hidden;
+}
+.dmg-num {
+  position: absolute; color: #ffdd00; font-family: 'Courier New', monospace;
+  font-size: 18px; font-weight: bold;
+  text-shadow: 0 0 4px #ff8800, 1px 1px 1px #000;
+  transform: translate(-50%, -50%);
+  pointer-events: none; white-space: nowrap;
+}
+.dmg-num.kill {
+  color: #ff4444; font-size: 22px;
+  text-shadow: 0 0 8px #ff0000, 0 0 16px #ff0000;
+}
+
+/* Kill Feed */
+#kill-feed {
+  position: fixed; top: 70px; right: 180px;
+  width: 250px; pointer-events: none; z-index: 18;
+  font-family: 'Courier New', monospace; font-size: 13px;
+}
+.kill-entry {
+  background: rgba(0, 0, 0, 0.6); padding: 4px 10px; margin-bottom: 3px;
+  border-left: 3px solid #f44; opacity: 0;
+  transform: translateX(20px);
+  transition: opacity 0.2s, transform 0.2s;
+}
+.kill-entry.visible { opacity: 1; transform: translateX(0); }
+.kf-weapon { color: #0ff; }
+.kf-alien { color: #f44; }
+
+/* Low Health Vignette */
+#low-health-vignette {
+  position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+  pointer-events: none; z-index: 14; display: none;
+  background: radial-gradient(ellipse at center, transparent 40%, rgba(180,0,0,0.5) 100%);
+}
+
 /* Loading */
 #loading {
   position: fixed; top: 0; left: 0; width: 100%; height: 100%;

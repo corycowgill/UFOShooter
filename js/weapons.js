@@ -51,6 +51,8 @@ export class WeaponManager {
     this.weaponRenderer = null;
     this.weaponModels = {};
     this.swingAngle = 0;
+    this.recoilOffset = 0;
+    this.recoilRotX = 0;
 
     this._initWeaponView();
   }
@@ -816,6 +818,9 @@ export class WeaponManager {
     if (weapon.type === 'melee') {
       return this._meleeAttack(enemies, weapon);
     } else {
+      // Recoil kick
+      this.recoilOffset = this.current === 'sniperRifle' ? 1.5 : 0.8;
+      this.recoilRotX = this.current === 'sniperRifle' ? 1.2 : 0.6;
       return this._hitscanAttack(enemies, weapon);
     }
   }
@@ -885,11 +890,54 @@ export class WeaponManager {
   update(delta) {
     if (this.cooldown > 0) this.cooldown -= delta;
 
-    // Animate weapon bob
+    // Recoil recovery
+    if (this.recoilOffset > 0) {
+      this.recoilOffset *= Math.pow(0.02, delta); // Exponential decay
+      if (this.recoilOffset < 0.001) this.recoilOffset = 0;
+    }
+    if (this.recoilRotX > 0) {
+      this.recoilRotX *= Math.pow(0.02, delta);
+      if (this.recoilRotX < 0.001) this.recoilRotX = 0;
+    }
+
+    // Animate weapon
     if (this.weaponModels[this.current]) {
       const model = this.weaponModels[this.current];
-      const time = performance.now() * 0.003;
-      model.position.y += Math.sin(time) * 0.0005;
+      const time = performance.now() * 0.001;
+
+      // Default position based on weapon type
+      let baseX = 0, baseY = 0, baseZ = 0;
+      let baseRotX = 0, baseRotY = 0, baseRotZ = 0;
+      if (this.current === 'laserRifle') {
+        baseX = 0.15; baseY = -0.15; baseRotY = -0.1;
+      } else if (this.current === 'sniperRifle') {
+        baseX = 0.1; baseY = -0.12; baseRotY = -0.08;
+      } else {
+        baseX = 0.2; baseY = -0.1; baseRotZ = 0.3;
+      }
+
+      // Idle sway (slow, smooth)
+      const swayX = Math.sin(time * 0.8) * 0.003 + Math.sin(time * 1.3) * 0.002;
+      const swayY = Math.sin(time * 1.1) * 0.004 + Math.cos(time * 0.7) * 0.002;
+      const swayRotZ = Math.sin(time * 0.6) * 0.005;
+
+      // Breathing bob
+      const breatheY = Math.sin(time * 2.0) * 0.003;
+
+      // Apply recoil (kick back and up)
+      const recoilZ = (this.recoilOffset || 0) * 0.15;
+      const recoilRotUp = -(this.recoilRotX || 0) * 0.1;
+
+      model.position.set(
+        baseX + swayX,
+        baseY + swayY + breatheY,
+        baseZ + recoilZ
+      );
+      model.rotation.set(
+        baseRotX + recoilRotUp,
+        baseRotY,
+        baseRotZ + swayRotZ
+      );
     }
 
     // Sword swing animation

@@ -7,6 +7,7 @@ import { WaveManager } from './waves.js';
 import { Player } from './player.js';
 import { HUD } from './hud.js';
 import { HelpGuide } from './help.js';
+import { VFXManager } from './vfx.js';
 import { LEVELS } from './levels.js';
 import { ALIEN_TYPES } from './aliens.js';
 
@@ -20,7 +21,7 @@ const GameState = {
 
 let state = GameState.MENU;
 let scene, camera, renderer;
-let controls, audio, particles, weapons, waveManager, player, hud, helpGuide;
+let controls, audio, particles, weapons, waveManager, player, hud, helpGuide, vfx;
 let currentLevelIndex = 0;
 let currentLevelData = null;
 let selectedStartLevel = 0;
@@ -374,6 +375,9 @@ function startGame() {
   // Particles
   particles = new ParticleSystem(scene);
 
+  // VFX
+  vfx = new VFXManager(camera, scene);
+
   // Weapons
   weapons = new WeaponManager(camera, scene, particles, audio);
 
@@ -382,6 +386,7 @@ function startGame() {
 
   // Wave manager
   waveManager = new WaveManager(scene, particles, audio);
+  waveManager.vfx = vfx;
 
   // Load selected level
   loadLevel(currentLevelIndex);
@@ -411,6 +416,7 @@ function loadLevel(index) {
     controls.camera = camera;
     particles.scene = scene;
     particles.cleanup();
+    if (vfx) { vfx.scene = scene; vfx.cleanup(); }
     waveManager.scene = scene;
     waveManager.cleanup();
     weapons.scene = scene;
@@ -423,6 +429,12 @@ function loadLevel(index) {
 
   // Reset player position
   camera.position.set(0, 1.7, 30);
+
+  // Initialize environment particles based on level
+  if (vfx) {
+    const envType = currentLevelIndex === 0 ? 'dust' : (currentLevelIndex === 2 ? 'embers' : 'dust');
+    vfx.initEnvironmentParticles(envType);
+  }
 
   // Show level announcement
   hud.showWaveAnnouncement(waveManager.wave + 1, level.name, true);
@@ -440,6 +452,7 @@ function returnToMenu() {
   audio.stopMusic();
   if (waveManager) waveManager.cleanup();
   if (particles) particles.cleanup();
+  if (vfx) vfx.cleanup();
 }
 
 function fireWeapon() {
@@ -461,14 +474,36 @@ function fireWeapon() {
 
 function processHit(hit) {
   const killed = hit.enemy.takeDamage(hit.damage);
+  const enemyPos = hit.enemy.mesh.position.clone();
+  const alienData = ALIEN_TYPES[hit.enemy.type];
+
+  // Hit marker and damage number
+  if (vfx) {
+    vfx.showHitMarker(killed);
+    vfx.showDamageNumber(enemyPos.clone().add(new THREE.Vector3(0, 1.5, 0)), hit.damage, killed);
+    // Small screen shake on hit
+    vfx.shake(0.02, 0.05);
+  }
+
   if (killed) {
     player.addKill();
-    player.addScore(ALIEN_TYPES[hit.enemy.type].scoreValue);
+    player.addScore(alienData.scoreValue);
+
+    // Kill feed entry
+    if (vfx) {
+      const weaponData = weapons.getWeaponData();
+      vfx.addKillFeedEntry(alienData.name, weaponData.name);
+      // Death dissolve effect
+      vfx.createDeathEffect(enemyPos, alienData.color || 0x00ff00, 1);
+    }
 
     // Bloater explosion chain damage
     if (hit.enemy.type === 'bloater') {
-      const pos = hit.enemy.mesh.position;
+      const pos = enemyPos;
       const radius = ALIEN_TYPES.bloater.explosionRadius;
+      // Bigger screen shake for explosion
+      if (vfx) vfx.shake(0.15, 0.3);
+
       // Damage nearby enemies
       for (const other of waveManager.enemies) {
         if (other === hit.enemy || other.dead) continue;
@@ -479,6 +514,10 @@ function processHit(hit) {
           if (chainKill) {
             player.addKill();
             player.addScore(ALIEN_TYPES[other.type].scoreValue);
+            if (vfx) {
+              vfx.addKillFeedEntry(ALIEN_TYPES[other.type].name, 'EXPLOSION');
+              vfx.createDeathEffect(other.mesh.position.clone(), ALIEN_TYPES[other.type].color || 0x00ff00, 1);
+            }
           }
         }
       }
@@ -514,6 +553,7 @@ function animate() {
   particles.update(delta);
   weapons.update(delta);
   hud.updateAnnouncement(delta);
+  if (vfx) vfx.update(delta, player.hp / player.maxHp);
 
   // Wave management
   const prevState = waveManager.state;
@@ -554,8 +594,10 @@ function animate() {
     const result = enemy.checkPlayerCollision(camera.position, delta);
     if (result) {
       player.takeDamage(result.damage, audio);
+      if (vfx) vfx.shake(0.08, 0.15);
       if (result.type === 'explosion') {
         particles.createExplosion(enemy.mesh.position.clone(), 0xff4400, 5, 0.8);
+        if (vfx) vfx.shake(0.2, 0.4);
       }
     }
   }
