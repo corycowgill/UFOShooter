@@ -754,24 +754,66 @@ function makeRock(x, z, scale = 1) {
 }
 
 function addGround(group, size, color = 0x333333) {
+  // Main ground
   const ground = new THREE.Mesh(
-    new THREE.PlaneGeometry(size * 2, size * 2),
+    new THREE.PlaneGeometry(size * 2, size * 2, 1, 1),
     makeMaterial(color, 0x111111)
   );
   ground.rotation.x = -Math.PI / 2;
   ground.receiveShadow = true;
   group.add(ground);
+
+  // Procedural ground detail grid lines (subtle)
+  const gridSize = size * 2;
+  const gridStep = 4;
+  const gridMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.08 });
+  for (let i = -size; i <= size; i += gridStep) {
+    // Horizontal lines
+    const hLine = new THREE.Mesh(new THREE.PlaneGeometry(gridSize, 0.03), gridMat);
+    hLine.rotation.x = -Math.PI / 2;
+    hLine.position.set(0, 0.005, i);
+    group.add(hLine);
+    // Vertical lines
+    const vLine = new THREE.Mesh(new THREE.PlaneGeometry(0.03, gridSize), gridMat);
+    vLine.rotation.x = -Math.PI / 2;
+    vLine.position.set(i, 0.005, 0);
+    group.add(vLine);
+  }
 }
 
 function addSky(scene) {
-  // Twilight invasion sky - gradient sphere
+  // Twilight invasion sky - vertical gradient via vertex colors
   const skyGeo = new THREE.SphereGeometry(500, 32, 32);
+  const skyColors = [];
+  const posAttr = skyGeo.attributes.position;
+  for (let i = 0; i < posAttr.count; i++) {
+    const y = posAttr.getY(i);
+    const t = (y / 500 + 1) * 0.5; // 0 at bottom, 1 at top
+    // Gradient: dark purple-brown at horizon -> deep blue-black at zenith
+    const r = 0.04 + (1 - t) * 0.06;
+    const g = 0.03 + (1 - t) * 0.02;
+    const b = 0.12 + t * 0.06;
+    skyColors.push(r, g, b);
+  }
+  skyGeo.setAttribute('color', new THREE.Float32BufferAttribute(skyColors, 3));
   const skyMat = new THREE.MeshBasicMaterial({
-    color: 0x0e0e2a,
+    vertexColors: true,
     side: THREE.BackSide
   });
   const sky = new THREE.Mesh(skyGeo, skyMat);
   scene.add(sky);
+
+  // Horizon glow (subtle warm band)
+  const horizonGeo = new THREE.CylinderGeometry(495, 495, 30, 32, 1, true);
+  const horizonMat = new THREE.MeshBasicMaterial({
+    color: 0x1a0a22,
+    transparent: true,
+    opacity: 0.3,
+    side: THREE.BackSide,
+  });
+  const horizon = new THREE.Mesh(horizonGeo, horizonMat);
+  horizon.position.y = -5;
+  scene.add(horizon);
 
   // Stars - varied sizes and brightness
   const starGeo = new THREE.BufferGeometry();
@@ -966,12 +1008,27 @@ function buildDowntownChicago(scene) {
   const ufo = addSky(scene);
 
   // Ambient - bright enough to see the city
-  scene.add(new THREE.AmbientLight(0x6677aa, 1.2));
-  const dirLight = new THREE.DirectionalLight(0xaabbff, 0.8);
-  dirLight.position.set(10, 30, 10);
+  scene.add(new THREE.AmbientLight(0x6677aa, 1.0));
+  const dirLight = new THREE.DirectionalLight(0xaabbff, 1.0);
+  dirLight.position.set(15, 40, 15);
+  dirLight.castShadow = true;
+  dirLight.shadow.mapSize.width = 2048;
+  dirLight.shadow.mapSize.height = 2048;
+  dirLight.shadow.camera.left = -60;
+  dirLight.shadow.camera.right = 60;
+  dirLight.shadow.camera.top = 60;
+  dirLight.shadow.camera.bottom = -60;
+  dirLight.shadow.camera.near = 1;
+  dirLight.shadow.camera.far = 120;
+  dirLight.shadow.bias = -0.002;
+  dirLight.shadow.radius = 3;
   scene.add(dirLight);
-  const fillLight = new THREE.HemisphereLight(0x4466aa, 0x222244, 0.6);
+  const fillLight = new THREE.HemisphereLight(0x4466aa, 0x222244, 0.7);
   scene.add(fillLight);
+  // Subtle blue rim light from UFO direction
+  const rimLight = new THREE.DirectionalLight(0x00ff88, 0.15);
+  rimLight.position.set(0, 80, -30);
+  scene.add(rimLight);
 
   const sidewalkMat = makeMaterial(0x888888);
   const curbMat = makeMaterial(0x999999);
@@ -1536,12 +1593,27 @@ function buildLincolnParkZoo(scene) {
   addGround(group, 100, 0x1a3311);
   const ufo = addSky(scene);
 
-  scene.add(new THREE.AmbientLight(0x557755, 1.2));
-  const dirLight = new THREE.DirectionalLight(0xaaffaa, 0.8);
-  dirLight.position.set(-10, 20, 10);
+  scene.add(new THREE.AmbientLight(0x557755, 1.0));
+  const dirLight = new THREE.DirectionalLight(0xaaffaa, 1.0);
+  dirLight.position.set(-15, 30, 15);
+  dirLight.castShadow = true;
+  dirLight.shadow.mapSize.width = 2048;
+  dirLight.shadow.mapSize.height = 2048;
+  dirLight.shadow.camera.left = -60;
+  dirLight.shadow.camera.right = 60;
+  dirLight.shadow.camera.top = 60;
+  dirLight.shadow.camera.bottom = -60;
+  dirLight.shadow.camera.near = 1;
+  dirLight.shadow.camera.far = 100;
+  dirLight.shadow.bias = -0.002;
+  dirLight.shadow.radius = 3;
   scene.add(dirLight);
-  const fillLight = new THREE.HemisphereLight(0x446644, 0x223322, 0.6);
+  const fillLight = new THREE.HemisphereLight(0x446644, 0x223322, 0.7);
   scene.add(fillLight);
+  // Green UFO rim
+  const rimLight = new THREE.DirectionalLight(0x00ff88, 0.12);
+  rimLight.position.set(0, 80, -30);
+  scene.add(rimLight);
 
   // === Zoo Entrance Gate ===
   const gateLeft = makeBox(1, 6, 1, 0x885533, -5, 0, 50);
@@ -1794,12 +1866,27 @@ function buildRavenswood(scene) {
   addGround(group, 100, 0x2a2a2a);
   const ufo = addSky(scene);
 
-  scene.add(new THREE.AmbientLight(0x667788, 1.2));
-  const dirLight = new THREE.DirectionalLight(0xbbbbff, 0.8);
-  dirLight.position.set(5, 25, -10);
+  scene.add(new THREE.AmbientLight(0x667788, 1.0));
+  const dirLight = new THREE.DirectionalLight(0xbbbbff, 0.9);
+  dirLight.position.set(10, 35, -15);
+  dirLight.castShadow = true;
+  dirLight.shadow.mapSize.width = 2048;
+  dirLight.shadow.mapSize.height = 2048;
+  dirLight.shadow.camera.left = -60;
+  dirLight.shadow.camera.right = 60;
+  dirLight.shadow.camera.top = 60;
+  dirLight.shadow.camera.bottom = -60;
+  dirLight.shadow.camera.near = 1;
+  dirLight.shadow.camera.far = 110;
+  dirLight.shadow.bias = -0.002;
+  dirLight.shadow.radius = 3;
   scene.add(dirLight);
   const fillLight = new THREE.HemisphereLight(0x445566, 0x222233, 0.6);
   scene.add(fillLight);
+  // Subtle alien rim light from UFO
+  const rimLight = new THREE.DirectionalLight(0x00ff88, 0.12);
+  rimLight.position.set(0, 80, -30);
+  scene.add(rimLight);
 
   // === CTA Brown Line Elevated Tracks ===
   // Support pillars with cross bracing

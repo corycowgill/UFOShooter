@@ -30,12 +30,16 @@ let menuScene, menuCamera, menuRenderer, menuUfo;
 
 // ===== INITIALIZATION =====
 function init() {
-  // Main renderer
+  // Main renderer - enhanced quality
   const canvas = document.getElementById('gameCanvas');
-  renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+  renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.1;
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
 
   // Camera
   camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 600);
@@ -364,6 +368,7 @@ function startGame() {
   document.getElementById('hud').style.display = 'block';
   document.getElementById('crosshair').style.display = 'block';
   document.getElementById('weapon-model').style.display = 'block';
+  document.getElementById('scanlines').style.display = 'block';
 
   // Create scene
   scene = new THREE.Scene();
@@ -449,6 +454,7 @@ function returnToMenu() {
   document.getElementById('hud').style.display = 'none';
   document.getElementById('crosshair').style.display = 'none';
   document.getElementById('weapon-model').style.display = 'none';
+  document.getElementById('scanlines').style.display = 'none';
   audio.stopMusic();
   if (waveManager) waveManager.cleanup();
   if (particles) particles.cleanup();
@@ -651,6 +657,7 @@ function gameOver() {
   document.getElementById('crosshair').style.display = 'none';
   document.getElementById('weapon-model').style.display = 'none';
   document.getElementById('scope-overlay').style.display = 'none';
+  document.getElementById('scanlines').style.display = 'none';
 
   document.getElementById('game-over').style.display = 'flex';
   document.getElementById('go-waves').textContent = waveManager.wave;
