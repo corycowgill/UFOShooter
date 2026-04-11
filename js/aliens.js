@@ -787,6 +787,86 @@ export class Alien {
     this.velocity = new THREE.Vector3();
     this.pulseTime = Math.random() * Math.PI * 2;
     this.projectiles = [];
+
+    // Store original emissive colors for hit flash recovery
+    this._originalEmissives = [];
+    this.mesh.traverse(child => {
+      if (child.material && child.material.emissive) {
+        this._originalEmissives.push({ mat: child.material, color: child.material.emissive.clone() });
+      }
+    });
+
+    // Ambient VFX state
+    this.hitFlashTimer = 0;
+    this._damageSmoke = [];    // smoke particles for damaged enemies
+    this._ambientEffects = []; // per-type ambient particle meshes
+    this._initAmbientVFX();
+  }
+
+  _initAmbientVFX() {
+    if (this.type === 'bloater') {
+      // Plasma leak particles orbiting the bloater
+      for (let i = 0; i < 6; i++) {
+        const particle = new THREE.Mesh(
+          new THREE.SphereGeometry(0.04 + Math.random() * 0.03, 4, 4),
+          new THREE.MeshBasicMaterial({ color: 0xff4400, transparent: true, opacity: 0.6 })
+        );
+        particle.userData.angle = (i / 6) * Math.PI * 2;
+        particle.userData.radius = 0.8 + Math.random() * 0.3;
+        particle.userData.speed = 1.5 + Math.random();
+        particle.userData.yOffset = 0.5 + Math.random() * 1.0;
+        this.mesh.add(particle);
+        this._ambientEffects.push(particle);
+      }
+    } else if (this.type === 'drone') {
+      // Engine exhaust glow cones under each engine
+      for (let i = 0; i < 4; i++) {
+        const angle = (i / 4) * Math.PI * 2;
+        const exhaust = new THREE.Mesh(
+          new THREE.ConeGeometry(0.06, 0.3, 6),
+          new THREE.MeshBasicMaterial({ color: 0x4488ff, transparent: true, opacity: 0.3 })
+        );
+        exhaust.position.set(Math.cos(angle) * 0.45, -0.4, Math.sin(angle) * 0.45);
+        exhaust.rotation.x = Math.PI; // Point downward
+        this.mesh.add(exhaust);
+        this._ambientEffects.push(exhaust);
+      }
+    } else if (this.type === 'stalker') {
+      // Shimmer distortion outline
+      const outline = new THREE.Mesh(
+        new THREE.SphereGeometry(0.7, 8, 8),
+        new THREE.MeshBasicMaterial({
+          color: 0x00ffff, transparent: true, opacity: 0.0, wireframe: true
+        })
+      );
+      outline.position.y = 0.8;
+      this.mesh.add(outline);
+      this._ambientEffects.push(outline);
+    } else if (this.type === 'spitter') {
+      // Acid drip particles from mouth area
+      for (let i = 0; i < 3; i++) {
+        const drip = new THREE.Mesh(
+          new THREE.SphereGeometry(0.025, 4, 4),
+          new THREE.MeshBasicMaterial({ color: 0xaaff00, transparent: true, opacity: 0.7 })
+        );
+        drip.position.set((Math.random() - 0.5) * 0.2, 1.3, 0.3);
+        drip.userData.dripTimer = Math.random() * 2;
+        drip.userData.baseY = 1.3;
+        this.mesh.add(drip);
+        this._ambientEffects.push(drip);
+      }
+    } else if (this.type === 'swarmer') {
+      // Speed trail afterimages (small trailing particles)
+      for (let i = 0; i < 4; i++) {
+        const trail = new THREE.Mesh(
+          new THREE.SphereGeometry(0.06, 4, 4),
+          new THREE.MeshBasicMaterial({ color: 0x9900ff, transparent: true, opacity: 0.0 })
+        );
+        trail.userData.trailIdx = i;
+        this.mesh.add(trail);
+        this._ambientEffects.push(trail);
+      }
+    }
   }
 
   update(delta, playerPos) {
@@ -832,6 +912,120 @@ export class Alien {
 
     // Update projectiles
     this._updateProjectiles(delta, playerPos);
+
+    // Update hit flash
+    if (this.hitFlashTimer > 0) {
+      this.hitFlashTimer -= delta;
+      if (this.hitFlashTimer <= 0) {
+        for (const entry of this._originalEmissives) {
+          entry.mat.emissive.copy(entry.color);
+        }
+      }
+    }
+
+    // Update ambient VFX
+    this._updateAmbientVFX(delta, dist);
+
+    // Health-based visual degradation: sparking and smoking when low HP
+    this._updateDamageEffects(delta);
+  }
+
+  _updateAmbientVFX(delta, dist) {
+    if (this.type === 'bloater') {
+      // Orbiting plasma leak particles + enhanced pulsing
+      for (const p of this._ambientEffects) {
+        p.userData.angle += p.userData.speed * delta;
+        p.position.set(
+          Math.cos(p.userData.angle) * p.userData.radius,
+          p.userData.yOffset + Math.sin(this.pulseTime * 3 + p.userData.angle) * 0.15,
+          Math.sin(p.userData.angle) * p.userData.radius
+        );
+        p.material.opacity = 0.3 + Math.sin(this.pulseTime * 4 + p.userData.angle) * 0.3;
+      }
+    } else if (this.type === 'drone') {
+      // Pulsing engine exhaust
+      for (const ex of this._ambientEffects) {
+        const pulseScale = 1 + Math.sin(this.pulseTime * 8) * 0.3;
+        ex.scale.set(pulseScale, 1 + Math.sin(this.pulseTime * 6) * 0.5, pulseScale);
+        ex.material.opacity = 0.2 + Math.sin(this.pulseTime * 10) * 0.15;
+      }
+    } else if (this.type === 'stalker') {
+      // Shimmer outline pulses with cloak state
+      const outline = this._ambientEffects[0];
+      if (outline) {
+        const shimmer = dist < 15 ? 0.12 + Math.sin(this.pulseTime * 12) * 0.08 : 0.03 + Math.sin(this.pulseTime * 6) * 0.03;
+        outline.material.opacity = shimmer;
+        outline.rotation.y += delta * 2;
+      }
+    } else if (this.type === 'spitter') {
+      // Acid drip animation
+      for (const drip of this._ambientEffects) {
+        drip.userData.dripTimer += delta;
+        const cycle = drip.userData.dripTimer % 1.5;
+        if (cycle < 1.0) {
+          drip.position.y = drip.userData.baseY - cycle * 0.4;
+          drip.material.opacity = 0.7 * (1 - cycle);
+          const s = 1 - cycle * 0.5;
+          drip.scale.set(s, 1 + cycle, s);
+        } else {
+          drip.position.y = drip.userData.baseY;
+          drip.material.opacity = 0;
+        }
+      }
+    } else if (this.type === 'swarmer') {
+      // Speed trail - trailing particles behind movement direction
+      for (const trail of this._ambientEffects) {
+        const idx = trail.userData.trailIdx;
+        trail.position.set(0, 0.5, -0.2 - idx * 0.15);
+        trail.material.opacity = Math.abs(Math.sin(this.pulseTime * 10)) * 0.4 / (idx + 1);
+        const s = 0.8 - idx * 0.15;
+        trail.scale.set(s, s, s);
+      }
+    }
+  }
+
+  _updateDamageEffects(delta) {
+    const hpPct = this.hp / this.maxHp;
+
+    // Spawn damage smoke/sparks when below 40% HP
+    if (hpPct < 0.4 && !this.dead) {
+      // Intermittent sparking
+      if (Math.random() < delta * 3) {
+        const sparkMesh = new THREE.Mesh(
+          new THREE.BoxGeometry(0.02, 0.02, 0.06),
+          new THREE.MeshBasicMaterial({
+            color: hpPct < 0.2 ? 0xff4400 : 0xffaa00,
+            transparent: true, opacity: 0.9
+          })
+        );
+        sparkMesh.position.set(
+          (Math.random() - 0.5) * 0.6,
+          0.5 + Math.random() * 1.0,
+          (Math.random() - 0.5) * 0.6
+        );
+        sparkMesh.velocity = new THREE.Vector3(
+          (Math.random() - 0.5) * 2,
+          Math.random() * 3 + 1,
+          (Math.random() - 0.5) * 2
+        );
+        sparkMesh.life = 0.3 + Math.random() * 0.2;
+        this.mesh.add(sparkMesh);
+        this._damageSmoke.push(sparkMesh);
+      }
+    }
+
+    // Update existing damage particles
+    for (let i = this._damageSmoke.length - 1; i >= 0; i--) {
+      const s = this._damageSmoke[i];
+      s.life -= delta;
+      s.position.add(s.velocity.clone().multiplyScalar(delta));
+      s.velocity.y -= 5 * delta;
+      s.material.opacity = Math.max(0, s.life * 3);
+      if (s.life <= 0) {
+        this.mesh.remove(s);
+        this._damageSmoke.splice(i, 1);
+      }
+    }
   }
 
   _gruntBehavior(delta, dist, toPlayer, playerPos) {
@@ -946,8 +1140,9 @@ export class Alien {
   _shootAtPlayer(playerPos) {
     this.audio.playAlienShoot();
     const from = this.mesh.position.clone();
-    from.y += 1.2;
-    const bolt = this.particles.createAlienBolt(from, playerPos.clone());
+    from.y += this.type === 'drone' ? 0 : 1.2;
+    const speed = this.type === 'spitter' ? 25 : (this.type === 'drone' ? 40 : 30);
+    const bolt = this.particles.createAlienBolt(from, playerPos.clone(), speed, this.type);
     this.projectiles.push(bolt);
   }
 
@@ -971,15 +1166,17 @@ export class Alien {
     this.hp -= amount;
     this.audio.playAlienHit();
 
-    // Flash white briefly
-    this.mesh.traverse(child => {
-      if (child.material && child.material.emissive) {
-        child.material.emissive.set(0xffffff);
-        setTimeout(() => {
-          if (child.material) child.material.emissive.set(child.material._originalEmissive || 0x000000);
-        }, 100);
-      }
-    });
+    // Flash white with proper recovery using stored emissive colors
+    for (const entry of this._originalEmissives) {
+      entry.mat.emissive.set(0xffffff);
+    }
+    this.hitFlashTimer = 0.1;
+
+    // Hit scale punch - brief enlargement
+    this.mesh.scale.set(1.15, 1.15, 1.15);
+    setTimeout(() => {
+      if (this.mesh) this.mesh.scale.set(1, 1, 1);
+    }, 80);
 
     if (this.hp <= 0) {
       this.die();
@@ -1042,6 +1239,8 @@ export class Alien {
 
   cleanup() {
     this.projectiles.forEach(p => this.scene.remove(p.mesh));
+    this._damageSmoke.forEach(s => this.mesh.remove(s));
+    this._damageSmoke = [];
     this.scene.remove(this.mesh);
   }
 

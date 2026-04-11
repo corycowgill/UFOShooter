@@ -86,48 +86,254 @@ export class ParticleSystem {
     this.impacts.push({ group, flash, sparks, life: duration, maxLife: duration });
   }
 
-  createAlienBolt(from, to, speed = 30) {
+  createAlienBolt(from, to, speed = 30, alienType = 'grunt') {
     const dir = new THREE.Vector3().subVectors(to, from).normalize();
-
-    // Elongated bolt with glow layers and trail
     const boltGroup = new THREE.Group();
-    const core = new THREE.Mesh(
-      new THREE.SphereGeometry(0.08, 8, 8),
-      new THREE.MeshBasicMaterial({ color: 0x66ff66 })
-    );
-    core.scale.set(1, 1, 2);
-    boltGroup.add(core);
 
-    // Inner glow
-    const innerGlow = new THREE.Mesh(
-      new THREE.SphereGeometry(0.15, 8, 8),
-      new THREE.MeshBasicMaterial({ color: 0x00ff00, transparent: true, opacity: 0.5 })
-    );
-    innerGlow.scale.set(1, 1, 1.5);
-    boltGroup.add(innerGlow);
-
-    // Outer glow
-    const outerGlow = new THREE.Mesh(
-      new THREE.SphereGeometry(0.3, 6, 6),
-      new THREE.MeshBasicMaterial({ color: 0x00ff00, transparent: true, opacity: 0.15 })
-    );
-    boltGroup.add(outerGlow);
-
-    // Trail particles
-    for (let i = 1; i <= 3; i++) {
-      const trail = new THREE.Mesh(
-        new THREE.SphereGeometry(0.05 / i, 4, 4),
-        new THREE.MeshBasicMaterial({ color: 0x00ff00, transparent: true, opacity: 0.4 / i })
+    // Different bolt styles per alien type
+    if (alienType === 'spitter') {
+      // Acid glob - larger, dripping, yellow-green
+      const core = new THREE.Mesh(
+        new THREE.SphereGeometry(0.12, 8, 8),
+        new THREE.MeshBasicMaterial({ color: 0xaaff00 })
       );
-      trail.position.z = -i * 0.15;
-      boltGroup.add(trail);
+      core.scale.set(0.8, 1, 1.5);
+      boltGroup.add(core);
+      const innerGlow = new THREE.Mesh(
+        new THREE.SphereGeometry(0.2, 8, 8),
+        new THREE.MeshBasicMaterial({ color: 0x88cc00, transparent: true, opacity: 0.5 })
+      );
+      boltGroup.add(innerGlow);
+      const outerGlow = new THREE.Mesh(
+        new THREE.SphereGeometry(0.35, 6, 6),
+        new THREE.MeshBasicMaterial({ color: 0x66aa00, transparent: true, opacity: 0.15 })
+      );
+      boltGroup.add(outerGlow);
+      // Dripping acid trail
+      for (let i = 1; i <= 5; i++) {
+        const drip = new THREE.Mesh(
+          new THREE.SphereGeometry(0.04 + (0.08 / i), 4, 4),
+          new THREE.MeshBasicMaterial({ color: 0xaaff00, transparent: true, opacity: 0.6 / i })
+        );
+        drip.position.set((Math.random() - 0.5) * 0.1, (Math.random() - 0.5) * 0.1, -i * 0.2);
+        boltGroup.add(drip);
+      }
+    } else if (alienType === 'drone') {
+      // Rapid energy pulse - small, fast, blue-white
+      const core = new THREE.Mesh(
+        new THREE.SphereGeometry(0.06, 6, 6),
+        new THREE.MeshBasicMaterial({ color: 0xaaddff })
+      );
+      core.scale.set(1, 1, 3);
+      boltGroup.add(core);
+      const glow = new THREE.Mesh(
+        new THREE.SphereGeometry(0.12, 6, 6),
+        new THREE.MeshBasicMaterial({ color: 0x4488ff, transparent: true, opacity: 0.4 })
+      );
+      glow.scale.set(1, 1, 2);
+      boltGroup.add(glow);
+      // Electric crackle lines
+      for (let i = 0; i < 3; i++) {
+        const crackle = new THREE.Mesh(
+          new THREE.BoxGeometry(0.015, 0.015, 0.25),
+          new THREE.MeshBasicMaterial({ color: 0x88ccff, transparent: true, opacity: 0.6 })
+        );
+        crackle.rotation.set(Math.random() * 0.5, 0, Math.random() * Math.PI);
+        boltGroup.add(crackle);
+      }
+    } else {
+      // Standard green energy bolt (grunt)
+      const core = new THREE.Mesh(
+        new THREE.SphereGeometry(0.08, 8, 8),
+        new THREE.MeshBasicMaterial({ color: 0x66ff66 })
+      );
+      core.scale.set(1, 1, 2);
+      boltGroup.add(core);
+      const innerGlow = new THREE.Mesh(
+        new THREE.SphereGeometry(0.15, 8, 8),
+        new THREE.MeshBasicMaterial({ color: 0x00ff00, transparent: true, opacity: 0.5 })
+      );
+      innerGlow.scale.set(1, 1, 1.5);
+      boltGroup.add(innerGlow);
+      const outerGlow = new THREE.Mesh(
+        new THREE.SphereGeometry(0.3, 6, 6),
+        new THREE.MeshBasicMaterial({ color: 0x00ff00, transparent: true, opacity: 0.15 })
+      );
+      boltGroup.add(outerGlow);
+      // Trail particles
+      for (let i = 1; i <= 3; i++) {
+        const trail = new THREE.Mesh(
+          new THREE.SphereGeometry(0.05 / i, 4, 4),
+          new THREE.MeshBasicMaterial({ color: 0x00ff00, transparent: true, opacity: 0.4 / i })
+        );
+        trail.position.z = -i * 0.15;
+        boltGroup.add(trail);
+      }
     }
 
     boltGroup.position.copy(from);
     boltGroup.lookAt(to);
 
     this.scene.add(boltGroup);
-    return { mesh: boltGroup, direction: dir, speed, life: 3, damage: 8 };
+    const dmg = alienType === 'spitter' ? 20 : (alienType === 'drone' ? 10 : 8);
+    return { mesh: boltGroup, direction: dir, speed, life: 3, damage: dmg, alienType };
+  }
+
+  // Sniper tracer - slow-fading bright beam with traveling bolt
+  createSniperTracer(from, to, color = 0x8800ff) {
+    const dir = new THREE.Vector3().subVectors(to, from);
+    const len = dir.length();
+
+    // Bright core beam
+    const coreGeo = new THREE.CylinderGeometry(0.015, 0.015, len, 8);
+    coreGeo.rotateX(Math.PI / 2);
+    const coreMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 1 });
+    const core = new THREE.Mesh(coreGeo, coreMat);
+    const mid = new THREE.Vector3().addVectors(from, to).multiplyScalar(0.5);
+    core.position.copy(mid);
+    core.lookAt(to);
+
+    // Inner glow
+    const innerGeo = new THREE.CylinderGeometry(0.04, 0.04, len, 8);
+    innerGeo.rotateX(Math.PI / 2);
+    core.add(new THREE.Mesh(innerGeo, new THREE.MeshBasicMaterial({
+      color, transparent: true, opacity: 0.7
+    })));
+
+    // Wide outer glow
+    const outerGeo = new THREE.CylinderGeometry(0.1, 0.1, len, 8);
+    outerGeo.rotateX(Math.PI / 2);
+    core.add(new THREE.Mesh(outerGeo, new THREE.MeshBasicMaterial({
+      color, transparent: true, opacity: 0.12
+    })));
+
+    // Traveling bolt along beam path
+    const bolt = new THREE.Mesh(
+      new THREE.SphereGeometry(0.08, 8, 8),
+      new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 1 })
+    );
+    bolt.scale.set(1, 1, 4);
+    const boltGlow = new THREE.Mesh(
+      new THREE.SphereGeometry(0.2, 6, 6),
+      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.5 })
+    );
+    bolt.add(boltGlow);
+    bolt.position.copy(from);
+    bolt.lookAt(to);
+
+    // Point light on bolt
+    const boltLight = new THREE.PointLight(color, 3, 8);
+    bolt.add(boltLight);
+
+    this.scene.add(core);
+    this.scene.add(bolt);
+
+    this.beams.push({
+      mesh: core, life: 0.4, maxLife: 0.4,
+      bolt, boltLight, boltFrom: from.clone(), boltTo: to.clone(), boltProgress: 0
+    });
+
+    // Impact sparks at hit point
+    this._createImpactSparks(to, color, 0.5);
+  }
+
+  // Weapon-specific impact effects
+  createWeaponImpact(position, weaponType) {
+    if (weaponType === 'sniperRifle') {
+      this._createSniperImpact(position);
+    } else if (weaponType === 'laserSword') {
+      this._createSwordImpact(position);
+    }
+    // laserRifle uses default _createImpactSparks from createLaserBeam
+  }
+
+  _createSniperImpact(position) {
+    const group = new THREE.Group();
+    group.position.copy(position);
+
+    // Large purple flash
+    const flash = new THREE.Mesh(
+      new THREE.SphereGeometry(0.4, 8, 8),
+      new THREE.MeshBasicMaterial({ color: 0xddaaff, transparent: true, opacity: 1 })
+    );
+    group.add(flash);
+
+    // Electric arcs radiating outward
+    const sparks = [];
+    for (let i = 0; i < 8; i++) {
+      const arc = new THREE.Mesh(
+        new THREE.BoxGeometry(0.02, 0.02, 0.3 + Math.random() * 0.3),
+        new THREE.MeshBasicMaterial({ color: 0xaa66ff, transparent: true, opacity: 0.9 })
+      );
+      arc.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
+      arc.velocity = new THREE.Vector3(
+        (Math.random() - 0.5) * 6,
+        Math.random() * 4 + 1,
+        (Math.random() - 0.5) * 6
+      );
+      group.add(arc);
+      sparks.push(arc);
+    }
+
+    // Purple energy ring
+    const ring = new THREE.Mesh(
+      new THREE.TorusGeometry(0.2, 0.03, 6, 16),
+      new THREE.MeshBasicMaterial({ color: 0x8800ff, transparent: true, opacity: 0.8 })
+    );
+    ring.rotation.x = Math.PI / 2;
+    group.add(ring);
+
+    const light = new THREE.PointLight(0x8800ff, 4, 6);
+    group.add(light);
+
+    this.scene.add(group);
+    this.impacts.push({ group, flash, sparks, ring, light, life: 0.4, maxLife: 0.4, type: 'sniper' });
+  }
+
+  _createSwordImpact(position) {
+    const group = new THREE.Group();
+    group.position.copy(position);
+
+    // Blue energy burst
+    const flash = new THREE.Mesh(
+      new THREE.SphereGeometry(0.3, 8, 8),
+      new THREE.MeshBasicMaterial({ color: 0xaaddff, transparent: true, opacity: 1 })
+    );
+    group.add(flash);
+
+    // Energy slash lines
+    const sparks = [];
+    for (let i = 0; i < 5; i++) {
+      const slash = new THREE.Mesh(
+        new THREE.BoxGeometry(0.01, 0.5 + Math.random() * 0.3, 0.01),
+        new THREE.MeshBasicMaterial({ color: 0x44aaff, transparent: true, opacity: 0.8 })
+      );
+      slash.rotation.z = (Math.random() - 0.5) * 1.5;
+      slash.velocity = new THREE.Vector3(0, 0, 0);
+      group.add(slash);
+      sparks.push(slash);
+    }
+
+    // Blue sparkle particles
+    for (let i = 0; i < 6; i++) {
+      const spark = new THREE.Mesh(
+        new THREE.BoxGeometry(0.03, 0.03, 0.03),
+        new THREE.MeshBasicMaterial({ color: 0x88ccff, transparent: true, opacity: 0.9 })
+      );
+      spark.velocity = new THREE.Vector3(
+        (Math.random() - 0.5) * 5,
+        Math.random() * 3,
+        (Math.random() - 0.5) * 5
+      );
+      group.add(spark);
+      sparks.push(spark);
+    }
+
+    const light = new THREE.PointLight(0x0088ff, 5, 6);
+    group.add(light);
+
+    this.scene.add(group);
+    this.impacts.push({ group, flash, sparks, light, life: 0.3, maxLife: 0.3, type: 'sword' });
   }
 
   createExplosion(position, color = 0xff4400, size = 3, duration = 0.5) {
@@ -344,8 +550,26 @@ export class ParticleSystem {
           child.material.opacity *= alpha;
         }
       });
+
+      // Sniper tracer bolt animation
+      if (b.bolt) {
+        b.boltProgress = Math.min(1, b.boltProgress + delta * 8);
+        b.bolt.position.lerpVectors(b.boltFrom, b.boltTo, b.boltProgress);
+        if (b.boltLight) b.boltLight.intensity = Math.max(0, 3 * (1 - b.boltProgress));
+        b.bolt.traverse(child => {
+          if (child.material && child.material.transparent) {
+            child.material.opacity = Math.max(0, 1 - b.boltProgress);
+          }
+        });
+        if (b.boltProgress >= 1 || b.life <= 0) {
+          this.scene.remove(b.bolt);
+          b.bolt = null;
+        }
+      }
+
       if (b.life <= 0) {
         this.scene.remove(b.mesh);
+        if (b.bolt) this.scene.remove(b.bolt);
         this.beams.splice(i, 1);
       }
     }
@@ -358,15 +582,25 @@ export class ParticleSystem {
 
       if (imp.flash) {
         imp.flash.material.opacity = Math.max(0, 1 - progress * 3);
-        const s = 1 + progress;
+        const s = 1 + progress * (imp.type === 'sniper' ? 2 : 1);
         imp.flash.scale.set(s, s, s);
       }
       for (const spark of imp.sparks) {
-        if (spark.velocity) {
+        if (spark.velocity && (spark.velocity.x || spark.velocity.y || spark.velocity.z)) {
           spark.position.add(spark.velocity.clone().multiplyScalar(delta));
           spark.velocity.y -= 15 * delta;
         }
         spark.material.opacity = Math.max(0, 1 - progress);
+      }
+      // Sniper impact ring expansion
+      if (imp.ring) {
+        const rs = 1 + progress * 4;
+        imp.ring.scale.set(rs, rs, rs);
+        imp.ring.material.opacity = Math.max(0, 0.8 * (1 - progress));
+      }
+      // Impact light fade
+      if (imp.light) {
+        imp.light.intensity = Math.max(0, (imp.light.intensity || 4) * (1 - progress));
       }
 
       if (imp.life <= 0) {

@@ -481,8 +481,15 @@ function processHit(hit) {
   if (vfx) {
     vfx.showHitMarker(killed);
     vfx.showDamageNumber(enemyPos.clone().add(new THREE.Vector3(0, 1.5, 0)), hit.damage, killed);
-    // Small screen shake on hit
-    vfx.shake(0.02, 0.05);
+    // Weapon-specific screen shake
+    const weaponKey = hit.weaponKey || 'laserRifle';
+    if (weaponKey === 'sniperRifle') {
+      vfx.shake(0.06, 0.12);
+    } else if (weaponKey === 'laserSword') {
+      vfx.shake(0.04, 0.08);
+    } else {
+      vfx.shake(0.02, 0.05);
+    }
   }
 
   if (killed) {

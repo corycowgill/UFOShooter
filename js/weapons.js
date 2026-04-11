@@ -850,13 +850,22 @@ export class WeaponManager {
     }
 
     if (closestHit) {
-      // Draw beam to hit point
-      this.particles.createLaserBeam(muzzlePos, closestHit.point, weapon.color, 0.15, weapon.beamWidth);
-      return { hit: true, enemy: closestHit.enemy, damage: weapon.damage, point: closestHit.point };
+      // Draw beam to hit point - weapon-specific
+      if (this.current === 'sniperRifle') {
+        this.particles.createSniperTracer(muzzlePos, closestHit.point, weapon.color);
+        this.particles.createWeaponImpact(closestHit.point, 'sniperRifle');
+      } else {
+        this.particles.createLaserBeam(muzzlePos, closestHit.point, weapon.color, 0.15, weapon.beamWidth);
+      }
+      return { hit: true, enemy: closestHit.enemy, damage: weapon.damage, point: closestHit.point, weaponKey: this.current };
     } else {
       // Draw beam to max range
       const endPoint = origin.clone().add(dir.clone().multiplyScalar(weapon.range));
-      this.particles.createLaserBeam(muzzlePos, endPoint, weapon.color, 0.1, weapon.beamWidth);
+      if (this.current === 'sniperRifle') {
+        this.particles.createSniperTracer(muzzlePos, endPoint, weapon.color);
+      } else {
+        this.particles.createLaserBeam(muzzlePos, endPoint, weapon.color, 0.1, weapon.beamWidth);
+      }
       return { hit: false };
     }
   }
@@ -881,7 +890,8 @@ export class WeaponManager {
       toEnemy.normalize();
       const dot = dir.dot(toEnemy);
       if (dot > 0.3) {
-        hits.push({ hit: true, enemy, damage: weapon.damage, point: enemy.mesh.position.clone() });
+        this.particles.createWeaponImpact(enemy.mesh.position.clone(), 'laserSword');
+        hits.push({ hit: true, enemy, damage: weapon.damage, point: enemy.mesh.position.clone(), weaponKey: 'laserSword' });
       }
     }
     return hits.length > 0 ? hits : { hit: false };
@@ -944,6 +954,25 @@ export class WeaponManager {
     if (this.swingAngle > 0 && this.weaponModels.laserSword) {
       this.swingAngle -= delta * 5;
       this.weaponModels.laserSword.rotation.z = 0.3 + Math.sin(this.swingAngle * Math.PI) * 0.8;
+    }
+
+    // Weapon energy glow pulse - animate glowing elements
+    if (this.weaponModels[this.current]) {
+      const model = this.weaponModels[this.current];
+      const pulse = 0.5 + Math.sin(time * 3) * 0.3;
+      const fastPulse = 0.6 + Math.sin(time * 8) * 0.2;
+      model.traverse(child => {
+        if (child.material && child.material.type === 'MeshBasicMaterial' && child.material.transparent) {
+          // Pulse opacity of glowing elements slightly
+          const baseOpacity = child.material.userData?.baseOpacity;
+          if (baseOpacity === undefined) {
+            child.material.userData = child.material.userData || {};
+            child.material.userData.baseOpacity = child.material.opacity;
+          } else {
+            child.material.opacity = baseOpacity * (0.85 + Math.sin(time * 4 + baseOpacity * 10) * 0.15);
+          }
+        }
+      });
     }
 
     // Render weapon view
