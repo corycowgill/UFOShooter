@@ -29,7 +29,8 @@ export class HelpGuide {
       canvas.height = 200;
       card.appendChild(canvas);
 
-      card.innerHTML += `
+      const info = document.createElement('div');
+      info.innerHTML = `
         <h3>${data.name}</h3>
         <div class="stat">HP: <span>${data.hp}</span></div>
         <div class="stat">Speed: <span>${data.speed}</span></div>
@@ -38,9 +39,7 @@ export class HelpGuide {
         <div class="stat">Score: <span>${data.scoreValue}</span></div>
         <p style="margin-top:8px;font-size:12px;color:#8a8;">${data.description}</p>
       `;
-
-      // Re-insert canvas at top
-      card.insertBefore(canvas, card.firstChild);
+      card.appendChild(info);
       container.appendChild(card);
 
       // Set up 3D preview
@@ -61,7 +60,8 @@ export class HelpGuide {
       canvas.height = 200;
       card.appendChild(canvas);
 
-      card.innerHTML += `
+      const info = document.createElement('div');
+      info.innerHTML = `
         <h3>${data.name}</h3>
         <div class="stat">Damage: <span>${data.damage}</span></div>
         <div class="stat">Fire Rate: <span>${(1/data.fireRate).toFixed(1)}/s</span></div>
@@ -70,8 +70,7 @@ export class HelpGuide {
         <div class="stat">Key: <span>[${data.key}]</span></div>
         <p style="margin-top:8px;font-size:12px;color:#8aa;">${data.description}</p>
       `;
-
-      card.insertBefore(canvas, card.firstChild);
+      card.appendChild(info);
       container.appendChild(card);
 
       this._setupWeaponPreview(canvas, key);
