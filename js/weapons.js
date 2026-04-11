@@ -97,6 +97,20 @@ export class WeaponManager {
     this.weaponModels.laserSword = this._buildSwordModel();
     this.weaponModels.sniperRifle = this._buildSniperModel();
 
+    // Cache glowing materials for each weapon (avoid per-frame traverse)
+    this._glowMaterials = {};
+    for (const [key, model] of Object.entries(this.weaponModels)) {
+      const mats = [];
+      model.traverse(child => {
+        if (child.material && child.material.type === 'MeshBasicMaterial' && child.material.transparent) {
+          child.material.userData = child.material.userData || {};
+          child.material.userData.baseOpacity = child.material.opacity;
+          mats.push(child.material);
+        }
+      });
+      this._glowMaterials[key] = mats;
+    }
+
     Object.values(this.weaponModels).forEach(m => {
       m.visible = false;
       this.weaponScene.add(m);
@@ -1415,24 +1429,15 @@ export class WeaponManager {
       this.weaponModels.laserSword.rotation.z = 0.3 + Math.sin(this.swingAngle * Math.PI) * 0.8;
     }
 
-    // Weapon energy glow pulse - animate glowing elements
-    if (this.weaponModels[this.current]) {
-      const model = this.weaponModels[this.current];
-      model.traverse(child => {
-        if (child.material && child.material.type === 'MeshBasicMaterial' && child.material.transparent) {
-          const baseOpacity = child.material.userData?.baseOpacity;
-          if (baseOpacity === undefined) {
-            child.material.userData = child.material.userData || {};
-            child.material.userData.baseOpacity = child.material.opacity;
-          } else {
-            // More organic pulse with multiple frequencies
-            const phase = baseOpacity * 12.0;
-            const slow = Math.sin(time * 2.5 + phase) * 0.1;
-            const fast = Math.sin(time * 6.0 + phase * 0.7) * 0.05;
-            child.material.opacity = baseOpacity * (0.88 + slow + fast);
-          }
-        }
-      });
+    // Weapon energy glow pulse - use cached material refs (no traverse)
+    const glowMats = this._glowMaterials && this._glowMaterials[this.current];
+    if (glowMats) {
+      for (let i = 0, len = glowMats.length; i < len; i++) {
+        const mat = glowMats[i];
+        const base = mat.userData.baseOpacity;
+        const phase = base * 12.0;
+        mat.opacity = base * (0.88 + Math.sin(time * 2.5 + phase) * 0.1 + Math.sin(time * 6.0 + phase * 0.7) * 0.05);
+      }
     }
 
     // Pulse accent light intensity

@@ -312,8 +312,11 @@ export class VFXManager {
       d.ring.material.opacity = Math.max(0, 0.8 * (1 - progress));
 
       // Pieces fly outward and fade
-      for (const p of d.pieces) {
-        p.position.add(p.velocity.clone().multiplyScalar(delta));
+      for (let pi = 0, plen = d.pieces.length; pi < plen; pi++) {
+        const p = d.pieces[pi];
+        p.position.x += p.velocity.x * delta;
+        p.position.y += p.velocity.y * delta;
+        p.position.z += p.velocity.z * delta;
         p.velocity.y -= 8 * delta;
         p.rotation.x += p.rotSpeed.x * delta;
         p.rotation.y += p.rotSpeed.y * delta;
@@ -324,8 +327,11 @@ export class VFXManager {
       }
 
       // Orbs float up and fade
-      for (const o of d.orbs) {
-        o.position.add(o.velocity.clone().multiplyScalar(delta));
+      for (let oi = 0, olen = d.orbs.length; oi < olen; oi++) {
+        const o = d.orbs[oi];
+        o.position.x += o.velocity.x * delta;
+        o.position.y += o.velocity.y * delta;
+        o.position.z += o.velocity.z * delta;
         o.material.opacity = Math.max(0, 0.8 * (1 - progress));
       }
 

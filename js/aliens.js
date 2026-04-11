@@ -2149,13 +2149,20 @@ export class Alien {
     this.pulseTime = Math.random() * Math.PI * 2;
     this.projectiles = [];
 
-    // Store original emissive colors for hit flash recovery
+    // Store original emissive colors for hit flash recovery + cache all materials
     this._originalEmissives = [];
+    this._allMaterials = [];
     this.mesh.traverse(child => {
-      if (child.material && child.material.emissive) {
-        this._originalEmissives.push({ mat: child.material, color: child.material.emissive.clone() });
+      if (child.material) {
+        this._allMaterials.push(child.material);
+        if (child.material.emissive) {
+          this._originalEmissives.push({ mat: child.material, color: child.material.emissive.clone() });
+        }
       }
     });
+
+    // Reusable temp vector to avoid per-frame allocations
+    this._tmpVec = new THREE.Vector3();
 
     // Ambient VFX state
     this.hitFlashTimer = 0;
@@ -2233,21 +2240,21 @@ export class Alien {
   update(delta, playerPos) {
     if (this.dead) {
       this.deathTimer -= delta;
-      // Sink and fade
+      // Sink and fade - use cached materials (no traverse)
       this.mesh.position.y -= delta * 2;
-      this.mesh.traverse(child => {
-        if (child.material && child.material.transparent !== undefined) {
-          child.material.transparent = true;
-          child.material.opacity = Math.max(0, this.deathTimer / 1.0);
-        }
-      });
+      const fadeAlpha = Math.max(0, this.deathTimer / 1.0);
+      for (let i = 0, len = this._allMaterials.length; i < len; i++) {
+        const mat = this._allMaterials[i];
+        mat.transparent = true;
+        mat.opacity = fadeAlpha;
+      }
       return this.deathTimer <= 0; // true = remove
     }
 
     this.pulseTime += delta;
 
-    // Face player
-    const toPlayer = new THREE.Vector3().subVectors(playerPos, this.mesh.position);
+    // Face player - reuse temp vector
+    const toPlayer = this._tmpVec.subVectors(playerPos, this.mesh.position);
     toPlayer.y = 0;
     const dist = toPlayer.length();
     toPlayer.normalize();
@@ -2284,11 +2291,15 @@ export class Alien {
       }
     }
 
-    // Update ambient VFX
-    this._updateAmbientVFX(delta, dist);
+    // Update ambient VFX - skip for distant aliens (LOD optimization)
+    if (dist < 50) {
+      this._updateAmbientVFX(delta, dist);
+    }
 
-    // Health-based visual degradation: sparking and smoking when low HP
-    this._updateDamageEffects(delta);
+    // Health-based visual degradation - skip for distant aliens
+    if (dist < 40) {
+      this._updateDamageEffects(delta);
+    }
   }
 
   _updateAmbientVFX(delta, dist) {
@@ -2350,10 +2361,13 @@ export class Alien {
 
     // Spawn damage smoke/sparks when below 40% HP
     if (hpPct < 0.4 && !this.dead) {
-      // Intermittent sparking
+      // Intermittent sparking - use shared geometry
       if (Math.random() < delta * 3) {
+        if (!Alien._sparkGeo) {
+          Alien._sparkGeo = new THREE.BoxGeometry(0.02, 0.02, 0.06);
+        }
         const sparkMesh = new THREE.Mesh(
-          new THREE.BoxGeometry(0.02, 0.02, 0.06),
+          Alien._sparkGeo,
           new THREE.MeshBasicMaterial({
             color: hpPct < 0.2 ? 0xff4400 : 0xffaa00,
             transparent: true, opacity: 0.9
@@ -2375,15 +2389,18 @@ export class Alien {
       }
     }
 
-    // Update existing damage particles
+    // Update existing damage particles - inline velocity math (no clone)
     for (let i = this._damageSmoke.length - 1; i >= 0; i--) {
       const s = this._damageSmoke[i];
       s.life -= delta;
-      s.position.add(s.velocity.clone().multiplyScalar(delta));
+      s.position.x += s.velocity.x * delta;
+      s.position.y += s.velocity.y * delta;
+      s.position.z += s.velocity.z * delta;
       s.velocity.y -= 5 * delta;
       s.material.opacity = Math.max(0, s.life * 3);
       if (s.life <= 0) {
         this.mesh.remove(s);
+        s.material.dispose();
         this._damageSmoke.splice(i, 1);
       }
     }
@@ -2393,13 +2410,18 @@ export class Alien {
     // Move toward player but stop at attack range
     const preferredDist = 15 + Math.sin(this.pulseTime * 0.5) * 5;
     if (dist > preferredDist + 2) {
-      this.mesh.position.add(toPlayer.clone().multiplyScalar(this.data.speed * delta));
+      const spd = this.data.speed * delta;
+      this.mesh.position.x += toPlayer.x * spd;
+      this.mesh.position.z += toPlayer.z * spd;
     } else if (dist < preferredDist - 2) {
-      this.mesh.position.add(toPlayer.clone().multiplyScalar(-this.data.speed * 0.5 * delta));
+      const spd = -this.data.speed * 0.5 * delta;
+      this.mesh.position.x += toPlayer.x * spd;
+      this.mesh.position.z += toPlayer.z * spd;
     }
     // Strafe slightly
-    const strafe = new THREE.Vector3(-toPlayer.z, 0, toPlayer.x);
-    this.mesh.position.add(strafe.multiplyScalar(Math.sin(this.pulseTime * 2) * 2 * delta));
+    const strafeMag = Math.sin(this.pulseTime * 2) * 2 * delta;
+    this.mesh.position.x += -toPlayer.z * strafeMag;
+    this.mesh.position.z += toPlayer.x * strafeMag;
 
     // Shoot
     this.attackCooldown -= delta;
@@ -2411,17 +2433,19 @@ export class Alien {
 
   _swarmerBehavior(delta, dist, toPlayer) {
     // Rush directly at player, zigzag slightly
-    const zigzag = new THREE.Vector3(-toPlayer.z, 0, toPlayer.x)
-      .multiplyScalar(Math.sin(this.pulseTime * 8) * 3 * delta);
-    this.mesh.position.add(toPlayer.clone().multiplyScalar(this.data.speed * delta));
-    this.mesh.position.add(zigzag);
+    const moveSpd = this.data.speed * delta;
+    const zigMag = Math.sin(this.pulseTime * 8) * 3 * delta;
+    this.mesh.position.x += toPlayer.x * moveSpd + (-toPlayer.z) * zigMag;
+    this.mesh.position.z += toPlayer.z * moveSpd + toPlayer.x * zigMag;
     // Bob up and down
     this.mesh.children[0].position.y = 0.5 + Math.sin(this.pulseTime * 10) * 0.05;
   }
 
   _bloaterBehavior(delta, dist, toPlayer) {
     // Slow approach
-    this.mesh.position.add(toPlayer.clone().multiplyScalar(this.data.speed * delta));
+    const spd = this.data.speed * delta;
+    this.mesh.position.x += toPlayer.x * spd;
+    this.mesh.position.z += toPlayer.z * spd;
 
     // Pulse glow
     const pulseMat = this.mesh.children[1]; // inner glow sphere
@@ -2435,32 +2459,37 @@ export class Alien {
 
   _stalkerBehavior(delta, dist, toPlayer, playerPos) {
     // Rush at player with zigzag, cloaked
-    const zigzag = new THREE.Vector3(-toPlayer.z, 0, toPlayer.x)
+    this._tmpVec.set(-toPlayer.z, 0, toPlayer.x)
       .multiplyScalar(Math.sin(this.pulseTime * 5) * 2 * delta);
-    this.mesh.position.add(toPlayer.clone().multiplyScalar(this.data.speed * delta));
-    this.mesh.position.add(zigzag);
+    const moveSpeed = this.data.speed * delta;
+    this.mesh.position.x += toPlayer.x * moveSpeed + this._tmpVec.x;
+    this.mesh.position.z += toPlayer.z * moveSpeed + this._tmpVec.z;
 
-    // Cloaking effect - more transparent when far, visible when close
+    // Cloaking effect - use cached materials (no traverse)
     const cloakOpacity = dist < 8 ? 0.8 : dist < 20 ? 0.3 : 0.1;
-    this.mesh.traverse(child => {
-      if (child.material) {
-        child.material.transparent = true;
-        child.material.opacity = cloakOpacity;
-      }
-    });
+    for (let i = 0, len = this._allMaterials.length; i < len; i++) {
+      const mat = this._allMaterials[i];
+      mat.transparent = true;
+      mat.opacity = cloakOpacity;
+    }
   }
 
   _spitterBehavior(delta, dist, toPlayer, playerPos) {
     // Stay far away, like a sniper
     const preferredDist = 35;
     if (dist > preferredDist + 5) {
-      this.mesh.position.add(toPlayer.clone().multiplyScalar(this.data.speed * delta));
+      const spd = this.data.speed * delta;
+      this.mesh.position.x += toPlayer.x * spd;
+      this.mesh.position.z += toPlayer.z * spd;
     } else if (dist < preferredDist - 5) {
-      this.mesh.position.add(toPlayer.clone().multiplyScalar(-this.data.speed * delta));
+      const spd = -this.data.speed * delta;
+      this.mesh.position.x += toPlayer.x * spd;
+      this.mesh.position.z += toPlayer.z * spd;
     }
     // Slow strafe
-    const strafe = new THREE.Vector3(-toPlayer.z, 0, toPlayer.x);
-    this.mesh.position.add(strafe.multiplyScalar(Math.sin(this.pulseTime * 1.5) * 1.5 * delta));
+    const strafeMag = Math.sin(this.pulseTime * 1.5) * 1.5 * delta;
+    this.mesh.position.x += -toPlayer.z * strafeMag;
+    this.mesh.position.z += toPlayer.x * strafeMag;
 
     // Shoot acid
     this.attackCooldown -= delta;
@@ -2476,15 +2505,20 @@ export class Alien {
     this.mesh.position.y += (targetY - this.mesh.position.y) * 3 * delta;
 
     // Circle/strafe around player
-    const strafe = new THREE.Vector3(-toPlayer.z, 0, toPlayer.x);
-    this.mesh.position.add(strafe.multiplyScalar(Math.sin(this.pulseTime * 2) * 3 * delta));
+    const strafeMag = Math.sin(this.pulseTime * 2) * 3 * delta;
+    this.mesh.position.x += -toPlayer.z * strafeMag;
+    this.mesh.position.z += toPlayer.x * strafeMag;
 
     // Approach to preferred range
     const preferredDist = 20;
     if (dist > preferredDist + 5) {
-      this.mesh.position.add(toPlayer.clone().multiplyScalar(this.data.speed * delta));
+      const spd = this.data.speed * delta;
+      this.mesh.position.x += toPlayer.x * spd;
+      this.mesh.position.z += toPlayer.z * spd;
     } else if (dist < preferredDist - 5) {
-      this.mesh.position.add(toPlayer.clone().multiplyScalar(-this.data.speed * 0.5 * delta));
+      const spd = -this.data.speed * 0.5 * delta;
+      this.mesh.position.x += toPlayer.x * spd;
+      this.mesh.position.z += toPlayer.z * spd;
     }
 
     // Bob up and down
@@ -2510,7 +2544,10 @@ export class Alien {
   _updateProjectiles(delta, playerPos) {
     for (let i = this.projectiles.length - 1; i >= 0; i--) {
       const bolt = this.projectiles[i];
-      bolt.mesh.position.add(bolt.direction.clone().multiplyScalar(bolt.speed * delta));
+      const bSpd = bolt.speed * delta;
+      bolt.mesh.position.x += bolt.direction.x * bSpd;
+      bolt.mesh.position.y += bolt.direction.y * bSpd;
+      bolt.mesh.position.z += bolt.direction.z * bSpd;
       bolt.life -= delta;
 
       if (bolt.life <= 0) {

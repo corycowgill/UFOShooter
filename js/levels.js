@@ -783,7 +783,7 @@ function addGround(group, size, color = 0x333333) {
 
 function addSky(scene) {
   // Twilight invasion sky - vertical gradient via vertex colors
-  const skyGeo = new THREE.SphereGeometry(500, 32, 32);
+  const skyGeo = new THREE.SphereGeometry(500, 16, 16);
   const skyColors = [];
   const posAttr = skyGeo.attributes.position;
   for (let i = 0; i < posAttr.count; i++) {
@@ -804,7 +804,7 @@ function addSky(scene) {
   scene.add(sky);
 
   // Horizon glow (subtle warm band)
-  const horizonGeo = new THREE.CylinderGeometry(495, 495, 30, 32, 1, true);
+  const horizonGeo = new THREE.CylinderGeometry(495, 495, 30, 16, 1, true);
   const horizonMat = new THREE.MeshBasicMaterial({
     color: 0x1a0a22,
     transparent: true,
@@ -851,13 +851,13 @@ function addSky(scene) {
   // Moon
   const moonGroup = new THREE.Group();
   const moon = new THREE.Mesh(
-    new THREE.SphereGeometry(15, 24, 24),
+    new THREE.SphereGeometry(15, 12, 12),
     new THREE.MeshBasicMaterial({ color: 0xddddbb })
   );
   moonGroup.add(moon);
   // Moon glow
   const moonGlow = new THREE.Mesh(
-    new THREE.SphereGeometry(20, 16, 16),
+    new THREE.SphereGeometry(20, 10, 10),
     new THREE.MeshBasicMaterial({ color: 0xddddaa, transparent: true, opacity: 0.08 })
   );
   moonGroup.add(moonGlow);
@@ -1012,8 +1012,8 @@ function buildDowntownChicago(scene) {
   const dirLight = new THREE.DirectionalLight(0xaabbff, 1.0);
   dirLight.position.set(15, 40, 15);
   dirLight.castShadow = true;
-  dirLight.shadow.mapSize.width = 2048;
-  dirLight.shadow.mapSize.height = 2048;
+  dirLight.shadow.mapSize.width = 1024;
+  dirLight.shadow.mapSize.height = 1024;
   dirLight.shadow.camera.left = -60;
   dirLight.shadow.camera.right = 60;
   dirLight.shadow.camera.top = 60;
@@ -1269,7 +1269,7 @@ function buildDowntownChicago(scene) {
 
   // === THE BEAN (Cloud Gate) - now in Millennium Park ===
   const bean = new THREE.Mesh(
-    new THREE.SphereGeometry(3, 24, 24),
+    new THREE.SphereGeometry(3, 14, 14),
     new THREE.MeshPhongMaterial({
       color: 0xbbbbdd,
       emissive: 0x222233,
@@ -1597,8 +1597,8 @@ function buildLincolnParkZoo(scene) {
   const dirLight = new THREE.DirectionalLight(0xaaffaa, 1.0);
   dirLight.position.set(-15, 30, 15);
   dirLight.castShadow = true;
-  dirLight.shadow.mapSize.width = 2048;
-  dirLight.shadow.mapSize.height = 2048;
+  dirLight.shadow.mapSize.width = 1024;
+  dirLight.shadow.mapSize.height = 1024;
   dirLight.shadow.camera.left = -60;
   dirLight.shadow.camera.right = 60;
   dirLight.shadow.camera.top = 60;
@@ -1870,8 +1870,8 @@ function buildRavenswood(scene) {
   const dirLight = new THREE.DirectionalLight(0xbbbbff, 0.9);
   dirLight.position.set(10, 35, -15);
   dirLight.castShadow = true;
-  dirLight.shadow.mapSize.width = 2048;
-  dirLight.shadow.mapSize.height = 2048;
+  dirLight.shadow.mapSize.width = 1024;
+  dirLight.shadow.mapSize.height = 1024;
   dirLight.shadow.camera.left = -60;
   dirLight.shadow.camera.right = 60;
   dirLight.shadow.camera.top = 60;

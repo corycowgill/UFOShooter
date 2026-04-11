@@ -545,22 +545,31 @@ export class ParticleSystem {
       if (b.mesh.material) {
         b.mesh.material.opacity = alpha;
       }
-      b.mesh.traverse(child => {
+      // Update child materials directly via children array (no traverse)
+      const children = b.mesh.children;
+      for (let ci = 0, clen = children.length; ci < clen; ci++) {
+        const child = children[ci];
         if (child.material && child.material.transparent) {
-          child.material.opacity *= alpha;
+          child.material.opacity = alpha;
         }
-      });
+      }
 
       // Sniper tracer bolt animation
       if (b.bolt) {
         b.boltProgress = Math.min(1, b.boltProgress + delta * 8);
         b.bolt.position.lerpVectors(b.boltFrom, b.boltTo, b.boltProgress);
         if (b.boltLight) b.boltLight.intensity = Math.max(0, 3 * (1 - b.boltProgress));
-        b.bolt.traverse(child => {
-          if (child.material && child.material.transparent) {
-            child.material.opacity = Math.max(0, 1 - b.boltProgress);
+        const boltAlpha = Math.max(0, 1 - b.boltProgress);
+        const boltChildren = b.bolt.children;
+        for (let bi = 0, blen = boltChildren.length; bi < blen; bi++) {
+          const bc = boltChildren[bi];
+          if (bc.material && bc.material.transparent) {
+            bc.material.opacity = boltAlpha;
           }
-        });
+        }
+        if (b.bolt.material && b.bolt.material.transparent) {
+          b.bolt.material.opacity = boltAlpha;
+        }
         if (b.boltProgress >= 1 || b.life <= 0) {
           this.scene.remove(b.bolt);
           b.bolt = null;
@@ -585,9 +594,12 @@ export class ParticleSystem {
         const s = 1 + progress * (imp.type === 'sniper' ? 2 : 1);
         imp.flash.scale.set(s, s, s);
       }
-      for (const spark of imp.sparks) {
+      for (let si = 0, slen = imp.sparks.length; si < slen; si++) {
+        const spark = imp.sparks[si];
         if (spark.velocity && (spark.velocity.x || spark.velocity.y || spark.velocity.z)) {
-          spark.position.add(spark.velocity.clone().multiplyScalar(delta));
+          spark.position.x += spark.velocity.x * delta;
+          spark.position.y += spark.velocity.y * delta;
+          spark.position.z += spark.velocity.z * delta;
           spark.velocity.y -= 15 * delta;
         }
         spark.material.opacity = Math.max(0, 1 - progress);
@@ -644,8 +656,11 @@ export class ParticleSystem {
 
       // Fire particles rise and shrink
       if (e.fireParticles) {
-        for (const p of e.fireParticles) {
-          p.position.add(p.velocity.clone().multiplyScalar(delta));
+        for (let fi = 0, flen = e.fireParticles.length; fi < flen; fi++) {
+          const p = e.fireParticles[fi];
+          p.position.x += p.velocity.x * delta;
+          p.position.y += p.velocity.y * delta;
+          p.position.z += p.velocity.z * delta;
           p.velocity.y -= 3 * delta;
           p.material.opacity = Math.max(0, 1 - progress * 1.5);
           const ps = Math.max(0.1, 1 - progress);
@@ -655,8 +670,12 @@ export class ParticleSystem {
 
       // Smoke particles rise slowly and expand
       if (e.smokeParticles) {
-        for (const sm of e.smokeParticles) {
-          sm.position.add(sm.velocity.clone().multiplyScalar(delta * 0.5));
+        const halfDelta = delta * 0.5;
+        for (let si = 0, slen = e.smokeParticles.length; si < slen; si++) {
+          const sm = e.smokeParticles[si];
+          sm.position.x += sm.velocity.x * halfDelta;
+          sm.position.y += sm.velocity.y * halfDelta;
+          sm.position.z += sm.velocity.z * halfDelta;
           sm.velocity.y -= 1 * delta;
           sm.material.opacity = Math.max(0, 0.6 * (1 - progress * 0.8));
           const grow = 1 + progress * sm.growRate;
@@ -665,8 +684,11 @@ export class ParticleSystem {
       }
 
       // Debris particles fall with gravity and spin
-      for (const p of e.particles) {
-        p.position.add(p.velocity.clone().multiplyScalar(delta));
+      for (let di = 0, dlen = e.particles.length; di < dlen; di++) {
+        const p = e.particles[di];
+        p.position.x += p.velocity.x * delta;
+        p.position.y += p.velocity.y * delta;
+        p.position.z += p.velocity.z * delta;
         p.velocity.y -= 12 * delta;
         p.material.opacity = Math.max(0, 1 - progress);
         if (p.rotSpeed) {
