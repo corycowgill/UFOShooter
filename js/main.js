@@ -221,6 +221,83 @@ function setupEventListeners() {
   });
 }
 
+const weaponOrder = ['laserRifle', 'laserSword', 'sniperRifle'];
+let currentWeaponIdx = 0;
+let gamepadFireHoldTimer = 0;
+
+function _setupGamepadCallbacks() {
+  if (!controls) return;
+
+  // RT = fire (single press)
+  controls.onGamepadFire = () => {
+    if (state !== GameState.PLAYING || helpGuide.isOpen) return;
+    fireWeapon();
+  };
+
+  // RT held = auto-fire for laser rifle
+  controls.onGamepadFireHold = () => {
+    if (state !== GameState.PLAYING || helpGuide.isOpen) return;
+    // Throttle to weapon fire rate via cooldown (handled in weapons.js)
+    fireWeapon();
+  };
+
+  // LT = zoom (sniper)
+  controls.onGamepadZoom = () => {
+    if (state !== GameState.PLAYING || helpGuide.isOpen) return;
+    weapons.toggleZoom();
+  };
+
+  // DPad Left/Up/Right = weapon 1/2/3
+  controls.onGamepadWeapon1 = () => {
+    if (state !== GameState.PLAYING) return;
+    weapons.switchWeapon('laserRifle');
+    currentWeaponIdx = 0;
+  };
+  controls.onGamepadWeapon2 = () => {
+    if (state !== GameState.PLAYING) return;
+    weapons.switchWeapon('laserSword');
+    currentWeaponIdx = 1;
+  };
+  controls.onGamepadWeapon3 = () => {
+    if (state !== GameState.PLAYING) return;
+    weapons.switchWeapon('sniperRifle');
+    currentWeaponIdx = 2;
+  };
+
+  // Y = cycle weapon
+  controls.onGamepadCycleWeapon = () => {
+    if (state !== GameState.PLAYING) return;
+    currentWeaponIdx = (currentWeaponIdx + 1) % weaponOrder.length;
+    weapons.switchWeapon(weaponOrder[currentWeaponIdx]);
+  };
+
+  // Back/Select = help
+  controls.onGamepadHelp = () => {
+    if (state === GameState.PLAYING) {
+      helpGuide.toggle();
+      if (helpGuide.isOpen) controls.unlock();
+    }
+  };
+
+  // Start = start game / pause
+  controls.onGamepadStart = () => {
+    if (state === GameState.MENU) {
+      startGame();
+    } else if (state === GameState.GAME_OVER) {
+      startGame();
+    } else if (state === GameState.PLAYING && !controls.isLocked && !helpGuide.isOpen) {
+      controls.lock();
+    }
+  };
+
+  // B = close help / back
+  controls.onGamepadBack = () => {
+    if (helpGuide.isOpen) {
+      helpGuide.close();
+    }
+  };
+}
+
 function startGame() {
   // Init audio on user interaction
   if (!audio.ctx) audio.init();
@@ -244,6 +321,7 @@ function startGame() {
 
   // Controls
   controls = new FPSControls(camera, renderer.domElement);
+  _setupGamepadCallbacks();
 
   // Particles
   particles = new ParticleSystem(scene);
