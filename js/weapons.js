@@ -70,19 +70,27 @@ export class WeaponManager {
     this.weaponCamera.position.set(0, 0, 2);
 
     // Key light - main illumination from upper right
-    const keyLight = new THREE.DirectionalLight(0xddeeff, 1.2);
+    const keyLight = new THREE.DirectionalLight(0xddeeff, 1.3);
     keyLight.position.set(2, 2, 3);
     this.weaponScene.add(keyLight);
     // Fill light - softer from left side
-    const fillLight = new THREE.DirectionalLight(0x8899bb, 0.4);
+    const fillLight = new THREE.DirectionalLight(0x8899bb, 0.45);
     fillLight.position.set(-2, 0.5, 1);
     this.weaponScene.add(fillLight);
     // Rim light - edge definition from behind
-    const rimLight = new THREE.DirectionalLight(0x6688cc, 0.6);
+    const rimLight = new THREE.DirectionalLight(0x6688cc, 0.65);
     rimLight.position.set(-1, 1, -2);
     this.weaponScene.add(rimLight);
+    // Bottom fill to reduce harsh shadows under weapon
+    const bottomFill = new THREE.DirectionalLight(0x445566, 0.2);
+    bottomFill.position.set(0, -2, 1);
+    this.weaponScene.add(bottomFill);
     // Ambient fill
-    this.weaponScene.add(new THREE.AmbientLight(0x334455, 0.5));
+    this.weaponScene.add(new THREE.AmbientLight(0x3a4455, 0.55));
+    // Weapon-colored accent light (changes per weapon)
+    this._weaponAccentLight = new THREE.PointLight(0xff0000, 0.4, 3);
+    this._weaponAccentLight.position.set(0, 0, -0.8);
+    this.weaponScene.add(this._weaponAccentLight);
 
     // Build weapon models
     this.weaponModels.laserRifle = this._buildRifleModel(0xff0000);
@@ -339,6 +347,165 @@ export class WeaponManager {
     recWindow.rotation.y = Math.PI / 2;
     group.add(recWindow);
 
+    // === HOLOGRAPHIC SIGHT ===
+    // Sight housing
+    const sightBase = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.04, 0.06), metalDark);
+    sightBase.position.set(0, 0.105, 0.0);
+    group.add(sightBase);
+    // Sight front window frame
+    const sightFront = new THREE.Mesh(new THREE.BoxGeometry(0.042, 0.05, 0.003), metalMed);
+    sightFront.position.set(0, 0.115, -0.03);
+    group.add(sightFront);
+    // Sight front glass
+    const sightGlass = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.034, 0.04),
+      new THREE.MeshBasicMaterial({ color: 0x001108, transparent: true, opacity: 0.35 })
+    );
+    sightGlass.position.set(0, 0.115, -0.029);
+    group.add(sightGlass);
+    // Sight rear window frame
+    const sightRear = new THREE.Mesh(new THREE.BoxGeometry(0.042, 0.05, 0.003), metalMed);
+    sightRear.position.set(0, 0.115, 0.03);
+    group.add(sightRear);
+    // Sight top hood
+    const sightHood = new THREE.Mesh(new THREE.BoxGeometry(0.044, 0.004, 0.062), metalDark);
+    sightHood.position.set(0, 0.138, 0.0);
+    group.add(sightHood);
+    // Sight side walls
+    for (const side of [-1, 1]) {
+      const sightWall = new THREE.Mesh(new THREE.BoxGeometry(0.003, 0.05, 0.058), metalDark);
+      sightWall.position.set(side * 0.022, 0.115, 0.0);
+      group.add(sightWall);
+    }
+    // Holographic reticle dot (glowing red/green)
+    const reticleDot = new THREE.Mesh(new THREE.SphereGeometry(0.004, 8, 8), glowMat(0xff2200, 1.0));
+    reticleDot.position.set(0, 0.115, 0.0);
+    group.add(reticleDot);
+    // Reticle ring
+    const reticleRing = new THREE.Mesh(new THREE.TorusGeometry(0.012, 0.001, 6, 16), glowMat(0xff2200, 0.5));
+    reticleRing.position.set(0, 0.115, 0.0);
+    group.add(reticleRing);
+    // Sight adjustment knobs
+    for (const side of [-1, 1]) {
+      const sightKnob = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.01, 6), metalLight);
+      sightKnob.rotation.z = Math.PI / 2;
+      sightKnob.position.set(side * 0.028, 0.12, 0.01);
+      group.add(sightKnob);
+    }
+    // Sight battery compartment
+    const sightBatt = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.01, 0.025), metalMed);
+    sightBatt.position.set(0.015, 0.1, 0.015);
+    group.add(sightBatt);
+
+    // === ENERGY CAPACITOR MODULE (left side) ===
+    const capHousing = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.06, 0.08), metalDark);
+    capHousing.position.set(-0.088, 0.0, 0.1);
+    group.add(capHousing);
+    // Capacitor cell window
+    const capWindow = new THREE.Mesh(new THREE.PlaneGeometry(0.035, 0.04), glowMat(color, 0.2));
+    capWindow.position.set(-0.109, 0.0, 0.1);
+    capWindow.rotation.y = -Math.PI / 2;
+    group.add(capWindow);
+    // Energy cell glow inside
+    const capCell = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.05, 8), glowMat(color, 0.55));
+    capCell.position.set(-0.088, 0.0, 0.1);
+    group.add(capCell);
+    // Capacitor mounting screws
+    for (const y of [-0.025, 0.025]) {
+      for (const z of [0.065, 0.135]) {
+        const screw = new THREE.Mesh(new THREE.CylinderGeometry(0.003, 0.003, 0.005, 6), metalBright);
+        screw.rotation.z = Math.PI / 2;
+        screw.position.set(-0.109, y, z);
+        group.add(screw);
+      }
+    }
+    // Cable routing from capacitor to barrel
+    const cableClips = [
+      { x: -0.068, y: -0.02, z: 0.05 },
+      { x: -0.058, y: -0.03, z: -0.05 },
+      { x: -0.048, y: -0.035, z: -0.2 },
+      { x: -0.04, y: -0.035, z: -0.4 },
+    ];
+    for (let i = 0; i < cableClips.length - 1; i++) {
+      const c0 = cableClips[i], c1 = cableClips[i + 1];
+      const dx = c1.x - c0.x, dy = c1.y - c0.y, dz = c1.z - c0.z;
+      const len = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      const cable = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.004, len, 4), metalDark);
+      cable.position.set((c0.x + c1.x) / 2, (c0.y + c1.y) / 2, (c0.z + c1.z) / 2);
+      cable.lookAt(c1.x, c1.y, c1.z);
+      cable.rotateX(Math.PI / 2);
+      group.add(cable);
+      // Cable clip
+      const clip = new THREE.Mesh(new THREE.TorusGeometry(0.006, 0.002, 4, 6), metalMed);
+      clip.position.set(c0.x, c0.y, c0.z);
+      group.add(clip);
+    }
+    // Cable energy glow trace
+    const cableGlow = new THREE.Mesh(new THREE.CylinderGeometry(0.002, 0.002, 0.4, 4), glowMat(color, 0.35));
+    cableGlow.rotation.x = Math.PI / 2;
+    cableGlow.position.set(-0.045, -0.035, -0.15);
+    group.add(cableGlow);
+
+    // === TACTICAL FLASHLIGHT (under foregrip) ===
+    const flashBody = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.014, 0.05, 8), metalDark);
+    flashBody.rotation.x = Math.PI / 2;
+    flashBody.position.set(0, -0.17, -0.1);
+    group.add(flashBody);
+    const flashLens = new THREE.Mesh(new THREE.CircleGeometry(0.013, 8), glowMat(0xffffcc, 0.15));
+    flashLens.position.set(0, -0.17, -0.126);
+    group.add(flashLens);
+    const flashBezel = new THREE.Mesh(new THREE.TorusGeometry(0.014, 0.002, 6, 8), metalLight);
+    flashBezel.position.set(0, -0.17, -0.126);
+    group.add(flashBezel);
+
+    // === BARREL BORE GLOW ===
+    const boreGlow = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.06, 8), glowMat(color, 0.4));
+    boreGlow.rotation.x = Math.PI / 2;
+    boreGlow.position.z = -1.17;
+    group.add(boreGlow);
+
+    // === RECEIVER PANEL LINES ===
+    // Horizontal panel lines on receiver sides
+    for (const side of [-1, 1]) {
+      for (let i = 0; i < 3; i++) {
+        const panelLine = new THREE.Mesh(
+          new THREE.BoxGeometry(0.001, 0.001, 0.25),
+          new THREE.MeshBasicMaterial({ color: 0x151515 })
+        );
+        panelLine.position.set(side * 0.066, -0.02 + i * 0.03, 0.15);
+        group.add(panelLine);
+      }
+      // Vertical divider
+      const vLine = new THREE.Mesh(
+        new THREE.BoxGeometry(0.001, 0.1, 0.001),
+        new THREE.MeshBasicMaterial({ color: 0x151515 })
+      );
+      vLine.position.set(side * 0.066, 0.0, 0.08);
+      group.add(vLine);
+    }
+    // Serial number plate (right side)
+    const serialPlate = new THREE.Mesh(new THREE.PlaneGeometry(0.04, 0.012), metalLight);
+    serialPlate.position.set(0.067, -0.04, 0.3);
+    serialPlate.rotation.y = Math.PI / 2;
+    group.add(serialPlate);
+    // Warning decal strip (yellow hash on barrel shroud)
+    const warnStrip = new THREE.Mesh(new THREE.BoxGeometry(0.005, 0.058, 0.015), glowMat(0xffaa00, 0.3));
+    warnStrip.position.set(0, 0.0, -0.48);
+    group.add(warnStrip);
+
+    // === ADDITIONAL RIVETS & SCREWS ===
+    const rivetPositions = [
+      [0.065, 0.05, -0.05], [0.065, 0.05, 0.15], [0.065, 0.05, 0.35],
+      [-0.065, 0.05, -0.05], [-0.065, 0.05, 0.15], [-0.065, 0.05, 0.35],
+      [0.065, -0.04, 0.0], [-0.065, -0.04, 0.0],
+    ];
+    for (const [rx, ry, rz] of rivetPositions) {
+      const rivet = new THREE.Mesh(new THREE.CylinderGeometry(0.003, 0.003, 0.004, 6), metalBright);
+      rivet.rotation.z = Math.PI / 2;
+      rivet.position.set(rx, ry, rz);
+      group.add(rivet);
+    }
+
     group.position.set(0.4, -0.35, -0.3);
     group.rotation.set(0, -0.1, 0);
     return group;
@@ -396,6 +563,41 @@ export class WeaponManager {
     powerLed.position.set(0.037, 0.07, 0);
     group.add(powerLed);
 
+    // === ENERGY CHANNELS (handle grooves) ===
+    // Vertical energy lines running up the handle
+    for (const side of [-1, 1]) {
+      const eChan = new THREE.Mesh(new THREE.BoxGeometry(0.002, 0.35, 0.003), glowMat(0x0066cc, 0.3));
+      eChan.position.set(side * 0.025, 0.02, 0.012);
+      group.add(eChan);
+      // Secondary thinner channel
+      const eChan2 = new THREE.Mesh(new THREE.BoxGeometry(0.001, 0.3, 0.002), glowMat(0x44aaff, 0.5));
+      eChan2.position.set(side * 0.025, 0.02, -0.012);
+      group.add(eChan2);
+    }
+    // Front/back channels
+    for (const z of [-0.03, 0.03]) {
+      const fChan = new THREE.Mesh(new THREE.BoxGeometry(0.002, 0.25, 0.001), glowMat(0x0066cc, 0.25));
+      fChan.position.set(0, 0.03, z);
+      group.add(fChan);
+    }
+
+    // === RUNE/CIRCUIT MARKINGS on handle ===
+    // Small circuit trace dots along the handle
+    for (let i = 0; i < 6; i++) {
+      const angle = (i / 6) * Math.PI * 2 + 0.3;
+      const ry = -0.12 + i * 0.06;
+      const runeDot = new THREE.Mesh(new THREE.SphereGeometry(0.003, 4, 4), glowMat(0x0088ff, 0.4 + Math.sin(i * 1.5) * 0.2));
+      runeDot.position.set(Math.cos(angle) * 0.032, ry, Math.sin(angle) * 0.032);
+      group.add(runeDot);
+    }
+    // Horizontal circuit traces (3 rings)
+    for (let i = 0; i < 3; i++) {
+      const circuitRing = new THREE.Mesh(new THREE.TorusGeometry(0.032, 0.001, 4, 16), glowMat(0x0066cc, 0.2));
+      circuitRing.position.y = -0.05 + i * 0.1;
+      circuitRing.rotation.x = Math.PI / 2;
+      group.add(circuitRing);
+    }
+
     // === CROSSGUARD ===
     // Main guard bar
     const guardMain = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.03, 0.045), metalMat);
@@ -405,6 +607,10 @@ export class WeaponManager {
     const guardRidge = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.008, 0.05), metalBright);
     guardRidge.position.y = 0.235;
     group.add(guardRidge);
+    // Guard bottom edge detail
+    const guardBottom = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.004, 0.048), darkMetal);
+    guardBottom.position.y = 0.203;
+    group.add(guardBottom);
     // Curved guard tips with scrollwork
     for (const side of [-1, 1]) {
       const tip = new THREE.Mesh(new THREE.SphereGeometry(0.018, 8, 8), metalBright);
@@ -418,38 +624,88 @@ export class WeaponManager {
       const curveTip = new THREE.Mesh(new THREE.SphereGeometry(0.01, 6, 6), metalBright);
       curveTip.position.set(side * 0.11, 0.27, 0);
       group.add(curveTip);
-      // Guard wing accents (energy)
+      // Guard wing accents (energy) - wider, double-lined
       const wingGlow = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.003, 0.01), glowMat(0x0088ff, 0.4));
       wingGlow.position.set(side * 0.08, 0.22, 0.025);
       group.add(wingGlow);
+      const wingGlow2 = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.002, 0.008), glowMat(0x44bbff, 0.25));
+      wingGlow2.position.set(side * 0.08, 0.215, -0.025);
+      group.add(wingGlow2);
+      // Guard circuit trace to tips
+      const guardTrace = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.001, 0.002), glowMat(0x0066cc, 0.35));
+      guardTrace.position.set(side * 0.06, 0.228, 0.0);
+      group.add(guardTrace);
+      // Quillon emitter vents (small energy outlets at guard ends)
+      const quillonVent = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.008, 0.008, 6), darkMetal);
+      quillonVent.position.set(side * 0.135, 0.22, 0);
+      quillonVent.rotation.z = side * Math.PI / 2;
+      group.add(quillonVent);
+      const quillonGlow = new THREE.Mesh(new THREE.SphereGeometry(0.005, 6, 6), glowMat(0x0088ff, 0.6));
+      quillonGlow.position.set(side * 0.14, 0.22, 0);
+      group.add(quillonGlow);
     }
-    // Center gem - larger, faceted
+    // Center gem - larger, faceted with mounting
+    const gemMount = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.02, 0.015), darkMetal);
+    gemMount.position.set(0, 0.22, 0.025);
+    group.add(gemMount);
     const gem = new THREE.Mesh(new THREE.OctahedronGeometry(0.022, 0), glowMat(0x00bbff, 1.0));
     gem.position.set(0, 0.22, 0.028);
     group.add(gem);
     const gemHalo = new THREE.Mesh(new THREE.SphereGeometry(0.035, 8, 8), glowMat(0x0088ff, 0.15));
     gem.add(gemHalo);
+    // Secondary side gems
+    for (const side of [-1, 1]) {
+      const sideGem = new THREE.Mesh(new THREE.OctahedronGeometry(0.008, 0), glowMat(0x00ddff, 0.7));
+      sideGem.position.set(side * 0.04, 0.228, 0.026);
+      group.add(sideGem);
+    }
 
-    // === EMITTER HOUSING ===
+    // === EMITTER HOUSING (enhanced multi-ring) ===
+    // Lower emitter collar
+    const emitterCollar = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.032, 0.015, 10), darkMetal);
+    emitterCollar.position.y = 0.245;
+    group.add(emitterCollar);
+    // Main emitter body
     const emitterBase = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.032, 0.04, 10), metalMat);
     emitterBase.position.y = 0.265;
     group.add(emitterBase);
+    // Emitter mid ring
+    const emitterMid = new THREE.Mesh(new THREE.TorusGeometry(0.032, 0.003, 6, 12), metalBright);
+    emitterMid.position.y = 0.27;
+    emitterMid.rotation.x = Math.PI / 2;
+    group.add(emitterMid);
+    // Top emitter ring
     const emitterRing = new THREE.Mesh(new THREE.TorusGeometry(0.03, 0.004, 6, 12), metalBright);
     emitterRing.position.y = 0.285;
     emitterRing.rotation.x = Math.PI / 2;
     group.add(emitterRing);
-    // Emitter vents
-    for (let i = 0; i < 4; i++) {
-      const angle = (i / 4) * Math.PI * 2;
-      const vent = new THREE.Mesh(new THREE.BoxGeometry(0.006, 0.025, 0.004), darkMetal);
+    // Energy channeling ring (glowing)
+    const emitterEnergyRing = new THREE.Mesh(new THREE.TorusGeometry(0.026, 0.002, 6, 16), glowMat(0x0088ff, 0.6));
+    emitterEnergyRing.position.y = 0.288;
+    emitterEnergyRing.rotation.x = Math.PI / 2;
+    group.add(emitterEnergyRing);
+    // Emitter vents (8 radial)
+    for (let i = 0; i < 8; i++) {
+      const angle = (i / 8) * Math.PI * 2;
+      const vent = new THREE.Mesh(new THREE.BoxGeometry(0.005, 0.02, 0.003), darkMetal);
       vent.position.set(Math.cos(angle) * 0.03, 0.27, Math.sin(angle) * 0.03);
       group.add(vent);
+      // Vent glow
+      if (i % 2 === 0) {
+        const ventGlow = new THREE.Mesh(new THREE.BoxGeometry(0.003, 0.015, 0.001), glowMat(0x0088ff, 0.4));
+        ventGlow.position.set(Math.cos(angle) * 0.031, 0.27, Math.sin(angle) * 0.031);
+        group.add(ventGlow);
+      }
     }
     // Emitter glow disc
-    const emitterGlow = new THREE.Mesh(new THREE.CircleGeometry(0.02, 10), glowMat(0x44aaff, 0.6));
+    const emitterGlow = new THREE.Mesh(new THREE.CircleGeometry(0.022, 12), glowMat(0x44aaff, 0.6));
     emitterGlow.position.y = 0.29;
     emitterGlow.rotation.x = -Math.PI / 2;
     group.add(emitterGlow);
+    // Emitter inner bore glow
+    const emitterBore = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.02, 8), glowMat(0x88ccff, 0.5));
+    emitterBore.position.y = 0.285;
+    group.add(emitterBore);
 
     // === BLADE ===
     const bladeLen = 1.05;
@@ -502,22 +758,58 @@ export class WeaponManager {
       group.add(gMesh);
     }
 
-    // Blade edge sparkle particles
-    for (let i = 0; i < 10; i++) {
+    // Blade edge sparkle particles (more, varied)
+    for (let i = 0; i < 18; i++) {
       const spark = new THREE.Mesh(
-        new THREE.SphereGeometry(0.006 + Math.random() * 0.004, 4, 4),
-        glowMat(0xccddff, 0.6 + Math.random() * 0.4)
+        new THREE.SphereGeometry(0.004 + Math.random() * 0.005, 4, 4),
+        glowMat(0xccddff, 0.5 + Math.random() * 0.5)
       );
-      const y = 0.4 + Math.random() * bladeLen * 0.8;
-      spark.position.set((Math.random() - 0.5) * 0.04, y, (Math.random() - 0.5) * 0.01);
+      const y = 0.35 + Math.random() * bladeLen * 0.9;
+      const xSpread = 0.025 + (y - 0.35) / bladeLen * 0.015;
+      spark.position.set((Math.random() - 0.5) * xSpread * 2, y, (Math.random() - 0.5) * 0.012);
       group.add(spark);
     }
-    // Blade tip glow point
-    const bladeTip = new THREE.Mesh(new THREE.SphereGeometry(0.015, 8, 8), glowMat(0xaaddff, 0.9));
+
+    // Blade edge shimmer lines (left & right edges)
+    for (const side of [-1, 1]) {
+      for (let i = 0; i < 5; i++) {
+        const ey = 0.4 + i * bladeLen * 0.18;
+        const eWidth = 0.022 - (i * 0.003);
+        const edgeLine = new THREE.Mesh(
+          new THREE.BoxGeometry(0.001, bladeLen * 0.15, 0.002),
+          glowMat(0xeeffff, 0.35 + Math.random() * 0.2)
+        );
+        edgeLine.position.set(side * eWidth, ey, 0);
+        group.add(edgeLine);
+      }
+    }
+
+    // Plasma instability nodes (bright spots along blade)
+    for (let i = 0; i < 4; i++) {
+      const nodeY = 0.5 + i * bladeLen * 0.22;
+      const node = new THREE.Mesh(new THREE.SphereGeometry(0.008, 6, 6), glowMat(0xeeffff, 0.7));
+      node.position.set(0, nodeY, 0);
+      group.add(node);
+      // Node halo
+      const nodeHalo = new THREE.Mesh(new THREE.SphereGeometry(0.018, 6, 6), glowMat(0x44aaff, 0.15));
+      node.add(nodeHalo);
+    }
+
+    // Blade base emission flare (where blade meets emitter)
+    const baseFlare = new THREE.Mesh(new THREE.SphereGeometry(0.025, 8, 8), glowMat(0x88ccff, 0.45));
+    baseFlare.scale.set(1, 0.4, 1);
+    baseFlare.position.set(0, 0.31, 0);
+    group.add(baseFlare);
+
+    // Blade tip glow point (enhanced)
+    const bladeTip = new THREE.Mesh(new THREE.SphereGeometry(0.013, 8, 8), glowMat(0xaaddff, 0.95));
     bladeTip.position.set(0, 0.3 + bladeLen, 0);
     group.add(bladeTip);
-    const bladeTipHalo = new THREE.Mesh(new THREE.SphereGeometry(0.04, 6, 6), glowMat(0x0088ff, 0.15));
+    const bladeTipHalo = new THREE.Mesh(new THREE.SphereGeometry(0.035, 6, 6), glowMat(0x0088ff, 0.2));
     bladeTip.add(bladeTipHalo);
+    // Tip flash point
+    const tipFlash = new THREE.Mesh(new THREE.SphereGeometry(0.006, 6, 6), glowMat(0xffffff, 0.9));
+    bladeTip.add(tipFlash);
 
     group.position.set(0.5, -0.5, -0.2);
     group.rotation.set(-0.5, 0, 0.3);
@@ -747,39 +1039,200 @@ export class WeaponManager {
     wire.position.set(0.02, -0.035, 0.05);
     group.add(wire);
 
+    // === BARREL HEAT SHIELD ===
+    // Perforated heat shield wrapping the barrel mid-section
+    const heatShield = new THREE.Mesh(new THREE.CylinderGeometry(0.034, 0.034, 0.5, 10), metalMed);
+    heatShield.rotation.x = Math.PI / 2;
+    heatShield.position.set(0, 0.0, -0.85);
+    group.add(heatShield);
+    // Heat shield vents (slots cut into the shield)
+    for (let i = 0; i < 8; i++) {
+      for (const side of [0.028, -0.028]) {
+        const hSlot = new THREE.Mesh(
+          new THREE.BoxGeometry(0.008, 0.015, 0.025),
+          new THREE.MeshBasicMaterial({ color: 0x080808 })
+        );
+        hSlot.position.set(0, side, -0.68 - i * 0.05);
+        group.add(hSlot);
+      }
+    }
+    // Heat shield mounting bands
+    for (const z of [-0.65, -0.85, -1.05]) {
+      const hBand = new THREE.Mesh(new THREE.TorusGeometry(0.036, 0.002, 6, 10), metalLight);
+      hBand.position.z = z;
+      group.add(hBand);
+    }
+
+    // === ANTI-GRAV STABILIZER MODULE ===
+    // Stabilizer housing (underneath barrel, forward of receiver)
+    const stabHousing = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.03, 0.08), metalDark);
+    stabHousing.position.set(0, -0.05, -0.45);
+    group.add(stabHousing);
+    // Stabilizer emitter plates
+    for (const side of [-1, 1]) {
+      const stabPlate = new THREE.Mesh(new THREE.BoxGeometry(0.003, 0.025, 0.06), metalLight);
+      stabPlate.position.set(side * 0.02, -0.05, -0.45);
+      group.add(stabPlate);
+      // Stabilizer glow strip
+      const stabGlow = new THREE.Mesh(new THREE.BoxGeometry(0.001, 0.018, 0.05), glowMat(color, 0.3));
+      stabGlow.position.set(side * 0.021, -0.05, -0.45);
+      group.add(stabGlow);
+    }
+    // Stabilizer indicator light
+    const stabLight = new THREE.Mesh(new THREE.SphereGeometry(0.004, 6, 6), glowMat(0x00ff44, 0.9));
+    stabLight.position.set(0, -0.033, -0.42);
+    group.add(stabLight);
+
+    // === POWER CELL (visible on right side of receiver) ===
+    const powerCell = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.07, 8), metalDark);
+    powerCell.rotation.z = Math.PI / 2;
+    powerCell.position.set(0.074, -0.02, 0.05);
+    group.add(powerCell);
+    // Power cell energy window
+    const cellWindow = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.04, 8), glowMat(color, 0.35));
+    cellWindow.rotation.z = Math.PI / 2;
+    cellWindow.position.set(0.074, -0.02, 0.05);
+    group.add(cellWindow);
+    // Power cell cap
+    const cellCap = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.018, 0.01, 8), metalBright);
+    cellCap.rotation.z = Math.PI / 2;
+    cellCap.position.set(0.11, -0.02, 0.05);
+    group.add(cellCap);
+    // Power cell release latch
+    const cellLatch = new THREE.Mesh(new THREE.BoxGeometry(0.008, 0.012, 0.02), metalLight);
+    cellLatch.position.set(0.09, -0.005, 0.05);
+    group.add(cellLatch);
+
+    // === RANGE FINDER MODULE (on scope) ===
+    const rfBody = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.02, 0.04), metalDark);
+    rfBody.position.set(0.045, 0.17, -0.05);
+    group.add(rfBody);
+    // Range finder lens
+    const rfLens = new THREE.Mesh(new THREE.CircleGeometry(0.007, 8), glowMat(0xff4400, 0.6));
+    rfLens.position.set(0.045, 0.17, -0.071);
+    group.add(rfLens);
+    // Range finder LED
+    const rfLed = new THREE.Mesh(new THREE.SphereGeometry(0.003, 6, 6), glowMat(0xff0000, 0.8));
+    rfLed.position.set(0.045, 0.182, -0.04);
+    group.add(rfLed);
+
+    // === DATA LINK ANTENNA ===
+    const antennaBase = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.012, 6), metalMed);
+    antennaBase.position.set(-0.04, 0.09, 0.35);
+    group.add(antennaBase);
+    const antennaMast = new THREE.Mesh(new THREE.CylinderGeometry(0.002, 0.003, 0.06, 4), metalLight);
+    antennaMast.position.set(-0.04, 0.125, 0.35);
+    group.add(antennaMast);
+    const antennaTip = new THREE.Mesh(new THREE.SphereGeometry(0.004, 6, 6), glowMat(color, 0.6));
+    antennaTip.position.set(-0.04, 0.157, 0.35);
+    group.add(antennaTip);
+
+    // === BARREL CROWN (detailed muzzle end) ===
+    // Crown face with ports
+    const crownFace = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.04, 0.015, 12), metalBright);
+    crownFace.rotation.x = Math.PI / 2;
+    crownFace.position.z = -1.62;
+    group.add(crownFace);
+    // Crown ports (6 radial)
+    for (let i = 0; i < 6; i++) {
+      const angle = (i / 6) * Math.PI * 2;
+      const crownPort = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.004, 0.016, 6), new THREE.MeshBasicMaterial({ color: 0x050505 }));
+      crownPort.rotation.x = Math.PI / 2;
+      crownPort.position.set(Math.cos(angle) * 0.025, Math.sin(angle) * 0.025, -1.62);
+      group.add(crownPort);
+    }
+
     // === ENERGY / SCI-FI ELEMENTS ===
-    // Energy coils near muzzle
-    for (let i = 0; i < 4; i++) {
-      const coil = new THREE.Mesh(new THREE.TorusGeometry(0.03, 0.004, 6, 12), glowMat(color, 0.5));
-      coil.position.z = -1.3 - i * 0.08;
+    // Energy coils near muzzle (more, varied sizes)
+    for (let i = 0; i < 5; i++) {
+      const coilSize = 0.028 + (i % 2) * 0.006;
+      const coil = new THREE.Mesh(new THREE.TorusGeometry(coilSize, 0.004, 6, 12), glowMat(color, 0.45 + (i % 2) * 0.15));
+      coil.position.z = -1.25 - i * 0.07;
       group.add(coil);
     }
-    // Energy conduit along barrel underside
-    const conduit = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.8, 6), glowMat(color, 0.25));
+    // Energy conduit along barrel underside (with nodes)
+    const conduit = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.9, 6), glowMat(color, 0.25));
     conduit.rotation.x = Math.PI / 2;
-    conduit.position.set(0, -0.03, -1.0);
+    conduit.position.set(0, -0.03, -1.05);
     group.add(conduit);
-    // Glowing muzzle tip
-    const tip = new THREE.Mesh(new THREE.SphereGeometry(0.03, 12, 12), new THREE.MeshBasicMaterial({ color }));
+    // Conduit junction nodes
+    for (let i = 0; i < 3; i++) {
+      const jNode = new THREE.Mesh(new THREE.SphereGeometry(0.008, 6, 6), glowMat(color, 0.5));
+      jNode.position.set(0, -0.03, -0.7 - i * 0.3);
+      group.add(jNode);
+    }
+    // Top energy conduit
+    const conduitTop = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.004, 0.6, 4), glowMat(color, 0.2));
+    conduitTop.rotation.x = Math.PI / 2;
+    conduitTop.position.set(0, 0.025, -1.0);
+    group.add(conduitTop);
+    // Glowing muzzle tip (enhanced)
+    const tip = new THREE.Mesh(new THREE.SphereGeometry(0.028, 12, 12), new THREE.MeshBasicMaterial({ color }));
     tip.position.z = -1.83;
     group.add(tip);
-    const tipHalo = new THREE.Mesh(new THREE.SphereGeometry(0.06, 10, 10), glowMat(color, 0.12));
+    const tipHalo = new THREE.Mesh(new THREE.SphereGeometry(0.055, 10, 10), glowMat(color, 0.14));
     tip.add(tipHalo);
-    // Accent strips
+    const tipCore = new THREE.Mesh(new THREE.SphereGeometry(0.012, 8, 8), glowMat(0xddaaff, 0.9));
+    tip.add(tipCore);
+    // Muzzle bore glow
+    const muzzleBore = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.04, 8), glowMat(color, 0.4));
+    muzzleBore.rotation.x = Math.PI / 2;
+    muzzleBore.position.z = -1.83;
+    group.add(muzzleBore);
+    // Accent strips (doubled)
     for (const side of [-1, 1]) {
       const strip = new THREE.Mesh(new THREE.BoxGeometry(0.003, 0.003, 0.5), glowMat(color, 0.35));
       strip.position.set(side * 0.057, 0.04, 0.05);
       group.add(strip);
+      // Lower accent strip
+      const strip2 = new THREE.Mesh(new THREE.BoxGeometry(0.002, 0.002, 0.35), glowMat(color, 0.2));
+      strip2.position.set(side * 0.057, -0.01, -0.05);
+      group.add(strip2);
+    }
+    // Receiver panel lines
+    for (const side of [-1, 1]) {
+      for (let i = 0; i < 3; i++) {
+        const pLine = new THREE.Mesh(new THREE.BoxGeometry(0.001, 0.001, 0.22), new THREE.MeshBasicMaterial({ color: 0x111118 }));
+        pLine.position.set(side * 0.056, -0.02 + i * 0.03, 0.15);
+        group.add(pLine);
+      }
     }
     // Digital ammo counter (glowing display on left side)
-    const displayBg = new THREE.Mesh(new THREE.PlaneGeometry(0.04, 0.02), new THREE.MeshBasicMaterial({ color: 0x050510 }));
+    const displayBg = new THREE.Mesh(new THREE.PlaneGeometry(0.045, 0.025), new THREE.MeshBasicMaterial({ color: 0x050510 }));
     displayBg.position.set(-0.058, 0.02, 0.08);
     displayBg.rotation.y = -Math.PI / 2;
     group.add(displayBg);
-    const displayTxt = new THREE.Mesh(new THREE.PlaneGeometry(0.035, 0.015), glowMat(color, 0.7));
+    const displayTxt = new THREE.Mesh(new THREE.PlaneGeometry(0.04, 0.02), glowMat(color, 0.7));
     displayTxt.position.set(-0.059, 0.02, 0.08);
     displayTxt.rotation.y = -Math.PI / 2;
     group.add(displayTxt);
+    // Display border
+    const displayBorder = new THREE.Mesh(new THREE.PlaneGeometry(0.048, 0.028), new THREE.MeshBasicMaterial({ color: 0x1a1a2a }));
+    displayBorder.position.set(-0.057, 0.02, 0.08);
+    displayBorder.rotation.y = -Math.PI / 2;
+    group.add(displayBorder);
+    // Status LEDs (3 dots below display)
+    for (let i = 0; i < 3; i++) {
+      const ledColor = i === 0 ? 0x00ff44 : (i === 1 ? 0xffaa00 : color);
+      const statusLed = new THREE.Mesh(new THREE.SphereGeometry(0.003, 6, 6), glowMat(ledColor, 0.8));
+      statusLed.position.set(-0.059, 0.003, 0.065 + i * 0.015);
+      group.add(statusLed);
+    }
+
+    // === ADDITIONAL RECEIVER DETAILS ===
+    // Picatinny rail screws
+    for (let i = 0; i < 4; i++) {
+      for (const side of [-1, 1]) {
+        const rScrew = new THREE.Mesh(new THREE.CylinderGeometry(0.003, 0.003, 0.004, 6), metalBright);
+        rScrew.rotation.z = Math.PI / 2;
+        rScrew.position.set(side * 0.056, 0.06, -0.05 + i * 0.1);
+        group.add(rScrew);
+      }
+    }
+    // Magazine floor plate detail
+    const magFloor = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.005, 0.045), metalLight);
+    magFloor.position.set(0, -0.28, 0.3);
+    group.add(magFloor);
 
     group.position.set(0.35, -0.35, -0.3);
     group.rotation.set(0, -0.1, 0);
@@ -793,6 +1246,11 @@ export class WeaponManager {
     if (this.weaponModels[name]) this.weaponModels[name].visible = true;
     this.current = name;
     this.cooldown = 0;
+    // Update accent light color per weapon
+    if (this._weaponAccentLight) {
+      const colors = { laserRifle: 0xff0000, laserSword: 0x0088ff, sniperRifle: 0x8800ff };
+      this._weaponAccentLight.color.setHex(colors[name] || 0xff0000);
+    }
   }
 
   toggleZoom() {
@@ -910,10 +1368,11 @@ export class WeaponManager {
       if (this.recoilRotX < 0.001) this.recoilRotX = 0;
     }
 
+    const time = performance.now() * 0.001;
+
     // Animate weapon
     if (this.weaponModels[this.current]) {
       const model = this.weaponModels[this.current];
-      const time = performance.now() * 0.001;
 
       // Default position based on weapon type
       let baseX = 0, baseY = 0, baseZ = 0;
@@ -959,20 +1418,26 @@ export class WeaponManager {
     // Weapon energy glow pulse - animate glowing elements
     if (this.weaponModels[this.current]) {
       const model = this.weaponModels[this.current];
-      const pulse = 0.5 + Math.sin(time * 3) * 0.3;
-      const fastPulse = 0.6 + Math.sin(time * 8) * 0.2;
       model.traverse(child => {
         if (child.material && child.material.type === 'MeshBasicMaterial' && child.material.transparent) {
-          // Pulse opacity of glowing elements slightly
           const baseOpacity = child.material.userData?.baseOpacity;
           if (baseOpacity === undefined) {
             child.material.userData = child.material.userData || {};
             child.material.userData.baseOpacity = child.material.opacity;
           } else {
-            child.material.opacity = baseOpacity * (0.85 + Math.sin(time * 4 + baseOpacity * 10) * 0.15);
+            // More organic pulse with multiple frequencies
+            const phase = baseOpacity * 12.0;
+            const slow = Math.sin(time * 2.5 + phase) * 0.1;
+            const fast = Math.sin(time * 6.0 + phase * 0.7) * 0.05;
+            child.material.opacity = baseOpacity * (0.88 + slow + fast);
           }
         }
       });
+    }
+
+    // Pulse accent light intensity
+    if (this._weaponAccentLight) {
+      this._weaponAccentLight.intensity = 0.35 + Math.sin(time * 3.0) * 0.12;
     }
 
     // Render weapon view
