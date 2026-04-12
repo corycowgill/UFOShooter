@@ -480,13 +480,14 @@ function fireWeapon() {
 
 function processHit(hit) {
   const killed = hit.enemy.takeDamage(hit.damage);
-  const enemyPos = hit.enemy.mesh.position.clone();
+  const enemyPos = hit.enemy.mesh.position;
   const alienData = ALIEN_TYPES[hit.enemy.type];
 
   // Hit marker and damage number
   if (vfx) {
     vfx.showHitMarker(killed);
-    vfx.showDamageNumber(enemyPos.clone().add(new THREE.Vector3(0, 1.5, 0)), hit.damage, killed);
+    _dmgNumPos.set(enemyPos.x, enemyPos.y + 1.5, enemyPos.z);
+    vfx.showDamageNumber(_dmgNumPos, hit.damage, killed);
     // Weapon-specific screen shake
     const weaponKey = hit.weaponKey || 'laserRifle';
     if (weaponKey === 'sniperRifle') {
@@ -529,7 +530,7 @@ function processHit(hit) {
             player.addScore(ALIEN_TYPES[other.type].scoreValue);
             if (vfx) {
               vfx.addKillFeedEntry(ALIEN_TYPES[other.type].name, 'EXPLOSION');
-              vfx.createDeathEffect(other.mesh.position.clone(), ALIEN_TYPES[other.type].color || 0x00ff00, 1);
+              vfx.createDeathEffect(other.mesh.position, ALIEN_TYPES[other.type].color || 0x00ff00, 1);
             }
           }
         }
@@ -546,6 +547,9 @@ function processHit(hit) {
 
 // ===== GAME LOOP =====
 let lastWaveState = '';
+// Reusable vectors for animate() loop - avoid per-frame allocations
+const _minimapDir = new THREE.Vector3();
+const _dmgNumPos = new THREE.Vector3();
 
 function animate() {
   requestAnimationFrame(animate);
@@ -609,7 +613,7 @@ function animate() {
       player.takeDamage(result.damage, audio);
       if (vfx) vfx.shake(0.08, 0.15);
       if (result.type === 'explosion') {
-        particles.createExplosion(enemy.mesh.position.clone(), 0xff4400, 5, 0.8);
+        particles.createExplosion(enemy.mesh.position, 0xff4400, 5, 0.8);
         if (vfx) vfx.shake(0.2, 0.4);
       }
     }
@@ -630,9 +634,8 @@ function animate() {
   hud.update(player, waveManager, weapons.getWeaponData(), LEVELS[currentLevelIndex].name);
 
   // Minimap
-  const dir = new THREE.Vector3();
-  camera.getWorldDirection(dir);
-  hud.drawMinimap(camera.position, dir, waveManager.enemies);
+  camera.getWorldDirection(_minimapDir);
+  hud.drawMinimap(camera.position, _minimapDir, waveManager.enemies);
 
   // Render
   renderer.render(scene, camera);

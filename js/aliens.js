@@ -2534,10 +2534,11 @@ export class Alien {
 
   _shootAtPlayer(playerPos) {
     this.audio.playAlienShoot();
-    const from = this.mesh.position.clone();
+    const from = this._tmpVec;
+    from.copy(this.mesh.position);
     from.y += this.type === 'drone' ? 0 : 1.2;
     const speed = this.type === 'spitter' ? 25 : (this.type === 'drone' ? 40 : 30);
-    const bolt = this.particles.createAlienBolt(from, playerPos.clone(), speed, this.type);
+    const bolt = this.particles.createAlienBolt(from, playerPos, speed, this.type);
     this.projectiles.push(bolt);
   }
 
@@ -2594,7 +2595,7 @@ export class Alien {
 
     // Bloater explodes on death
     if (this.type === 'bloater') {
-      this.particles.createExplosion(this.mesh.position.clone(), 0xff4400, 5, 0.8);
+      this.particles.createExplosion(this.mesh.position, 0xff4400, 5, 0.8);
       this.audio.playExplosion();
       this.deathTimer = 0.1; // Remove quickly since we show explosion
     }

@@ -54,6 +54,13 @@ export class WeaponManager {
     this.recoilOffset = 0;
     this.recoilRotX = 0;
 
+    // Reusable temporaries for fire path - avoid per-shot allocations
+    this._tmpDir = new THREE.Vector3();
+    this._tmpMuzzle = new THREE.Vector3();
+    this._tmpEnd = new THREE.Vector3();
+    this._tmpToEnemy = new THREE.Vector3();
+    this._tmpRaycaster = new THREE.Raycaster();
+
     this._initWeaponView();
   }
 
@@ -1298,22 +1305,29 @@ export class WeaponManager {
   }
 
   _hitscanAttack(enemies, weapon) {
-    const origin = this.camera.position.clone();
-    const dir = new THREE.Vector3();
+    const origin = this.camera.position;
+    const dir = this._tmpDir;
     this.camera.getWorldDirection(dir);
 
     // Muzzle flash
-    const muzzlePos = origin.clone().add(dir.clone().multiplyScalar(1));
+    const muzzlePos = this._tmpMuzzle.set(
+      origin.x + dir.x,
+      origin.y + dir.y,
+      origin.z + dir.z
+    );
     this.particles.createMuzzleFlash(muzzlePos, dir, weapon.color);
 
-    // Raycast against enemies
-    const raycaster = new THREE.Raycaster(origin, dir, 0, weapon.range);
+    // Raycast against enemies (reused)
+    const raycaster = this._tmpRaycaster;
+    raycaster.set(origin, dir);
+    raycaster.near = 0;
+    raycaster.far = weapon.range;
     let closestHit = null;
     let closestDist = Infinity;
 
-    for (const enemy of enemies) {
+    for (let i = 0, n = enemies.length; i < n; i++) {
+      const enemy = enemies[i];
       if (enemy.dead) continue;
-      // Check intersection with enemy mesh
       const intersects = raycaster.intersectObject(enemy.mesh, true);
       if (intersects.length > 0 && intersects[0].distance < closestDist) {
         closestDist = intersects[0].distance;
@@ -1332,7 +1346,11 @@ export class WeaponManager {
       return { hit: true, enemy: closestHit.enemy, damage: weapon.damage, point: closestHit.point, weaponKey: this.current };
     } else {
       // Draw beam to max range
-      const endPoint = origin.clone().add(dir.clone().multiplyScalar(weapon.range));
+      const endPoint = this._tmpEnd.set(
+        origin.x + dir.x * weapon.range,
+        origin.y + dir.y * weapon.range,
+        origin.z + dir.z * weapon.range
+      );
       if (this.current === 'sniperRifle') {
         this.particles.createSniperTracer(muzzlePos, endPoint, weapon.color);
       } else {
@@ -1345,25 +1363,27 @@ export class WeaponManager {
   _meleeAttack(enemies, weapon) {
     this.particles.createSwordSlash(this.camera, weapon.color);
 
-    const origin = this.camera.position.clone();
-    const dir = new THREE.Vector3();
+    const origin = this.camera.position;
+    const dir = this._tmpDir;
     this.camera.getWorldDirection(dir);
 
     // Animate sword swing
     this.swingAngle = 1.0;
 
     const hits = [];
-    for (const enemy of enemies) {
+    const toEnemy = this._tmpToEnemy;
+    for (let i = 0, n = enemies.length; i < n; i++) {
+      const enemy = enemies[i];
       if (enemy.dead) continue;
-      const toEnemy = new THREE.Vector3().subVectors(enemy.mesh.position, origin);
+      toEnemy.subVectors(enemy.mesh.position, origin);
       const dist = toEnemy.length();
       if (dist > weapon.range) continue;
       // Check angle (wide arc - 90 degrees)
-      toEnemy.normalize();
+      toEnemy.multiplyScalar(1 / dist);
       const dot = dir.dot(toEnemy);
       if (dot > 0.3) {
-        this.particles.createWeaponImpact(enemy.mesh.position.clone(), 'laserSword');
-        hits.push({ hit: true, enemy, damage: weapon.damage, point: enemy.mesh.position.clone(), weaponKey: 'laserSword' });
+        this.particles.createWeaponImpact(enemy.mesh.position, 'laserSword');
+        hits.push({ hit: true, enemy, damage: weapon.damage, point: enemy.mesh.position, weaponKey: 'laserSword' });
       }
     }
     return hits.length > 0 ? hits : { hit: false };

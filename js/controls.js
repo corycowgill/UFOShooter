@@ -16,6 +16,14 @@ export class FPSControls {
     this.velocity = new THREE.Vector3();
     this.direction = new THREE.Vector3();
 
+    // Reusable temp objects to avoid per-frame allocations
+    this._tmpForward = new THREE.Vector3();
+    this._tmpRight = new THREE.Vector3();
+    this._tmpUp = new THREE.Vector3(0, 1, 0);
+    this._tmpNewPos = new THREE.Vector3();
+    this._tmpCheckPoint = new THREE.Vector3();
+    this._tmpBox = new THREE.Box3();
+
     this.playerHeight = 1.7;
     this.speed = 12;
     this.sprintMultiplier = 1.8;
@@ -233,12 +241,12 @@ export class FPSControls {
 
     // Horizontal movement
     this.direction.set(0, 0, 0);
-    const forward = new THREE.Vector3();
-    const right = new THREE.Vector3();
+    const forward = this._tmpForward;
+    const right = this._tmpRight;
     this.camera.getWorldDirection(forward);
     forward.y = 0;
     forward.normalize();
-    right.crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
+    right.crossVectors(forward, this._tmpUp).normalize();
 
     // Keyboard input
     if (this.moveForward) this.direction.add(forward);
@@ -248,25 +256,32 @@ export class FPSControls {
 
     // Gamepad left stick input (additive with keyboard)
     if (useGamepad && (this.gamepadMoveX !== 0 || this.gamepadMoveY !== 0)) {
-      this.direction.add(right.clone().multiplyScalar(this.gamepadMoveX));
-      this.direction.sub(forward.clone().multiplyScalar(this.gamepadMoveY));
+      this.direction.x += right.x * this.gamepadMoveX - forward.x * this.gamepadMoveY;
+      this.direction.y += right.y * this.gamepadMoveX - forward.y * this.gamepadMoveY;
+      this.direction.z += right.z * this.gamepadMoveX - forward.z * this.gamepadMoveY;
     }
 
     this.direction.normalize();
 
-    const moveVec = this.direction.multiplyScalar(speed * delta);
-
-    // Attempt move with collision
-    const newPos = this.camera.position.clone().add(moveVec);
+    const moveDist = speed * delta;
+    const newX = this.camera.position.x + this.direction.x * moveDist;
+    const newZ = this.camera.position.z + this.direction.z * moveDist;
 
     // Check collisions
     let blocked = false;
     if (colliders && colliders.length > 0) {
       const playerRadius = 0.4;
-      for (const col of colliders) {
+      const checkY = this.camera.position.y - this.playerHeight / 2;
+      const checkPoint = this._tmpCheckPoint;
+      checkPoint.set(newX, checkY, newZ);
+      for (let i = 0, n = colliders.length; i < n; i++) {
+        const col = colliders[i];
         if (!col.box) continue;
-        const expanded = col.box.clone().expandByScalar(playerRadius);
-        if (expanded.containsPoint(new THREE.Vector3(newPos.x, this.camera.position.y - this.playerHeight / 2, newPos.z))) {
+        const b = col.box;
+        // Inlined expanded box containsPoint test
+        if (checkPoint.x >= b.min.x - playerRadius && checkPoint.x <= b.max.x + playerRadius &&
+            checkPoint.y >= b.min.y - playerRadius && checkPoint.y <= b.max.y + playerRadius &&
+            checkPoint.z >= b.min.z - playerRadius && checkPoint.z <= b.max.z + playerRadius) {
           blocked = true;
           break;
         }
@@ -274,8 +289,8 @@ export class FPSControls {
     }
 
     if (!blocked) {
-      this.camera.position.x = newPos.x;
-      this.camera.position.z = newPos.z;
+      this.camera.position.x = newX;
+      this.camera.position.z = newZ;
     }
 
     // Keep within level bounds
@@ -295,11 +310,11 @@ export class FPSControls {
   }
 
   getPosition() {
-    return this.camera.position.clone();
+    return this.camera.position;
   }
 
-  getDirection() {
-    const dir = new THREE.Vector3();
+  getDirection(target) {
+    const dir = target || new THREE.Vector3();
     this.camera.getWorldDirection(dir);
     return dir;
   }
