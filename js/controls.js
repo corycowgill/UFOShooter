@@ -34,6 +34,17 @@ export class FPSControls {
 
     this.sensitivity = 0.002;
 
+    // Touch state (mobile / iOS)
+    this.touchEnabled = false;
+    this.touchMoveX = 0; // -1..1 virtual stick
+    this.touchMoveY = 0;
+    this.touchLookDX = 0; // consumed per frame
+    this.touchLookDY = 0;
+    this.touchSensitivity = 0.004;
+    this._moveTouchId = null;
+    this._lookTouchId = null;
+    this._moveOrigin = { x: 0, y: 0 };
+
     // Gamepad state
     this.gamepadIndex = -1;
     this.gamepadLookX = 0;
@@ -81,11 +92,116 @@ export class FPSControls {
   }
 
   lock() {
+    if (this.touchEnabled) {
+      this.isLocked = true;
+      return;
+    }
     this.domElement.requestPointerLock();
   }
 
   unlock() {
+    if (this.touchEnabled) {
+      this.isLocked = false;
+      return;
+    }
     document.exitPointerLock();
+  }
+
+  // Enable touch controls for mobile/iOS. Callbacks: onFire, onJump, onCycleWeapon.
+  enableTouchControls(callbacks = {}) {
+    this.touchEnabled = true;
+    this.onTouchFire = callbacks.onFire || null;
+    this.onTouchJump = callbacks.onJump || null;
+    this.onTouchCycleWeapon = callbacks.onCycleWeapon || null;
+
+    const halfW = () => window.innerWidth / 2;
+
+    const onTouchStart = (e) => {
+      if (!this.isLocked) return;
+      for (const t of e.changedTouches) {
+        // Ignore touches on UI buttons (they have their own handlers)
+        const target = t.target;
+        if (target && target.closest && target.closest('.touch-btn')) continue;
+        if (t.clientX < halfW()) {
+          // Left half = virtual joystick
+          if (this._moveTouchId === null) {
+            this._moveTouchId = t.identifier;
+            this._moveOrigin.x = t.clientX;
+            this._moveOrigin.y = t.clientY;
+            this.touchMoveX = 0;
+            this.touchMoveY = 0;
+            const stick = document.getElementById('touch-stick');
+            if (stick) {
+              stick.style.display = 'block';
+              stick.style.left = (t.clientX - 60) + 'px';
+              stick.style.top = (t.clientY - 60) + 'px';
+              const knob = document.getElementById('touch-stick-knob');
+              if (knob) { knob.style.left = '40px'; knob.style.top = '40px'; }
+            }
+          }
+        } else {
+          // Right half = look
+          if (this._lookTouchId === null) {
+            this._lookTouchId = t.identifier;
+            this._lookLastX = t.clientX;
+            this._lookLastY = t.clientY;
+          }
+        }
+      }
+      e.preventDefault();
+    };
+
+    const onTouchMove = (e) => {
+      for (const t of e.changedTouches) {
+        if (t.identifier === this._moveTouchId) {
+          const dx = t.clientX - this._moveOrigin.x;
+          const dy = t.clientY - this._moveOrigin.y;
+          const maxR = 50;
+          const len = Math.hypot(dx, dy);
+          const cdx = len > maxR ? dx * maxR / len : dx;
+          const cdy = len > maxR ? dy * maxR / len : dy;
+          this.touchMoveX = cdx / maxR;
+          this.touchMoveY = cdy / maxR;
+          const knob = document.getElementById('touch-stick-knob');
+          if (knob) {
+            knob.style.left = (40 + cdx) + 'px';
+            knob.style.top = (40 + cdy) + 'px';
+          }
+        } else if (t.identifier === this._lookTouchId) {
+          this.touchLookDX += (t.clientX - this._lookLastX);
+          this.touchLookDY += (t.clientY - this._lookLastY);
+          this._lookLastX = t.clientX;
+          this._lookLastY = t.clientY;
+        }
+      }
+      e.preventDefault();
+    };
+
+    const onTouchEnd = (e) => {
+      for (const t of e.changedTouches) {
+        if (t.identifier === this._moveTouchId) {
+          this._moveTouchId = null;
+          this.touchMoveX = 0;
+          this.touchMoveY = 0;
+          const stick = document.getElementById('touch-stick');
+          if (stick) stick.style.display = 'none';
+        } else if (t.identifier === this._lookTouchId) {
+          this._lookTouchId = null;
+        }
+      }
+    };
+
+    this.domElement.addEventListener('touchstart', onTouchStart, { passive: false });
+    this.domElement.addEventListener('touchmove', onTouchMove, { passive: false });
+    this.domElement.addEventListener('touchend', onTouchEnd);
+    this.domElement.addEventListener('touchcancel', onTouchEnd);
+  }
+
+  touchJump() {
+    if (this.onGround) {
+      this.verticalVelocity = this.jumpForce;
+      this.onGround = false;
+    }
   }
 
   _onPointerlockChange() {
@@ -233,9 +349,21 @@ export class FPSControls {
     // Always poll gamepad
     this._pollGamepad(delta);
 
-    // Allow gamepad to work even without pointer lock
+    // Apply pending touch look delta
+    if (this.touchEnabled && (this.touchLookDX !== 0 || this.touchLookDY !== 0)) {
+      this.euler.setFromQuaternion(this.camera.quaternion);
+      this.euler.y -= this.touchLookDX * this.touchSensitivity;
+      this.euler.x -= this.touchLookDY * this.touchSensitivity;
+      this.euler.x = Math.max(-Math.PI / 2 + 0.01, Math.min(Math.PI / 2 - 0.01, this.euler.x));
+      this.camera.quaternion.setFromEuler(this.euler);
+      this.touchLookDX = 0;
+      this.touchLookDY = 0;
+    }
+
+    // Allow gamepad / touch to work even without pointer lock
     const useGamepad = this.hasGamepad;
-    if (!this.isLocked && !useGamepad) return;
+    const useTouch = this.touchEnabled && this.isLocked;
+    if (!this.isLocked && !useGamepad && !useTouch) return;
 
     const speed = this.speed * (this.sprint ? this.sprintMultiplier : 1);
 
@@ -259,6 +387,13 @@ export class FPSControls {
       this.direction.x += right.x * this.gamepadMoveX - forward.x * this.gamepadMoveY;
       this.direction.y += right.y * this.gamepadMoveX - forward.y * this.gamepadMoveY;
       this.direction.z += right.z * this.gamepadMoveX - forward.z * this.gamepadMoveY;
+    }
+
+    // Touch virtual joystick input
+    if (this.touchEnabled && (this.touchMoveX !== 0 || this.touchMoveY !== 0)) {
+      this.direction.x += right.x * this.touchMoveX - forward.x * this.touchMoveY;
+      this.direction.y += right.y * this.touchMoveX - forward.y * this.touchMoveY;
+      this.direction.z += right.z * this.touchMoveX - forward.z * this.touchMoveY;
     }
 
     this.direction.normalize();

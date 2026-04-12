@@ -28,6 +28,11 @@ let selectedStartLevel = 0;
 let clock;
 let menuScene, menuCamera, menuRenderer, menuUfo;
 
+// iOS / mobile detection (iPhone, iPad, iPod; also matches iPadOS Safari reporting as Mac with touch)
+const IS_IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+  (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const IS_TOUCH = IS_IOS || ('ontouchstart' in window && navigator.maxTouchPoints > 0);
+
 // ===== INITIALIZATION =====
 function init() {
   try {
@@ -238,6 +243,25 @@ function setupEventListeners() {
     }
   });
 
+  // Touch buttons (wired once at startup - they call into live `controls`)
+  const wireTouchBtn = (id, onPress) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const handler = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (state !== GameState.PLAYING || helpGuide.isOpen) return;
+      onPress();
+    };
+    el.addEventListener('touchstart', handler, { passive: false });
+  };
+  wireTouchBtn('touch-fire', () => fireWeapon());
+  wireTouchBtn('touch-jump', () => { if (controls) controls.touchJump(); });
+  wireTouchBtn('touch-weapon', () => {
+    currentWeaponIdx = (currentWeaponIdx + 1) % weaponOrder.length;
+    weapons.switchWeapon(weaponOrder[currentWeaponIdx]);
+  });
+
   // Keyboard
   document.addEventListener('keydown', (e) => {
     if (state === GameState.PLAYING) {
@@ -393,6 +417,19 @@ function startGame() {
   controls = new FPSControls(camera, renderer.domElement);
   _setupGamepadCallbacks();
 
+  // Enable touch controls on iOS / touch devices
+  if (IS_TOUCH) {
+    controls.enableTouchControls({
+      onFire: () => fireWeapon(),
+      onJump: () => controls.touchJump(),
+      onCycleWeapon: () => {
+        currentWeaponIdx = (currentWeaponIdx + 1) % weaponOrder.length;
+        weapons.switchWeapon(weaponOrder[currentWeaponIdx]);
+      },
+    });
+    document.getElementById('touch-controls').classList.add('active');
+  }
+
   // Particles
   particles = new ParticleSystem(scene);
 
@@ -471,6 +508,8 @@ function returnToMenu() {
   document.getElementById('crosshair').style.display = 'none';
   document.getElementById('weapon-model').style.display = 'none';
   document.getElementById('scanlines').style.display = 'none';
+  const tc = document.getElementById('touch-controls');
+  if (tc) tc.classList.remove('active');
   audio.stopMusic();
   if (waveManager) waveManager.cleanup();
   if (particles) particles.cleanup();
@@ -673,6 +712,9 @@ function gameOver() {
   state = GameState.GAME_OVER;
   controls.unlock();
   audio.stopMusic();
+
+  const tc = document.getElementById('touch-controls');
+  if (tc) tc.classList.remove('active');
 
   document.getElementById('hud').style.display = 'none';
   document.getElementById('crosshair').style.display = 'none';
