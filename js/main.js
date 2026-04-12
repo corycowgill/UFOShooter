@@ -30,6 +30,22 @@ let menuScene, menuCamera, menuRenderer, menuUfo;
 
 // ===== INITIALIZATION =====
 function init() {
+  try {
+    _init();
+  } catch (e) {
+    const loading = document.getElementById('loading');
+    if (loading) {
+      loading.style.whiteSpace = 'pre-wrap';
+      loading.style.fontSize = '14px';
+      loading.style.padding = '20px';
+      loading.style.textAlign = 'left';
+      loading.textContent = 'ERROR during init:\n' + (e && e.stack ? e.stack : e);
+    }
+    console.error('Init failed:', e);
+  }
+}
+
+function _init() {
   // Main renderer - enhanced quality
   const canvas = document.getElementById('gameCanvas');
   renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });

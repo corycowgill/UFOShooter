@@ -1392,15 +1392,15 @@ export function createAlienModel(type) {
     }
 
     // Gaping maw - large mouth with inner glow
-    const maw = new THREE.Mesh(
+    const gapingMaw = new THREE.Mesh(
       new THREE.SphereGeometry(0.25, 10, 8, 0, Math.PI * 2, 0, Math.PI / 2),
       new THREE.MeshPhongMaterial({
         color: 0x330000, emissive: 0x220000, side: THREE.DoubleSide
       })
     );
-    maw.position.set(0, 1.5, 0.85);
-    maw.rotation.x = Math.PI / 2;
-    group.add(maw);
+    gapingMaw.position.set(0, 1.5, 0.85);
+    gapingMaw.rotation.x = Math.PI / 2;
+    group.add(gapingMaw);
     // Mouth interior glow
     const mawGlow = new THREE.Mesh(
       new THREE.SphereGeometry(0.18, 8, 6),
@@ -1870,13 +1870,13 @@ export function createAlienModel(type) {
       group.add(segment);
     }
     // Tail blade tip
-    const tailBlade = new THREE.Mesh(
+    const tailBladeTip = new THREE.Mesh(
       new THREE.ConeGeometry(0.04, 0.15, 4),
       new THREE.MeshPhongMaterial({ color: 0x112233, shininess: 100 })
     );
-    tailBlade.position.set(Math.sin(3) * 0.08, 0.3, -1.2);
-    tailBlade.rotation.x = -Math.PI / 2;
-    group.add(tailBlade);
+    tailBladeTip.position.set(Math.sin(3) * 0.08, 0.3, -1.2);
+    tailBladeTip.rotation.x = -Math.PI / 2;
+    group.add(tailBladeTip);
     const tailBladeEdge = new THREE.Mesh(
       new THREE.BoxGeometry(0.003, 0.12, 0.006),
       glowMat(0x00ffff, 0.6)
@@ -1886,16 +1886,16 @@ export function createAlienModel(type) {
     group.add(tailBladeEdge);
 
     // Cloak field shimmer shell (outer translucent sphere)
-    const shimmer = new THREE.Mesh(
+    const cloakShell = new THREE.Mesh(
       new THREE.SphereGeometry(0.85, 10, 10),
       new THREE.MeshBasicMaterial({
         color: 0x88ffff, transparent: true, opacity: 0.06,
         side: THREE.BackSide
       })
     );
-    shimmer.position.y = 0.95;
-    shimmer.scale.set(0.7, 1.2, 0.7);
-    group.add(shimmer);
+    cloakShell.position.y = 0.95;
+    cloakShell.scale.set(0.7, 1.2, 0.7);
+    group.add(cloakShell);
 
   } else if (type === 'spitter') {
     // === SPITTER: Hunched reptilian acid alien ===
@@ -2326,13 +2326,13 @@ export function createAlienModel(type) {
     }
 
     // Forked tongue extending out
-    const tongue = new THREE.Mesh(
+    const forkedTongue = new THREE.Mesh(
       new THREE.CylinderGeometry(0.01, 0.008, 0.18, 4),
       new THREE.MeshPhongMaterial({ color: 0x882244, emissive: 0x220011, shininess: 60 })
     );
-    tongue.position.set(0, 0.9, 0.42);
-    tongue.rotation.x = Math.PI / 2;
-    group.add(tongue);
+    forkedTongue.position.set(0, 0.9, 0.42);
+    forkedTongue.rotation.x = Math.PI / 2;
+    group.add(forkedTongue);
     for (const fs of [-1, 1]) {
       const forkBit = new THREE.Mesh(
         new THREE.CylinderGeometry(0.008, 0.003, 0.06, 4),
