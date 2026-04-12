@@ -534,28 +534,28 @@ export class ParticleSystem {
 
     // Central flash - bright icosahedron
     const flashGeo = new THREE.IcosahedronGeometry(size * 0.5, 1);
-    const flashMat = new THREE.MeshBasicMaterial({ color: 0xffffaa, transparent: true, opacity: 1 });
-    const flash = new THREE.Mesh(flashGeo, flashMat);
+    const flash = new THREE.Mesh(flashGeo, glowMat(0xffffcc, 1));
     group.add(flash);
 
     // Inner fireball
     const fireGeo = new THREE.SphereGeometry(size * 0.4, 12, 12);
-    const fireMat = new THREE.MeshBasicMaterial({ color: 0xff8800, transparent: true, opacity: 0.8 });
-    const fireball = new THREE.Mesh(fireGeo, fireMat);
+    const fireball = new THREE.Mesh(fireGeo, glowMat(0xff8800, 1));
     fireball.scale.set(0.3, 0.3, 0.3);
     group.add(fireball);
 
     // Expanding shockwave ring
     const ringGeo = new THREE.TorusGeometry(size * 0.3, 0.08, 6, 24);
-    const ringMat = new THREE.MeshBasicMaterial({ color: 0xffaa44, transparent: true, opacity: 0.7 });
-    const ring = new THREE.Mesh(ringGeo, ringMat);
+    const ring = new THREE.Mesh(ringGeo, glowMat(0xffaa44, 0.9));
     ring.rotation.x = Math.PI / 2;
     ring.scale.set(0.1, 0.1, 0.1);
     group.add(ring);
 
     // Expanding wireframe sphere
     const sphereGeo = new THREE.SphereGeometry(size, 12, 12);
-    const sphereMat = new THREE.MeshBasicMaterial({ color: color, transparent: true, opacity: 0.4, wireframe: true });
+    const sphereMat = new THREE.MeshBasicMaterial({
+      color, transparent: true, opacity: 0.5, wireframe: true,
+      blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false,
+    });
     const sphere = new THREE.Mesh(sphereGeo, sphereMat);
     sphere.scale.set(0.1, 0.1, 0.1);
     group.add(sphere);
@@ -564,10 +564,7 @@ export class ParticleSystem {
     const fireParticles = [];
     for (let i = 0; i < 12; i++) {
       const pGeo = new THREE.SphereGeometry(0.15 + Math.random() * 0.15, 6, 6);
-      const pMat = new THREE.MeshBasicMaterial({
-        color: Math.random() > 0.5 ? 0xff6600 : 0xff2200,
-        transparent: true, opacity: 1
-      });
+      const pMat = glowMat(Math.random() > 0.5 ? 0xff6600 : 0xff2200, 1);
       const p = new THREE.Mesh(pGeo, pMat);
       p.velocity = new THREE.Vector3(
         (Math.random() - 0.5) * size * 3,
@@ -647,7 +644,7 @@ export class ParticleSystem {
     // Flash cone
     const cone = new THREE.Mesh(
       new THREE.ConeGeometry(0.12, 0.3, 6),
-      new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9 })
+      glowMat(0xffffff, 1.0)
     );
     cone.rotation.x = -Math.PI / 2;
     cone.position.z = 0.15;
@@ -656,7 +653,7 @@ export class ParticleSystem {
     // Flash sphere
     const sphere = new THREE.Mesh(
       new THREE.SphereGeometry(0.08, 6, 6),
-      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.8 })
+      glowMat(color, 0.9)
     );
     group.add(sphere);
 
@@ -664,8 +661,9 @@ export class ParticleSystem {
     for (let i = 0; i < 3; i++) {
       const flare = new THREE.Mesh(
         new THREE.PlaneGeometry(0.3, 0.05),
-        new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.6, side: THREE.DoubleSide })
+        glowMat(color, 0.75)
       );
+      flare.material.side = THREE.DoubleSide;
       flare.rotation.z = (i / 3) * Math.PI;
       group.add(flare);
     }
@@ -687,21 +685,16 @@ export class ParticleSystem {
 
     // Main arc - bright edge
     const mainGeo = new THREE.TorusGeometry(1.2, 0.04, 4, 20, Math.PI);
-    const mainMat = new THREE.MeshBasicMaterial({ color: 0xaaddff, transparent: true, opacity: 0.9 });
-    group.add(new THREE.Mesh(mainGeo, mainMat));
+    group.add(new THREE.Mesh(mainGeo, glowMat(0xaaddff, 1.0)));
 
     // Inner arc - white core
     const innerGeo = new THREE.TorusGeometry(1.2, 0.015, 4, 20, Math.PI);
-    const innerMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 1.0 });
-    group.add(new THREE.Mesh(innerGeo, innerMat));
+    group.add(new THREE.Mesh(innerGeo, glowMat(0xffffff, 1.0)));
 
     // Trailing glow arcs
     for (let i = 1; i <= 2; i++) {
       const trailGeo = new THREE.TorusGeometry(1.2, 0.04 + i * 0.04, 4, 16, Math.PI);
-      const trailMat = new THREE.MeshBasicMaterial({
-        color: color, transparent: true, opacity: 0.4 / i
-      });
-      const trail = new THREE.Mesh(trailGeo, trailMat);
+      const trail = new THREE.Mesh(trailGeo, glowMat(color, 0.5 / i));
       trail.rotation.z = i * 0.08;
       group.add(trail);
     }
@@ -711,7 +704,7 @@ export class ParticleSystem {
       const angle = (i / 8) * Math.PI;
       const sparkle = new THREE.Mesh(
         new THREE.BoxGeometry(0.03, 0.03, 0.03),
-        new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.8 })
+        glowMat(0xffffff, 1.0)
       );
       sparkle.position.set(Math.cos(angle) * 1.2, Math.sin(angle) * 1.2, 0);
       group.add(sparkle);

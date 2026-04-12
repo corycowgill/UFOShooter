@@ -295,6 +295,24 @@ canvas#gameCanvas { display: block; width: 100vw; height: 100vh; }
   display: none;
 }
 
+/* Cinematic vignette overlay - radial darkening + subtle color cast.
+   Always on during gameplay for atmospheric depth. */
+#vignette {
+  position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+  pointer-events: none; z-index: 18;
+  background:
+    radial-gradient(ellipse at center,
+      rgba(0,0,0,0) 40%,
+      rgba(0,0,0,0.35) 85%,
+      rgba(0,0,0,0.75) 100%),
+    radial-gradient(ellipse at center,
+      rgba(80,40,120,0.05) 0%,
+      rgba(0,20,40,0.12) 70%,
+      rgba(0,0,0,0) 100%);
+  mix-blend-mode: multiply;
+  display: none;
+}
+
 /* Weapon model area */
 #weapon-model {
   position: fixed; bottom: -20px; right: 20px;
@@ -467,6 +485,7 @@ canvas#gameCanvas { display: block; width: 100vw; height: 100vh; }
   <div class="bracket-bl"></div><div class="bracket-br"></div>
 </div>
 <div id="scanlines"></div>
+<div id="vignette"></div>
 
 <div id="damage-flash"></div>
 

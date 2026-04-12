@@ -417,6 +417,7 @@ function startGame() {
   document.getElementById('crosshair').style.display = 'block';
   document.getElementById('weapon-model').style.display = 'block';
   document.getElementById('scanlines').style.display = 'block';
+  document.getElementById('vignette').style.display = 'block';
 
   // Create scene
   scene = new THREE.Scene();
@@ -525,6 +526,7 @@ function returnToMenu() {
   document.getElementById('crosshair').style.display = 'none';
   document.getElementById('weapon-model').style.display = 'none';
   document.getElementById('scanlines').style.display = 'none';
+  document.getElementById('vignette').style.display = 'none';
   const tc = document.getElementById('touch-controls');
   if (tc) tc.classList.remove('active');
   audio.stopMusic();
@@ -738,6 +740,7 @@ function gameOver() {
   document.getElementById('weapon-model').style.display = 'none';
   document.getElementById('scope-overlay').style.display = 'none';
   document.getElementById('scanlines').style.display = 'none';
+  document.getElementById('vignette').style.display = 'none';
 
   document.getElementById('game-over').style.display = 'flex';
   document.getElementById('go-waves').textContent = waveManager.wave;

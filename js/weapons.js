@@ -47,6 +47,54 @@ export const WEAPONS = {
   },
 };
 
+// Fresnel rim-light shader patch for weapon viewmodels. Gives the hero's
+// gun a subtle glowing edge that reads against any background.
+function _weaponRim(material, rimColorHex, rimIntensity = 0.55, rimPower = 3.0) {
+  const rimColor = new THREE.Color(rimColorHex);
+  material.onBeforeCompile = (shader) => {
+    shader.uniforms.rimColor = { value: rimColor };
+    shader.uniforms.rimIntensity = { value: rimIntensity };
+    shader.uniforms.rimPower = { value: rimPower };
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        '#include <common>',
+        `#include <common>
+         uniform vec3 rimColor;
+         uniform float rimIntensity;
+         uniform float rimPower;`
+      )
+      .replace(
+        '#include <output_fragment>',
+        `float rimDot = 1.0 - max(0.0, dot(normalize(vViewPosition), normal));
+         float rim = pow(rimDot, rimPower) * rimIntensity;
+         outgoingLight += rimColor * rim;
+         #include <output_fragment>`
+      );
+  };
+  material.customProgramCacheKey = () =>
+    'wrim_' + rimColor.getHexString() + '_' + rimIntensity.toFixed(2) + '_' + rimPower.toFixed(2);
+  material.needsUpdate = true;
+}
+
+function _rimLightWeaponModel(model, rimColorHex) {
+  const patched = new WeakSet();
+  model.traverse(child => {
+    const mat = child.material;
+    if (!mat) return;
+    if (Array.isArray(mat)) {
+      mat.forEach(m => {
+        if (m && m.isMeshPhongMaterial && !patched.has(m)) {
+          _weaponRim(m, rimColorHex);
+          patched.add(m);
+        }
+      });
+    } else if (mat.isMeshPhongMaterial && !patched.has(mat)) {
+      _weaponRim(mat, rimColorHex);
+      patched.add(mat);
+    }
+  });
+}
+
 export class WeaponManager {
   constructor(camera, scene, particles, audio) {
     this.camera = camera;
@@ -124,6 +172,13 @@ export class WeaponManager {
     this.weaponModels.laserSword = this._buildSwordModel();
     this.weaponModels.sniperRifle = this._buildSniperModel();
     this.weaponModels.rocketLauncher = this._buildRocketLauncherModel();
+
+    // Rim-light each weapon with its signature energy color so the
+    // viewmodel silhouette glows subtly against the scene.
+    _rimLightWeaponModel(this.weaponModels.laserRifle, 0xff3322);
+    _rimLightWeaponModel(this.weaponModels.laserSword, 0x44aaff);
+    _rimLightWeaponModel(this.weaponModels.sniperRifle, 0xbb66ff);
+    _rimLightWeaponModel(this.weaponModels.rocketLauncher, 0x00ffee);
 
     // Cache glowing materials for each weapon (avoid per-frame traverse)
     this._glowMaterials = {};
