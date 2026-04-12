@@ -6,7 +6,12 @@ export const LEVELS = [
 ];
 
 function makeMaterial(color, emissive = 0x000000) {
-  return new THREE.MeshPhongMaterial({ color, emissive });
+  return new THREE.MeshPhongMaterial({
+    color,
+    emissive,
+    shininess: 35,
+    specular: 0x222233,
+  });
 }
 
 // Freeze static level geometry: compute world matrices once, then disable
@@ -1277,28 +1282,38 @@ function buildDowntownChicago(scene) {
   addGround(group, 100, 0x2a2a2a);
   const ufo = addSky(scene);
 
+  // Downtown twilight: dense blue-violet haze
+  scene.fog = new THREE.FogExp2(0x0c0c28, 0.0042);
+  scene.background = new THREE.Color(0x0a0a22);
+
   // Ambient - bright enough to see the city
-  scene.add(new THREE.AmbientLight(0x6677aa, 1.0));
-  const dirLight = new THREE.DirectionalLight(0xaabbff, 1.0);
+  scene.add(new THREE.AmbientLight(0x556688, 0.55));
+  const dirLight = new THREE.DirectionalLight(0xbbccff, 1.25);
   dirLight.position.set(15, 40, 15);
   dirLight.castShadow = true;
-  dirLight.shadow.mapSize.width = 1024;
-  dirLight.shadow.mapSize.height = 1024;
-  dirLight.shadow.camera.left = -60;
-  dirLight.shadow.camera.right = 60;
-  dirLight.shadow.camera.top = 60;
-  dirLight.shadow.camera.bottom = -60;
+  dirLight.shadow.mapSize.width = 2048;
+  dirLight.shadow.mapSize.height = 2048;
+  dirLight.shadow.camera.left = -70;
+  dirLight.shadow.camera.right = 70;
+  dirLight.shadow.camera.top = 70;
+  dirLight.shadow.camera.bottom = -70;
   dirLight.shadow.camera.near = 1;
-  dirLight.shadow.camera.far = 120;
-  dirLight.shadow.bias = -0.002;
-  dirLight.shadow.radius = 3;
+  dirLight.shadow.camera.far = 140;
+  dirLight.shadow.bias = -0.0005;
+  dirLight.shadow.normalBias = 0.04;
+  dirLight.shadow.radius = 4;
   scene.add(dirLight);
-  const fillLight = new THREE.HemisphereLight(0x4466aa, 0x222244, 0.7);
+  // Sky/ground gradient fill
+  const fillLight = new THREE.HemisphereLight(0x6688cc, 0x1a1a33, 0.9);
   scene.add(fillLight);
-  // Subtle blue rim light from UFO direction
-  const rimLight = new THREE.DirectionalLight(0x00ff88, 0.15);
-  rimLight.position.set(0, 80, -30);
+  // Subtle green rim light from UFO direction (backlight)
+  const rimLight = new THREE.DirectionalLight(0x22ffaa, 0.35);
+  rimLight.position.set(0, 60, -80);
   scene.add(rimLight);
+  // Warm accent light to add color contrast
+  const accentLight = new THREE.DirectionalLight(0xff6622, 0.15);
+  accentLight.position.set(-60, 30, 40);
+  scene.add(accentLight);
 
   const sidewalkMat = makeMaterial(0x888888);
   const curbMat = makeMaterial(0x999999);
@@ -1923,27 +1938,37 @@ function buildLincolnParkZoo(scene) {
   addGround(group, 100, 0x1a3311);
   const ufo = addSky(scene);
 
-  scene.add(new THREE.AmbientLight(0x557755, 1.0));
-  const dirLight = new THREE.DirectionalLight(0xaaffaa, 1.0);
-  dirLight.position.set(-15, 30, 15);
+  // Zoo at dusk: warm green haze
+  scene.fog = new THREE.FogExp2(0x0d1a12, 0.0038);
+  scene.background = new THREE.Color(0x0a1408);
+
+  scene.add(new THREE.AmbientLight(0x4a5a3a, 0.5));
+  const dirLight = new THREE.DirectionalLight(0xccffbb, 1.3);
+  dirLight.position.set(-15, 35, 15);
   dirLight.castShadow = true;
-  dirLight.shadow.mapSize.width = 1024;
-  dirLight.shadow.mapSize.height = 1024;
-  dirLight.shadow.camera.left = -60;
-  dirLight.shadow.camera.right = 60;
-  dirLight.shadow.camera.top = 60;
-  dirLight.shadow.camera.bottom = -60;
+  dirLight.shadow.mapSize.width = 2048;
+  dirLight.shadow.mapSize.height = 2048;
+  dirLight.shadow.camera.left = -70;
+  dirLight.shadow.camera.right = 70;
+  dirLight.shadow.camera.top = 70;
+  dirLight.shadow.camera.bottom = -70;
   dirLight.shadow.camera.near = 1;
-  dirLight.shadow.camera.far = 100;
-  dirLight.shadow.bias = -0.002;
-  dirLight.shadow.radius = 3;
+  dirLight.shadow.camera.far = 120;
+  dirLight.shadow.bias = -0.0005;
+  dirLight.shadow.normalBias = 0.04;
+  dirLight.shadow.radius = 4;
   scene.add(dirLight);
-  const fillLight = new THREE.HemisphereLight(0x446644, 0x223322, 0.7);
+  // Sky/ground gradient fill (foliage greens)
+  const fillLight = new THREE.HemisphereLight(0x88bb66, 0x1a2211, 0.9);
   scene.add(fillLight);
-  // Green UFO rim
-  const rimLight = new THREE.DirectionalLight(0x00ff88, 0.12);
-  rimLight.position.set(0, 80, -30);
+  // Eerie green UFO backlight
+  const rimLight = new THREE.DirectionalLight(0x33ff88, 0.4);
+  rimLight.position.set(0, 60, -80);
   scene.add(rimLight);
+  // Warm sunset accent
+  const accentLight = new THREE.DirectionalLight(0xffaa44, 0.18);
+  accentLight.position.set(60, 20, 30);
+  scene.add(accentLight);
 
   // === Zoo Entrance Gate ===
   const gateLeft = makeBox(1, 6, 1, 0x885533, -5, 0, 50);
@@ -2197,27 +2222,37 @@ function buildRavenswood(scene) {
   addGround(group, 100, 0x2a2a2a);
   const ufo = addSky(scene);
 
-  scene.add(new THREE.AmbientLight(0x667788, 1.0));
-  const dirLight = new THREE.DirectionalLight(0xbbbbff, 0.9);
-  dirLight.position.set(10, 35, -15);
+  // Ravenswood at night: cool urban blue haze
+  scene.fog = new THREE.FogExp2(0x0a0e1c, 0.0045);
+  scene.background = new THREE.Color(0x080a18);
+
+  scene.add(new THREE.AmbientLight(0x3a4a55, 0.5));
+  const dirLight = new THREE.DirectionalLight(0xccccff, 1.15);
+  dirLight.position.set(10, 38, -15);
   dirLight.castShadow = true;
-  dirLight.shadow.mapSize.width = 1024;
-  dirLight.shadow.mapSize.height = 1024;
-  dirLight.shadow.camera.left = -60;
-  dirLight.shadow.camera.right = 60;
-  dirLight.shadow.camera.top = 60;
-  dirLight.shadow.camera.bottom = -60;
+  dirLight.shadow.mapSize.width = 2048;
+  dirLight.shadow.mapSize.height = 2048;
+  dirLight.shadow.camera.left = -70;
+  dirLight.shadow.camera.right = 70;
+  dirLight.shadow.camera.top = 70;
+  dirLight.shadow.camera.bottom = -70;
   dirLight.shadow.camera.near = 1;
-  dirLight.shadow.camera.far = 110;
-  dirLight.shadow.bias = -0.002;
-  dirLight.shadow.radius = 3;
+  dirLight.shadow.camera.far = 130;
+  dirLight.shadow.bias = -0.0005;
+  dirLight.shadow.normalBias = 0.04;
+  dirLight.shadow.radius = 4;
   scene.add(dirLight);
-  const fillLight = new THREE.HemisphereLight(0x445566, 0x222233, 0.6);
+  // Moonlit sky/ground gradient
+  const fillLight = new THREE.HemisphereLight(0x5577aa, 0x151520, 0.85);
   scene.add(fillLight);
-  // Subtle alien rim light from UFO
-  const rimLight = new THREE.DirectionalLight(0x00ff88, 0.12);
-  rimLight.position.set(0, 80, -30);
+  // Alien green UFO backlight
+  const rimLight = new THREE.DirectionalLight(0x22ffaa, 0.4);
+  rimLight.position.set(0, 60, -80);
   scene.add(rimLight);
+  // Street lamp warm accent
+  const accentLight = new THREE.DirectionalLight(0xffaa55, 0.15);
+  accentLight.position.set(-30, 20, 60);
+  scene.add(accentLight);
 
   // === CTA Brown Line Elevated Tracks ===
   // Support pillars with cross bracing
