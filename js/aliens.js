@@ -490,6 +490,146 @@ export function createAlienModel(type) {
       group.add(cell);
     }
 
+    // === NEW DETAILS: breathing apparatus, gauntlets, knee armor, greaves ===
+    // Breathing hoses from backpack to chest/mask
+    for (const side of [-1, 1]) {
+      const hoseSegs = 6;
+      for (let s = 0; s < hoseSegs; s++) {
+        const t = s / hoseSegs;
+        const seg = new THREE.Mesh(
+          new THREE.SphereGeometry(0.018, 4, 4),
+          darkMetal
+        );
+        seg.position.set(
+          side * (0.12 + Math.sin(t * Math.PI) * 0.08),
+          1.0 + t * 0.55 - Math.sin(t * Math.PI) * 0.05,
+          -0.24 + t * 0.5
+        );
+        group.add(seg);
+      }
+      // Hose connector at chest
+      const hoseConn = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.022, 0.028, 0.04, 6),
+        metalMat
+      );
+      hoseConn.position.set(side * 0.2, 1.55, 0.24);
+      hoseConn.rotation.x = Math.PI / 2;
+      group.add(hoseConn);
+      const hoseGlow = new THREE.Mesh(
+        new THREE.CircleGeometry(0.012, 6),
+        glowMat(0x00ffaa, 0.8)
+      );
+      hoseGlow.position.set(side * 0.2, 1.55, 0.26);
+      group.add(hoseGlow);
+    }
+
+    // Forearm gauntlets with holographic display
+    for (const side of [-1, 1]) {
+      const gauntlet = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.075, 0.07, 0.22, 8),
+        darkArmorMat
+      );
+      gauntlet.position.set(side * 0.5, 1.0, 0.05);
+      gauntlet.rotation.z = side * 0.1;
+      group.add(gauntlet);
+      // Gauntlet plating ridges
+      for (let r = 0; r < 3; r++) {
+        const ridge = new THREE.Mesh(
+          new THREE.TorusGeometry(0.076, 0.008, 4, 10),
+          metalMat
+        );
+        ridge.position.set(side * 0.5, 0.92 + r * 0.08, 0.05);
+        ridge.rotation.x = Math.PI / 2;
+        group.add(ridge);
+      }
+      // Holographic forearm display (outer side)
+      const holoScreen = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.09, 0.05),
+        glowMat(0x00ff66, 0.6)
+      );
+      holoScreen.position.set(side * 0.58, 1.02, 0.05);
+      holoScreen.rotation.y = side * Math.PI / 2;
+      group.add(holoScreen);
+      // Display data lines
+      for (let d = 0; d < 3; d++) {
+        const dataLine = new THREE.Mesh(
+          new THREE.PlaneGeometry(0.06, 0.004),
+          glowMat(0x88ffaa, 0.9)
+        );
+        dataLine.position.set(side * 0.585, 1.03 - d * 0.012, 0.05);
+        dataLine.rotation.y = side * Math.PI / 2;
+        group.add(dataLine);
+      }
+    }
+
+    // Knee armor plates
+    for (const side of [-1, 1]) {
+      const kneePad = new THREE.Mesh(
+        new THREE.SphereGeometry(0.1, 6, 6),
+        armorMat
+      );
+      kneePad.scale.set(1, 0.7, 0.8);
+      kneePad.position.set(side * 0.16, 0.45, 0.05);
+      group.add(kneePad);
+      // Knee bolt
+      const kneeBolt = new THREE.Mesh(
+        new THREE.SphereGeometry(0.02, 5, 5),
+        metalMat
+      );
+      kneeBolt.position.set(side * 0.16, 0.45, 0.13);
+      group.add(kneeBolt);
+      // Kneecap glow dot
+      const kneeGlow = new THREE.Mesh(
+        new THREE.CircleGeometry(0.008, 6),
+        glowMat(0x00ff44, 0.7)
+      );
+      kneeGlow.position.set(side * 0.16, 0.45, 0.15);
+      group.add(kneeGlow);
+    }
+
+    // Boot greaves and spikes
+    for (const side of [-1, 1]) {
+      const greave = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.09, 0.12, 0.18, 6),
+        darkArmorMat
+      );
+      greave.position.set(side * 0.16, 0.12, 0.02);
+      group.add(greave);
+      // Toe cap
+      const toeCap = new THREE.Mesh(
+        new THREE.SphereGeometry(0.1, 6, 6),
+        metalMat
+      );
+      toeCap.scale.set(0.9, 0.6, 1.2);
+      toeCap.position.set(side * 0.16, 0.08, 0.15);
+      group.add(toeCap);
+      // Spikes on toe cap
+      for (let t = 0; t < 2; t++) {
+        const spike = new THREE.Mesh(
+          new THREE.ConeGeometry(0.014, 0.04, 4),
+          metalMat
+        );
+        spike.position.set(side * 0.16 + (t - 0.5) * 0.05, 0.1, 0.22);
+        spike.rotation.x = Math.PI / 2;
+        group.add(spike);
+      }
+    }
+
+    // Glowing power core on back (between shoulder blades)
+    const powerCore = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.04, 0.04, 0.08, 6),
+      darkMetal
+    );
+    powerCore.position.set(0, 1.35, -0.29);
+    powerCore.rotation.x = Math.PI / 2;
+    group.add(powerCore);
+    const powerCoreGlow = new THREE.Mesh(
+      new THREE.CircleGeometry(0.03, 8),
+      glowMat(0x00ffaa, 0.85)
+    );
+    powerCoreGlow.position.set(0, 1.35, -0.34);
+    group.add(powerCoreGlow);
+
   } else if (type === 'swarmer') {
     // === SWARMER: Fast insectoid alien ===
     const chitin = new THREE.MeshPhongMaterial({ color: 0x7700cc, emissive: 0x220044, shininess: 60 });
@@ -789,6 +929,108 @@ export function createAlienModel(type) {
     );
     spineGlow.position.set(0, 0.55, 0.05);
     group.add(spineGlow);
+
+    // === NEW DETAILS: wing membranes, mandibles, antennae, egg sac ===
+    // Translucent wing membranes from back
+    for (const side of [-1, 1]) {
+      const wing = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.35, 0.22),
+        new THREE.MeshBasicMaterial({
+          color: 0xaa33ff, transparent: true, opacity: 0.35,
+          side: THREE.DoubleSide
+        })
+      );
+      wing.position.set(side * 0.15, 0.6, -0.15);
+      wing.rotation.y = side * -0.6;
+      wing.rotation.z = side * -0.3;
+      group.add(wing);
+      // Wing ribs (chitin spines)
+      for (let r = 0; r < 4; r++) {
+        const rib = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.005, 0.005, 0.2, 3),
+          clawMat
+        );
+        rib.position.set(side * (0.18 + r * 0.06), 0.6, -0.15 - r * 0.02);
+        rib.rotation.z = side * -0.8;
+        group.add(rib);
+      }
+    }
+
+    // Mandibles/pincers (forward-facing, around mouth area)
+    for (const side of [-1, 1]) {
+      const mandible = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.018, 0.006, 0.12, 5),
+        clawMat
+      );
+      mandible.position.set(side * 0.08, 0.72, 0.24);
+      mandible.rotation.x = 1.3;
+      mandible.rotation.z = side * 0.4;
+      group.add(mandible);
+      // Mandible tooth
+      const tooth = new THREE.Mesh(
+        new THREE.ConeGeometry(0.008, 0.025, 4),
+        clawMat
+      );
+      tooth.position.set(side * 0.06, 0.67, 0.3);
+      tooth.rotation.x = 1.8;
+      group.add(tooth);
+    }
+
+    // Antennae with pulsing tips
+    for (const side of [-1, 1]) {
+      const antenna = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.008, 0.004, 0.25, 4),
+        clawMat
+      );
+      antenna.position.set(side * 0.08, 0.95, 0.1);
+      antenna.rotation.z = side * -0.3;
+      antenna.rotation.x = -0.2;
+      group.add(antenna);
+      const antennaTip = new THREE.Mesh(
+        new THREE.SphereGeometry(0.018, 5, 5),
+        glowMat(0xff44ff, 0.85)
+      );
+      antennaTip.position.set(side * 0.15, 1.06, 0.07);
+      group.add(antennaTip);
+    }
+
+    // Pulsating egg sac on underside of abdomen
+    const eggSac = new THREE.Mesh(
+      new THREE.SphereGeometry(0.12, 8, 6),
+      new THREE.MeshPhongMaterial({
+        color: 0x662288, emissive: 0x330044,
+        transparent: true, opacity: 0.75, shininess: 60
+      })
+    );
+    eggSac.scale.set(1, 0.7, 1.3);
+    eggSac.position.set(0, 0.32, -0.08);
+    group.add(eggSac);
+    // Egg sac glow embryos
+    for (let e = 0; e < 4; e++) {
+      const embryo = new THREE.Mesh(
+        new THREE.SphereGeometry(0.02, 4, 4),
+        glowMat(0xff66ff, 0.7)
+      );
+      const ang = (e / 4) * Math.PI * 2;
+      embryo.position.set(Math.cos(ang) * 0.05, 0.32, -0.08 + Math.sin(ang) * 0.06);
+      group.add(embryo);
+    }
+
+    // Additional compound eye cluster (side eyes)
+    for (const side of [-1, 1]) {
+      for (let e = 0; e < 3; e++) {
+        const smallEye = new THREE.Mesh(
+          new THREE.SphereGeometry(0.015, 5, 5),
+          glowMat(0xff00ff, 0.9)
+        );
+        smallEye.position.set(
+          side * (0.1 + e * 0.015),
+          0.82 + e * 0.01,
+          0.12 - e * 0.03
+        );
+        group.add(smallEye);
+      }
+    }
 
   } else if (type === 'bloater') {
     // === BLOATER: Massive volatile alien ===
@@ -1097,6 +1339,117 @@ export function createAlienModel(type) {
       hazard.rotation.x = Math.PI / 2;
       hazard.rotation.z = angle;
       group.add(hazard);
+    }
+
+    // === NEW DETAILS: pustules, vein network, mouth/teeth, drip mucus ===
+    // Large pulsing pustules across the body surface
+    for (let p = 0; p < 12; p++) {
+      const theta = Math.random() * Math.PI * 2;
+      const phi = (Math.random() * 0.6 + 0.2) * Math.PI;
+      const rad = 1.1;
+      const pustule = new THREE.Mesh(
+        new THREE.SphereGeometry(0.07 + Math.random() * 0.05, 5, 5),
+        new THREE.MeshPhongMaterial({
+          color: 0xff6633, emissive: 0x441100,
+          shininess: 60, transparent: true, opacity: 0.85
+        })
+      );
+      pustule.position.set(
+        Math.cos(theta) * Math.sin(phi) * rad,
+        1.5 + Math.cos(phi) * rad,
+        Math.sin(theta) * Math.sin(phi) * rad
+      );
+      pustule.scale.set(1, 0.6, 1);
+      group.add(pustule);
+      // Glowing core inside pustule
+      const core = new THREE.Mesh(
+        new THREE.SphereGeometry(0.025, 4, 4),
+        glowMat(0xffaa00, 0.9)
+      );
+      core.position.copy(pustule.position);
+      group.add(core);
+    }
+
+    // Vein network - thin glowing tubes running across body
+    for (let v = 0; v < 8; v++) {
+      const startAngle = Math.random() * Math.PI * 2;
+      for (let s = 0; s < 4; s++) {
+        const vein = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.012, 0.012, 0.2, 4),
+          glowMat(0xff3300, 0.6)
+        );
+        const ang = startAngle + s * 0.15;
+        const y = 1.0 + s * 0.25;
+        vein.position.set(
+          Math.cos(ang) * 1.05,
+          y,
+          Math.sin(ang) * 1.05
+        );
+        vein.rotation.x = Math.PI / 2;
+        vein.rotation.z = ang + Math.PI / 2;
+        group.add(vein);
+      }
+    }
+
+    // Gaping maw - large mouth with inner glow
+    const maw = new THREE.Mesh(
+      new THREE.SphereGeometry(0.25, 10, 8, 0, Math.PI * 2, 0, Math.PI / 2),
+      new THREE.MeshPhongMaterial({
+        color: 0x330000, emissive: 0x220000, side: THREE.DoubleSide
+      })
+    );
+    maw.position.set(0, 1.5, 0.85);
+    maw.rotation.x = Math.PI / 2;
+    group.add(maw);
+    // Mouth interior glow
+    const mawGlow = new THREE.Mesh(
+      new THREE.SphereGeometry(0.18, 8, 6),
+      glowMat(0xff4400, 0.7)
+    );
+    mawGlow.position.set(0, 1.5, 0.92);
+    group.add(mawGlow);
+    // Sharp teeth ringing the maw
+    for (let t = 0; t < 10; t++) {
+      const ang = (t / 10) * Math.PI * 2;
+      const tooth = new THREE.Mesh(
+        new THREE.ConeGeometry(0.018, 0.07, 4),
+        new THREE.MeshPhongMaterial({ color: 0xddccaa, shininess: 80 })
+      );
+      tooth.position.set(
+        Math.cos(ang) * 0.22,
+        1.5 + Math.sin(ang) * 0.22,
+        0.82
+      );
+      tooth.rotation.x = Math.PI / 2;
+      tooth.rotation.z = ang + Math.PI / 2;
+      group.add(tooth);
+    }
+
+    // Drooling mucus strands from maw
+    for (let d = 0; d < 5; d++) {
+      const droolAng = (d / 5 - 0.5) * 0.8;
+      const drool = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.008, 0.002, 0.15 + Math.random() * 0.1, 4),
+        glowMat(0xff7722, 0.5)
+      );
+      drool.position.set(
+        Math.sin(droolAng) * 0.1,
+        1.38 - 0.08,
+        0.88
+      );
+      group.add(drool);
+    }
+
+    // Spinal fin ridge from top to back
+    for (let f = 0; f < 6; f++) {
+      const fin = new THREE.Mesh(
+        new THREE.ConeGeometry(0.1 - f * 0.008, 0.15, 4),
+        new THREE.MeshPhongMaterial({ color: 0x552200, emissive: 0x220800, shininess: 40 })
+      );
+      fin.position.set(0, 2.3 - f * 0.15, -0.2 - f * 0.12);
+      fin.rotation.x = -0.3 - f * 0.1;
+      fin.scale.set(1, 1, 0.3);
+      group.add(fin);
     }
 
   } else if (type === 'stalker') {
@@ -1442,6 +1795,107 @@ export function createAlienModel(type) {
     );
     cloakHalo.position.set(0, 1.6, -0.2);
     group.add(cloakHalo);
+
+    // === NEW DETAILS: wrist blades, scanner visor, dorsal spines, tail, field shimmer ===
+    // Wrist blades (extending past forearms)
+    for (const side of [-1, 1]) {
+      const blade = new THREE.Mesh(
+        new THREE.ConeGeometry(0.025, 0.35, 4),
+        new THREE.MeshPhongMaterial({ color: 0x223344, emissive: 0x001122, shininess: 100 })
+      );
+      blade.position.set(side * 0.45, 0.85, 0.3);
+      blade.rotation.x = -Math.PI / 2;
+      blade.scale.set(1, 1, 0.25);
+      group.add(blade);
+      // Blade energy edge
+      const bladeEdge = new THREE.Mesh(
+        new THREE.BoxGeometry(0.004, 0.3, 0.012),
+        glowMat(0x00ffff, 0.8)
+      );
+      bladeEdge.position.set(side * 0.45, 0.85, 0.42);
+      bladeEdge.rotation.x = Math.PI / 2;
+      group.add(bladeEdge);
+      // Wrist housing
+      const wrist = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.05, 0.045, 0.08, 6),
+        new THREE.MeshPhongMaterial({ color: 0x334455, shininess: 70 })
+      );
+      wrist.position.set(side * 0.45, 0.85, 0.18);
+      wrist.rotation.x = Math.PI / 2;
+      group.add(wrist);
+    }
+
+    // Predator scanner visor - horizontal band across eyes
+    const visor = new THREE.Mesh(
+      new THREE.BoxGeometry(0.28, 0.04, 0.08),
+      new THREE.MeshPhongMaterial({ color: 0x112233, shininess: 90 })
+    );
+    visor.position.set(0, 1.72, 0.18);
+    group.add(visor);
+    // Visor glow bar
+    const visorGlow = new THREE.Mesh(
+      new THREE.BoxGeometry(0.25, 0.012, 0.005),
+      glowMat(0x00ffcc, 0.9)
+    );
+    visorGlow.position.set(0, 1.72, 0.22);
+    group.add(visorGlow);
+    // Scanner eye dots
+    for (let e = 0; e < 5; e++) {
+      const eyeDot = new THREE.Mesh(
+        new THREE.CircleGeometry(0.008, 6),
+        glowMat(0xff0000, 0.85)
+      );
+      eyeDot.position.set(-0.1 + e * 0.05, 1.72, 0.225);
+      group.add(eyeDot);
+    }
+
+    // Dorsal spines running down back
+    for (let s = 0; s < 5; s++) {
+      const spine = new THREE.Mesh(
+        new THREE.ConeGeometry(0.025, 0.1, 4),
+        new THREE.MeshPhongMaterial({ color: 0x334455, emissive: 0x112233, shininess: 80 })
+      );
+      spine.position.set(0, 1.55 - s * 0.18, -0.22);
+      spine.rotation.x = 0.3;
+      group.add(spine);
+    }
+
+    // Tail
+    for (let t = 0; t < 6; t++) {
+      const segment = new THREE.Mesh(
+        new THREE.SphereGeometry(0.055 - t * 0.006, 5, 5),
+        new THREE.MeshPhongMaterial({ color: 0x2a3540, emissive: 0x0a1520, shininess: 60 })
+      );
+      segment.position.set(Math.sin(t * 0.5) * 0.08, 0.3, -0.25 - t * 0.15);
+      group.add(segment);
+    }
+    // Tail blade tip
+    const tailBlade = new THREE.Mesh(
+      new THREE.ConeGeometry(0.04, 0.15, 4),
+      new THREE.MeshPhongMaterial({ color: 0x112233, shininess: 100 })
+    );
+    tailBlade.position.set(Math.sin(3) * 0.08, 0.3, -1.2);
+    tailBlade.rotation.x = -Math.PI / 2;
+    group.add(tailBlade);
+    const tailBladeEdge = new THREE.Mesh(
+      new THREE.BoxGeometry(0.003, 0.12, 0.006),
+      glowMat(0x00ffff, 0.6)
+    );
+    tailBladeEdge.position.set(Math.sin(3) * 0.08, 0.3, -1.25);
+    tailBladeEdge.rotation.x = Math.PI / 2;
+    group.add(tailBladeEdge);
+
+    // Cloak field shimmer shell (outer translucent sphere)
+    const shimmer = new THREE.Mesh(
+      new THREE.SphereGeometry(0.85, 10, 10),
+      new THREE.MeshBasicMaterial({
+        color: 0x88ffff, transparent: true, opacity: 0.06,
+        side: THREE.BackSide
+      })
+    );
+    shimmer.position.y = 0.95;
+    shimmer.scale.set(0.7, 1.2, 0.7);
+    group.add(shimmer);
 
   } else if (type === 'spitter') {
     // === SPITTER: Hunched reptilian acid alien ===
@@ -1792,6 +2246,128 @@ export function createAlienModel(type) {
     acidPool.position.y = 0.02;
     group.add(acidPool);
 
+    // === NEW DETAILS: venom sacs, acid fangs, gill flaps, throat pouch, tongue ===
+    // Venom sacs on shoulders/back - bulging translucent pods
+    for (const side of [-1, 1]) {
+      const sac = new THREE.Mesh(
+        new THREE.SphereGeometry(0.12, 8, 8),
+        new THREE.MeshPhongMaterial({
+          color: 0x88cc00, emissive: 0x334400,
+          transparent: true, opacity: 0.7, shininess: 80
+        })
+      );
+      sac.scale.set(1, 1.2, 0.8);
+      sac.position.set(side * 0.28, 1.15, -0.1);
+      group.add(sac);
+      // Sac highlight/nucleus
+      const sacCore = new THREE.Mesh(
+        new THREE.SphereGeometry(0.04, 5, 5),
+        glowMat(0xccff44, 0.85)
+      );
+      sacCore.position.set(side * 0.28, 1.15, -0.05);
+      group.add(sacCore);
+      // Connector tube from sac to mouth
+      for (let c = 0; c < 4; c++) {
+        const tube = new THREE.Mesh(
+          new THREE.SphereGeometry(0.015, 4, 4),
+          darkScale
+        );
+        const t = c / 4;
+        tube.position.set(
+          side * (0.28 - t * 0.22),
+          1.15 - t * 0.3,
+          -0.1 + t * 0.4
+        );
+        group.add(tube);
+      }
+    }
+
+    // Large throat pouch (expandable sac)
+    const throatPouch = new THREE.Mesh(
+      new THREE.SphereGeometry(0.17, 10, 8),
+      new THREE.MeshPhongMaterial({
+        color: 0x556600, emissive: 0x223300,
+        shininess: 30, transparent: true, opacity: 0.85
+      })
+    );
+    throatPouch.scale.set(1, 0.7, 1.2);
+    throatPouch.position.set(0, 0.78, 0.2);
+    group.add(throatPouch);
+    // Pouch vein lines
+    for (let v = 0; v < 6; v++) {
+      const ang = (v / 6) * Math.PI - Math.PI / 2;
+      const vein = new THREE.Mesh(
+        new THREE.BoxGeometry(0.004, 0.006, 0.25),
+        glowMat(0xaaff00, 0.4)
+      );
+      vein.position.set(Math.sin(ang) * 0.14, 0.78, 0.25);
+      vein.rotation.y = ang;
+      group.add(vein);
+    }
+
+    // Acid fangs - protruding from mouth area
+    for (let f = 0; f < 4; f++) {
+      const ang = (f / 4 - 0.375) * 0.7;
+      const fang = new THREE.Mesh(
+        new THREE.ConeGeometry(0.018, 0.08, 4),
+        new THREE.MeshPhongMaterial({ color: 0xeeddaa, emissive: 0x221100, shininess: 80 })
+      );
+      fang.position.set(Math.sin(ang) * 0.1, 0.92, 0.32);
+      fang.rotation.x = Math.PI;
+      group.add(fang);
+      // Acid drip at fang tip
+      const drip = new THREE.Mesh(
+        new THREE.SphereGeometry(0.012, 4, 4),
+        glowMat(0xaaff00, 0.7)
+      );
+      drip.position.set(Math.sin(ang) * 0.1, 0.84, 0.32);
+      drip.scale.set(1, 1.6, 1);
+      group.add(drip);
+    }
+
+    // Forked tongue extending out
+    const tongue = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.01, 0.008, 0.18, 4),
+      new THREE.MeshPhongMaterial({ color: 0x882244, emissive: 0x220011, shininess: 60 })
+    );
+    tongue.position.set(0, 0.9, 0.42);
+    tongue.rotation.x = Math.PI / 2;
+    group.add(tongue);
+    for (const fs of [-1, 1]) {
+      const forkBit = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.008, 0.003, 0.06, 4),
+        new THREE.MeshPhongMaterial({ color: 0x882244, emissive: 0x220011 })
+      );
+      forkBit.position.set(fs * 0.015, 0.9, 0.52);
+      forkBit.rotation.x = Math.PI / 2;
+      forkBit.rotation.z = fs * 0.3;
+      group.add(forkBit);
+    }
+
+    // Gill flaps on neck/sides
+    for (const side of [-1, 1]) {
+      for (let g = 0; g < 3; g++) {
+        const gill = new THREE.Mesh(
+          new THREE.BoxGeometry(0.04, 0.01, 0.06),
+          new THREE.MeshPhongMaterial({ color: 0x334400, emissive: 0x221100, shininess: 40 })
+        );
+        gill.position.set(side * 0.16, 0.88 - g * 0.035, 0.06);
+        gill.rotation.z = side * 0.3;
+        group.add(gill);
+      }
+    }
+
+    // Ridge of acid-leaking pores along spine
+    for (let p = 0; p < 5; p++) {
+      const pore = new THREE.Mesh(
+        new THREE.CircleGeometry(0.015, 6),
+        glowMat(0xccff44, 0.7)
+      );
+      pore.position.set(0, 0.8 + p * 0.15, -0.38);
+      pore.rotation.y = Math.PI;
+      group.add(pore);
+    }
+
   } else if (type === 'drone') {
     // === DRONE: Floating alien drone ===
     const hullMat = new THREE.MeshPhongMaterial({ color: 0x335588, emissive: 0x112244, shininess: 70 });
@@ -2125,6 +2701,160 @@ export function createAlienModel(type) {
     );
     scanLaser.position.y = -0.8;
     group.add(scanLaser);
+
+    // === NEW DETAILS: armor plating, weapon pods, antenna array, status lights, thruster vents ===
+    // Armored top plating - layered hex panels
+    for (let h = 0; h < 6; h++) {
+      const ang = (h / 6) * Math.PI * 2;
+      const panel = new THREE.Mesh(
+        new THREE.BoxGeometry(0.18, 0.04, 0.12),
+        new THREE.MeshPhongMaterial({ color: 0x2a4466, emissive: 0x081022, shininess: 85 })
+      );
+      panel.position.set(Math.cos(ang) * 0.3, 0.12, Math.sin(ang) * 0.3);
+      panel.rotation.y = ang;
+      panel.rotation.x = 0.15;
+      group.add(panel);
+      // Panel rivets
+      for (let rv = 0; rv < 2; rv++) {
+        const rivet = new THREE.Mesh(
+          new THREE.SphereGeometry(0.01, 4, 4),
+          new THREE.MeshPhongMaterial({ color: 0x88aacc, shininess: 90 })
+        );
+        rivet.position.set(
+          Math.cos(ang) * 0.3 + Math.cos(ang + Math.PI / 2) * (rv * 0.05 - 0.025),
+          0.14,
+          Math.sin(ang) * 0.3 + Math.sin(ang + Math.PI / 2) * (rv * 0.05 - 0.025)
+        );
+        group.add(rivet);
+      }
+    }
+
+    // Weapon pods - 3 forward-facing turrets on underside
+    for (let w = 0; w < 3; w++) {
+      const ang = (w / 3 - 0.5) * 0.8;
+      const pod = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.04, 0.05, 0.08, 6),
+        new THREE.MeshPhongMaterial({ color: 0x223344, emissive: 0x000811, shininess: 85 })
+      );
+      pod.position.set(Math.sin(ang) * 0.22, -0.1, Math.cos(ang) * 0.3);
+      pod.rotation.x = Math.PI / 2;
+      group.add(pod);
+      // Pod barrel
+      const barrel = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.012, 0.014, 0.15, 5),
+        new THREE.MeshPhongMaterial({ color: 0x111122, shininess: 95 })
+      );
+      barrel.position.set(Math.sin(ang) * 0.22, -0.1, Math.cos(ang) * 0.42);
+      barrel.rotation.x = Math.PI / 2;
+      group.add(barrel);
+      // Muzzle glow
+      const muzzle = new THREE.Mesh(
+        new THREE.CircleGeometry(0.012, 6),
+        glowMat(0x66bbff, 0.8)
+      );
+      muzzle.position.set(Math.sin(ang) * 0.22, -0.1, Math.cos(ang) * 0.5);
+      group.add(muzzle);
+    }
+
+    // Antenna array on top (radio mast + dish)
+    const antennaBase = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.025, 0.035, 0.06, 6),
+      new THREE.MeshPhongMaterial({ color: 0x334455, shininess: 80 })
+    );
+    antennaBase.position.y = 0.2;
+    group.add(antennaBase);
+    const antennaMast = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.005, 0.005, 0.25, 4),
+      new THREE.MeshPhongMaterial({ color: 0xaabbcc, shininess: 90 })
+    );
+    antennaMast.position.y = 0.35;
+    group.add(antennaMast);
+    // Mast tip beacon
+    const beacon = new THREE.Mesh(
+      new THREE.SphereGeometry(0.018, 5, 5),
+      glowMat(0xff0000, 0.9)
+    );
+    beacon.position.y = 0.49;
+    group.add(beacon);
+    // Parabolic comms dish
+    const dish = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.06, 0.03, 0.03, 8, 1, true),
+      new THREE.MeshPhongMaterial({
+        color: 0x99aacc, shininess: 100, side: THREE.DoubleSide
+      })
+    );
+    dish.position.set(0.08, 0.28, 0.02);
+    dish.rotation.x = -0.5;
+    dish.rotation.z = 0.3;
+    group.add(dish);
+    // Dish receiver stub
+    const dishStub = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.005, 0.005, 0.04, 4),
+      new THREE.MeshPhongMaterial({ color: 0x556677 })
+    );
+    dishStub.position.set(0.09, 0.3, 0.06);
+    group.add(dishStub);
+
+    // Status indicator light ring around equator
+    for (let l = 0; l < 12; l++) {
+      const ang = (l / 12) * Math.PI * 2;
+      const light = new THREE.Mesh(
+        new THREE.BoxGeometry(0.012, 0.012, 0.012),
+        glowMat(l % 3 === 0 ? 0xff4400 : (l % 3 === 1 ? 0x44aaff : 0x00ff88), 0.9)
+      );
+      light.position.set(Math.cos(ang) * 0.41, 0, Math.sin(ang) * 0.41);
+      group.add(light);
+    }
+
+    // Side thruster vents (4 cardinal directions)
+    for (let t = 0; t < 4; t++) {
+      const ang = (t / 4) * Math.PI * 2 + Math.PI / 4;
+      const vent = new THREE.Mesh(
+        new THREE.BoxGeometry(0.1, 0.06, 0.03),
+        new THREE.MeshPhongMaterial({ color: 0x1a2233, emissive: 0x000811, shininess: 70 })
+      );
+      vent.position.set(Math.cos(ang) * 0.4, -0.05, Math.sin(ang) * 0.4);
+      vent.rotation.y = ang + Math.PI / 2;
+      group.add(vent);
+      // Vent louvers
+      for (let lv = 0; lv < 3; lv++) {
+        const louver = new THREE.Mesh(
+          new THREE.BoxGeometry(0.09, 0.006, 0.008),
+          new THREE.MeshPhongMaterial({ color: 0x334455 })
+        );
+        louver.position.set(
+          Math.cos(ang) * 0.415,
+          -0.065 + lv * 0.02,
+          Math.sin(ang) * 0.415
+        );
+        louver.rotation.y = ang + Math.PI / 2;
+        group.add(louver);
+      }
+      // Thruster glow inside vent
+      const ventGlow = new THREE.Mesh(
+        new THREE.CircleGeometry(0.035, 6),
+        glowMat(0x66aaff, 0.5)
+      );
+      ventGlow.position.set(Math.cos(ang) * 0.42, -0.05, Math.sin(ang) * 0.42);
+      ventGlow.rotation.y = ang - Math.PI / 2;
+      group.add(ventGlow);
+    }
+
+    // Central bottom energy vortex (additional glow layer)
+    const bottomVortex = new THREE.Mesh(
+      new THREE.TorusGeometry(0.12, 0.015, 6, 12),
+      glowMat(0x4488ff, 0.6)
+    );
+    bottomVortex.position.y = -0.22;
+    bottomVortex.rotation.x = Math.PI / 2;
+    group.add(bottomVortex);
+    const bottomVortex2 = new THREE.Mesh(
+      new THREE.TorusGeometry(0.18, 0.008, 4, 16),
+      glowMat(0x66aaff, 0.4)
+    );
+    bottomVortex2.position.y = -0.2;
+    bottomVortex2.rotation.x = Math.PI / 2;
+    group.add(bottomVortex2);
   }
 
   return group;
