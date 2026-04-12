@@ -33,6 +33,18 @@ export const WEAPONS = {
     description: 'Precision long-range laser. One shot, one kill.',
     key: '3',
   },
+  rocketLauncher: {
+    name: 'PLASMA ROCKET',
+    damage: 120,
+    fireRate: 1.4,
+    range: 150,
+    type: 'projectile',
+    color: 0x00ffee,
+    projectileSpeed: 55,
+    explosionRadius: 7,
+    description: 'Homing plasma warhead. Massive area damage with spectacular detonations.',
+    key: '4',
+  },
 };
 
 export class WeaponManager {
@@ -63,6 +75,11 @@ export class WeaponManager {
     this._tmpSphere = new THREE.Sphere();
     // Rough bounding radius by alien type (for ray prefilter)
     this._alienRadius = { bloater: 1.5, grunt: 0.9, spitter: 1.0, drone: 0.7, stalker: 0.9, swarmer: 0.6 };
+
+    // Active rocket projectiles in the world
+    this.projectiles = [];
+    // Callback: called with array of hits when a rocket detonates
+    this.onRocketHit = null;
 
     this._initWeaponView();
   }
@@ -106,6 +123,7 @@ export class WeaponManager {
     this.weaponModels.laserRifle = this._buildRifleModel(0xff0000);
     this.weaponModels.laserSword = this._buildSwordModel();
     this.weaponModels.sniperRifle = this._buildSniperModel();
+    this.weaponModels.rocketLauncher = this._buildRocketLauncherModel();
 
     // Cache glowing materials for each weapon (avoid per-frame traverse)
     this._glowMaterials = {};
@@ -1263,6 +1281,334 @@ export class WeaponManager {
     return group;
   }
 
+  _buildRocketLauncherModel() {
+    const group = new THREE.Group();
+    const accent = 0x00ffee;
+    const metalMat = new THREE.MeshPhongMaterial({ color: 0x2a3540, shininess: 70, specular: 0x88aabb });
+    const darkMat = new THREE.MeshPhongMaterial({ color: 0x151a22, shininess: 40 });
+    const panelMat = new THREE.MeshPhongMaterial({ color: 0x333e4a, shininess: 90, specular: 0x99bbcc });
+    const glowMat = (c, o = 0.75) => new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: o });
+
+    // === Main launch tube ===
+    const tubeOuter = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.09, 0.095, 1.2, 16),
+      metalMat
+    );
+    tubeOuter.rotation.x = Math.PI / 2;
+    tubeOuter.position.z = -0.1;
+    group.add(tubeOuter);
+
+    // Inner barrel (darker, visible through front)
+    const tubeInner = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.075, 0.08, 1.21, 14),
+      darkMat
+    );
+    tubeInner.rotation.x = Math.PI / 2;
+    tubeInner.position.z = -0.1;
+    group.add(tubeInner);
+
+    // Ring reinforcements along the tube
+    for (const zz of [-0.55, -0.25, 0.05, 0.35]) {
+      const ring = new THREE.Mesh(
+        new THREE.TorusGeometry(0.098, 0.012, 6, 20),
+        panelMat
+      );
+      ring.rotation.y = Math.PI / 2;
+      ring.position.z = zz;
+      group.add(ring);
+    }
+
+    // Cooling vent slots along the top
+    for (let i = 0; i < 5; i++) {
+      const vent = new THREE.Mesh(
+        new THREE.BoxGeometry(0.1, 0.01, 0.05),
+        new THREE.MeshBasicMaterial({ color: 0x050910 })
+      );
+      vent.position.set(0, 0.1, -0.45 + i * 0.18);
+      group.add(vent);
+    }
+
+    // Forward muzzle ring with flared tip
+    const muzzleFlare = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.13, 0.09, 0.09, 16),
+      panelMat
+    );
+    muzzleFlare.rotation.x = Math.PI / 2;
+    muzzleFlare.position.z = -0.73;
+    group.add(muzzleFlare);
+    // Muzzle inner glow
+    const muzzleGlow = new THREE.Mesh(
+      new THREE.CircleGeometry(0.085, 16),
+      glowMat(accent, 0.6)
+    );
+    muzzleGlow.rotation.y = Math.PI;
+    muzzleGlow.position.z = -0.78;
+    group.add(muzzleGlow);
+    // Muzzle outer ring
+    const muzzleRing = new THREE.Mesh(
+      new THREE.TorusGeometry(0.11, 0.008, 6, 20),
+      glowMat(accent, 0.85)
+    );
+    muzzleRing.rotation.y = Math.PI / 2;
+    muzzleRing.position.z = -0.77;
+    group.add(muzzleRing);
+    // Muzzle claws (4 forward prongs)
+    for (let c = 0; c < 4; c++) {
+      const claw = new THREE.Mesh(
+        new THREE.BoxGeometry(0.025, 0.025, 0.12),
+        metalMat
+      );
+      const ang = (c / 4) * Math.PI * 2 + Math.PI / 4;
+      claw.position.set(Math.cos(ang) * 0.11, Math.sin(ang) * 0.11, -0.82);
+      group.add(claw);
+    }
+
+    // === Plasma loading core visible midway (peek through tube) ===
+    const plasmaChamber = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.04, 0.04, 0.3, 12),
+      glowMat(accent, 0.9)
+    );
+    plasmaChamber.rotation.x = Math.PI / 2;
+    plasmaChamber.position.z = 0.12;
+    plasmaChamber.position.y = 0.02;
+    group.add(plasmaChamber);
+    // Chamber halo
+    const plasmaHalo = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.06, 0.06, 0.32, 12, 1, true),
+      new THREE.MeshBasicMaterial({ color: accent, transparent: true, opacity: 0.3, side: THREE.DoubleSide })
+    );
+    plasmaHalo.rotation.x = Math.PI / 2;
+    plasmaHalo.position.z = 0.12;
+    plasmaHalo.position.y = 0.02;
+    group.add(plasmaHalo);
+
+    // Viewport window showing plasma (slot on top of tube)
+    const window1 = new THREE.Mesh(
+      new THREE.BoxGeometry(0.04, 0.005, 0.18),
+      glowMat(accent, 0.8)
+    );
+    window1.position.set(0, 0.095, 0.12);
+    group.add(window1);
+    const window2 = new THREE.Mesh(
+      new THREE.BoxGeometry(0.06, 0.003, 0.2),
+      glowMat(accent, 0.4)
+    );
+    window2.position.set(0, 0.097, 0.12);
+    group.add(window2);
+
+    // === Energy coils wrapped around the front of the tube ===
+    for (let c = 0; c < 3; c++) {
+      const coil = new THREE.Mesh(
+        new THREE.TorusGeometry(0.105, 0.01, 6, 20),
+        glowMat(accent, 0.7 - c * 0.15)
+      );
+      coil.rotation.y = Math.PI / 2;
+      coil.position.z = -0.4 + c * 0.12;
+      group.add(coil);
+    }
+
+    // === Side ammo canisters (2 per side) ===
+    for (const side of [-1, 1]) {
+      for (let i = 0; i < 2; i++) {
+        const canister = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.028, 0.028, 0.22, 8),
+          panelMat
+        );
+        canister.rotation.x = Math.PI / 2;
+        canister.position.set(side * 0.13, -0.02, -0.05 + i * 0.28);
+        group.add(canister);
+        // Glow tip on each canister
+        const tip = new THREE.Mesh(
+          new THREE.SphereGeometry(0.02, 6, 6),
+          glowMat(accent, 0.9)
+        );
+        tip.position.set(side * 0.13, -0.02, -0.17 + i * 0.28);
+        group.add(tip);
+        // Connector tube to main body
+        const conn = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.006, 0.006, 0.05, 4),
+          metalMat
+        );
+        conn.rotation.z = Math.PI / 2;
+        conn.position.set(side * 0.1, -0.02, -0.05 + i * 0.28);
+        group.add(conn);
+      }
+    }
+
+    // === Receiver / body block ===
+    const receiver = new THREE.Mesh(
+      new THREE.BoxGeometry(0.18, 0.14, 0.32),
+      panelMat
+    );
+    receiver.position.set(0, -0.03, 0.38);
+    group.add(receiver);
+    // Angled side panels
+    for (const side of [-1, 1]) {
+      const panel = new THREE.Mesh(
+        new THREE.BoxGeometry(0.01, 0.12, 0.28),
+        new THREE.MeshPhongMaterial({ color: 0x1a2430, shininess: 100 })
+      );
+      panel.position.set(side * 0.095, -0.03, 0.38);
+      group.add(panel);
+      // Glowing side strips
+      const strip = new THREE.Mesh(
+        new THREE.BoxGeometry(0.002, 0.005, 0.2),
+        glowMat(accent, 0.7)
+      );
+      strip.position.set(side * 0.1, -0.06, 0.38);
+      group.add(strip);
+    }
+
+    // Top-mounted targeting sight / display
+    const sightBase = new THREE.Mesh(
+      new THREE.BoxGeometry(0.1, 0.025, 0.1),
+      darkMat
+    );
+    sightBase.position.set(0, 0.075, 0.3);
+    group.add(sightBase);
+    const sightScreen = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.08, 0.04),
+      glowMat(accent, 0.75)
+    );
+    sightScreen.rotation.x = -Math.PI / 3;
+    sightScreen.position.set(0, 0.095, 0.27);
+    group.add(sightScreen);
+    // Crosshair on screen
+    const crossH = new THREE.Mesh(
+      new THREE.BoxGeometry(0.06, 0.002, 0.001),
+      glowMat(0xffffff, 0.9)
+    );
+    crossH.rotation.x = -Math.PI / 3;
+    crossH.position.set(0, 0.099, 0.266);
+    group.add(crossH);
+    const crossV = new THREE.Mesh(
+      new THREE.BoxGeometry(0.002, 0.003, 0.04),
+      glowMat(0xffffff, 0.9)
+    );
+    crossV.rotation.x = -Math.PI / 3;
+    crossV.position.set(0, 0.099, 0.266);
+    group.add(crossV);
+    // Sight lens at front
+    const sightLens = new THREE.Mesh(
+      new THREE.CircleGeometry(0.02, 8),
+      glowMat(accent, 0.6)
+    );
+    sightLens.position.set(0, 0.09, 0.21);
+    group.add(sightLens);
+
+    // Grip (pistol style)
+    const grip = new THREE.Mesh(
+      new THREE.BoxGeometry(0.06, 0.2, 0.08),
+      darkMat
+    );
+    grip.position.set(0, -0.2, 0.42);
+    grip.rotation.x = 0.25;
+    group.add(grip);
+    // Grip textured ridges
+    for (let r = 0; r < 5; r++) {
+      const ridge = new THREE.Mesh(
+        new THREE.BoxGeometry(0.065, 0.005, 0.085),
+        new THREE.MeshPhongMaterial({ color: 0x0a0f18 })
+      );
+      ridge.position.set(0, -0.13 - r * 0.028, 0.43 + r * 0.006);
+      ridge.rotation.x = 0.25;
+      group.add(ridge);
+    }
+    // Trigger guard
+    const triggerGuard = new THREE.Mesh(
+      new THREE.TorusGeometry(0.035, 0.005, 4, 12, Math.PI),
+      metalMat
+    );
+    triggerGuard.rotation.x = Math.PI / 2 + 0.2;
+    triggerGuard.position.set(0, -0.11, 0.47);
+    group.add(triggerGuard);
+
+    // Shoulder rest / rear brace
+    const shoulderRest = new THREE.Mesh(
+      new THREE.BoxGeometry(0.14, 0.12, 0.08),
+      darkMat
+    );
+    shoulderRest.position.set(0, -0.02, 0.6);
+    group.add(shoulderRest);
+    // Rest pad
+    const restPad = new THREE.Mesh(
+      new THREE.BoxGeometry(0.16, 0.14, 0.03),
+      new THREE.MeshPhongMaterial({ color: 0x080808 })
+    );
+    restPad.position.set(0, -0.02, 0.65);
+    group.add(restPad);
+
+    // Rear exhaust vents (glowing)
+    for (let v = 0; v < 3; v++) {
+      const ang = (v - 1) * 0.4;
+      const ventSlot = new THREE.Mesh(
+        new THREE.BoxGeometry(0.02, 0.008, 0.04),
+        glowMat(accent, 0.6)
+      );
+      ventSlot.position.set(Math.sin(ang) * 0.06, 0.02, 0.68);
+      group.add(ventSlot);
+    }
+
+    // Status LEDs on the side of the receiver
+    for (const side of [-1, 1]) {
+      for (let i = 0; i < 4; i++) {
+        const led = new THREE.Mesh(
+          new THREE.SphereGeometry(0.005, 6, 6),
+          glowMat(i === 0 ? 0x00ff44 : (i === 1 ? 0xffaa00 : accent), 0.9)
+        );
+        led.position.set(side * 0.1, 0.02, 0.28 + i * 0.03);
+        group.add(led);
+      }
+    }
+
+    // Ammo counter display on left side
+    const counterBg = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.06, 0.03),
+      new THREE.MeshBasicMaterial({ color: 0x030508 })
+    );
+    counterBg.rotation.y = -Math.PI / 2;
+    counterBg.position.set(-0.096, 0.0, 0.4);
+    group.add(counterBg);
+    const counterScreen = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.055, 0.025),
+      glowMat(accent, 0.7)
+    );
+    counterScreen.rotation.y = -Math.PI / 2;
+    counterScreen.position.set(-0.097, 0.0, 0.4);
+    group.add(counterScreen);
+
+    // Fore grip under the barrel
+    const foreGrip = new THREE.Mesh(
+      new THREE.BoxGeometry(0.04, 0.09, 0.1),
+      darkMat
+    );
+    foreGrip.position.set(0, -0.12, 0.05);
+    group.add(foreGrip);
+    for (let i = 0; i < 3; i++) {
+      const ridge = new THREE.Mesh(
+        new THREE.BoxGeometry(0.045, 0.005, 0.11),
+        new THREE.MeshPhongMaterial({ color: 0x0a0f18 })
+      );
+      ridge.position.set(0, -0.08 - i * 0.025, 0.05);
+      group.add(ridge);
+    }
+
+    // Warning stripes (hazard markings near muzzle)
+    for (let i = 0; i < 4; i++) {
+      const stripe = new THREE.Mesh(
+        new THREE.BoxGeometry(0.005, 0.05, 0.01),
+        new THREE.MeshBasicMaterial({ color: i % 2 === 0 ? 0xffaa00 : 0x222222 })
+      );
+      const ang = i * Math.PI / 2;
+      stripe.position.set(Math.cos(ang) * 0.1, Math.sin(ang) * 0.1, -0.6);
+      group.add(stripe);
+    }
+
+    group.position.set(0.32, -0.3, -0.35);
+    group.rotation.set(0, -0.06, 0);
+    return group;
+  }
+
   switchWeapon(name) {
     if (!WEAPONS[name]) return;
     if (this.zoomed) this.toggleZoom();
@@ -1272,7 +1618,7 @@ export class WeaponManager {
     this.cooldown = 0;
     // Update accent light color per weapon
     if (this._weaponAccentLight) {
-      const colors = { laserRifle: 0xff0000, laserSword: 0x0088ff, sniperRifle: 0x8800ff };
+      const colors = { laserRifle: 0xff0000, laserSword: 0x0088ff, sniperRifle: 0x8800ff, rocketLauncher: 0x00ffee };
       this._weaponAccentLight.color.setHex(colors[name] || 0xff0000);
     }
   }
@@ -1296,14 +1642,192 @@ export class WeaponManager {
     if (this.current === 'laserRifle') this.audio.playLaserRifle();
     else if (this.current === 'laserSword') this.audio.playLaserSword();
     else if (this.current === 'sniperRifle') this.audio.playSniperShot();
+    else if (this.current === 'rocketLauncher' && this.audio.playRocketLaunch) this.audio.playRocketLaunch();
 
     if (weapon.type === 'melee') {
       return this._meleeAttack(enemies, weapon);
+    } else if (weapon.type === 'projectile') {
+      // Big recoil kick
+      this.recoilOffset = 2.0;
+      this.recoilRotX = 1.8;
+      this._launchRocket(weapon);
+      return null; // hits are delivered asynchronously via onRocketHit
     } else {
       // Recoil kick
       this.recoilOffset = this.current === 'sniperRifle' ? 1.5 : 0.8;
       this.recoilRotX = this.current === 'sniperRifle' ? 1.2 : 0.6;
       return this._hitscanAttack(enemies, weapon);
+    }
+  }
+
+  _launchRocket(weapon) {
+    const origin = this.camera.position;
+    const dir = new THREE.Vector3();
+    this.camera.getWorldDirection(dir);
+
+    // Spawn slightly ahead of camera, offset down-right to match hip-fired rocket
+    const right = new THREE.Vector3();
+    right.crossVectors(dir, new THREE.Vector3(0, 1, 0)).normalize();
+    const spawn = new THREE.Vector3().copy(origin)
+      .add(dir.clone().multiplyScalar(1.2))
+      .add(right.multiplyScalar(0.25))
+      .add(new THREE.Vector3(0, -0.2, 0));
+
+    // Build rocket mesh: elongated glowing warhead with trail
+    const rocket = new THREE.Group();
+    // Main body (cyan metal)
+    const body = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.08, 0.12, 0.6, 10),
+      new THREE.MeshPhongMaterial({ color: 0x223344, emissive: 0x001122, shininess: 80 })
+    );
+    body.rotation.x = Math.PI / 2;
+    rocket.add(body);
+    // Nose cone
+    const nose = new THREE.Mesh(
+      new THREE.ConeGeometry(0.08, 0.22, 10),
+      new THREE.MeshPhongMaterial({ color: 0x445566, emissive: 0x112233, shininess: 100 })
+    );
+    nose.rotation.x = Math.PI / 2;
+    nose.position.z = 0.4;
+    rocket.add(nose);
+    // Glowing plasma core (visible through slots)
+    const core = new THREE.Mesh(
+      new THREE.SphereGeometry(0.14, 10, 10),
+      new THREE.MeshBasicMaterial({ color: 0x00ffee, transparent: true, opacity: 0.85 })
+    );
+    rocket.add(core);
+    // Outer halo glow
+    const halo = new THREE.Mesh(
+      new THREE.SphereGeometry(0.28, 10, 10),
+      new THREE.MeshBasicMaterial({ color: 0x00ffee, transparent: true, opacity: 0.25 })
+    );
+    rocket.add(halo);
+    // Stabilizer fins
+    for (let f = 0; f < 4; f++) {
+      const fin = new THREE.Mesh(
+        new THREE.BoxGeometry(0.18, 0.02, 0.15),
+        new THREE.MeshPhongMaterial({ color: 0x334455 })
+      );
+      fin.position.z = -0.25;
+      fin.rotation.z = (f / 4) * Math.PI * 2;
+      rocket.add(fin);
+    }
+    // Exhaust cone behind
+    const exhaust = new THREE.Mesh(
+      new THREE.ConeGeometry(0.16, 0.4, 10, 1, true),
+      new THREE.MeshBasicMaterial({ color: 0x88ffff, transparent: true, opacity: 0.7, side: THREE.DoubleSide })
+    );
+    exhaust.rotation.x = -Math.PI / 2;
+    exhaust.position.z = -0.55;
+    rocket.add(exhaust);
+
+    // Point light traveling with rocket
+    const rocketLight = new THREE.PointLight(0x00ffee, 3, 12);
+    rocket.add(rocketLight);
+
+    rocket.position.copy(spawn);
+    // Orient rocket to face direction of travel
+    rocket.lookAt(spawn.clone().add(dir));
+    this.scene.add(rocket);
+
+    // Muzzle flash at launch
+    this.particles.createMuzzleFlash(spawn, dir, 0x00ffee);
+
+    this.projectiles.push({
+      mesh: rocket,
+      body, nose, core, halo, exhaust, light: rocketLight,
+      position: spawn.clone(),
+      velocity: dir.clone().multiplyScalar(weapon.projectileSpeed),
+      damage: weapon.damage,
+      radius: weapon.explosionRadius,
+      range: weapon.range,
+      distanceTraveled: 0,
+      age: 0,
+      weapon,
+    });
+  }
+
+  _updateProjectiles(delta, enemies) {
+    if (this.projectiles.length === 0) return;
+    const tmp = this._tmpToEnemy;
+    for (let i = this.projectiles.length - 1; i >= 0; i--) {
+      const p = this.projectiles[i];
+      p.age += delta;
+      const step = p.velocity.clone().multiplyScalar(delta);
+      p.position.add(step);
+      p.distanceTraveled += step.length();
+      p.mesh.position.copy(p.position);
+
+      // Animate core/halo pulsing
+      const pulse = 0.8 + Math.sin(p.age * 40) * 0.2;
+      if (p.core) p.core.scale.set(pulse, pulse, pulse);
+      if (p.halo) p.halo.scale.set(pulse * 1.15, pulse * 1.15, pulse * 1.15);
+      if (p.exhaust) {
+        const exS = 0.8 + Math.sin(p.age * 30) * 0.2;
+        p.exhaust.scale.set(exS, exS, 1 + Math.sin(p.age * 25) * 0.3);
+      }
+      // Spin for visual interest
+      p.mesh.rotateZ(delta * 6);
+
+      // Check enemy collision
+      let hitEnemy = null;
+      for (let e = 0; e < enemies.length; e++) {
+        const enemy = enemies[e];
+        if (enemy.dead) continue;
+        const r = (this._alienRadius[enemy.type] || 1.0) + 0.4;
+        tmp.subVectors(enemy.mesh.position, p.position);
+        tmp.y += 0.8;
+        if (tmp.lengthSq() < r * r) {
+          hitEnemy = enemy;
+          break;
+        }
+      }
+
+      // Detonate on enemy hit, ground hit, or max range
+      const hitGround = p.position.y <= 0.3;
+      const outOfRange = p.distanceTraveled >= p.range;
+      if (hitEnemy || hitGround || outOfRange) {
+        this._detonateRocket(p, enemies);
+        this.scene.remove(p.mesh);
+        this.projectiles.splice(i, 1);
+      }
+    }
+  }
+
+  _detonateRocket(p, enemies) {
+    // Spectacular explosion visuals
+    if (this.particles.createMegaExplosion) {
+      this.particles.createMegaExplosion(p.position, p.radius);
+    } else {
+      this.particles.createExplosion(p.position, 0x00ffee, p.radius, 1.2);
+    }
+    if (this.audio.playExplosion) this.audio.playExplosion();
+
+    // Apply AoE damage
+    const hits = [];
+    const radiusSq = p.radius * p.radius;
+    for (let i = 0; i < enemies.length; i++) {
+      const enemy = enemies[i];
+      if (enemy.dead) continue;
+      const dx = enemy.mesh.position.x - p.position.x;
+      const dy = enemy.mesh.position.y + 0.8 - p.position.y;
+      const dz = enemy.mesh.position.z - p.position.z;
+      const dSq = dx * dx + dy * dy + dz * dz;
+      if (dSq < radiusSq) {
+        const d = Math.sqrt(dSq);
+        const falloff = 1 - d / p.radius;
+        const dmg = p.damage * (0.5 + falloff * 0.5);
+        hits.push({
+          hit: true,
+          enemy,
+          damage: dmg,
+          point: enemy.mesh.position,
+          weaponKey: 'rocketLauncher',
+        });
+      }
+    }
+    if (hits.length > 0 && this.onRocketHit) {
+      this.onRocketHit(hits, p.position);
     }
   }
 
@@ -1401,8 +1925,11 @@ export class WeaponManager {
     return hits.length > 0 ? hits : { hit: false };
   }
 
-  update(delta) {
+  update(delta, enemies) {
     if (this.cooldown > 0) this.cooldown -= delta;
+
+    // Advance rocket projectiles
+    if (enemies) this._updateProjectiles(delta, enemies);
 
     // Recoil recovery
     if (this.recoilOffset > 0) {
@@ -1427,6 +1954,8 @@ export class WeaponManager {
         baseX = 0.15; baseY = -0.15; baseRotY = -0.1;
       } else if (this.current === 'sniperRifle') {
         baseX = 0.1; baseY = -0.12; baseRotY = -0.08;
+      } else if (this.current === 'rocketLauncher') {
+        baseX = 0.2; baseY = -0.2; baseRotY = -0.05;
       } else {
         baseX = 0.2; baseY = -0.1; baseRotZ = 0.3;
       }

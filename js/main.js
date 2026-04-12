@@ -266,9 +266,10 @@ function setupEventListeners() {
   document.addEventListener('keydown', (e) => {
     if (state === GameState.PLAYING) {
       switch (e.code) {
-        case 'Digit1': weapons.switchWeapon('laserRifle'); break;
-        case 'Digit2': weapons.switchWeapon('laserSword'); break;
-        case 'Digit3': weapons.switchWeapon('sniperRifle'); break;
+        case 'Digit1': weapons.switchWeapon('laserRifle'); currentWeaponIdx = 0; break;
+        case 'Digit2': weapons.switchWeapon('laserSword'); currentWeaponIdx = 1; break;
+        case 'Digit3': weapons.switchWeapon('sniperRifle'); currentWeaponIdx = 2; break;
+        case 'Digit4': weapons.switchWeapon('rocketLauncher'); currentWeaponIdx = 3; break;
         case 'KeyH':
         case 'Tab':
           e.preventDefault();
@@ -314,7 +315,7 @@ function setupEventListeners() {
   });
 }
 
-const weaponOrder = ['laserRifle', 'laserSword', 'sniperRifle'];
+const weaponOrder = ['laserRifle', 'laserSword', 'sniperRifle', 'rocketLauncher'];
 let currentWeaponIdx = 0;
 let gamepadFireHoldTimer = 0;
 
@@ -438,6 +439,11 @@ function startGame() {
 
   // Weapons
   weapons = new WeaponManager(camera, scene, particles, audio);
+  // Rocket detonation hits are delivered asynchronously
+  weapons.onRocketHit = (hits, pos) => {
+    if (vfx) vfx.shake(0.3, 0.5);
+    for (const hit of hits) processHit(hit);
+  };
 
   // Player
   player = new Player();
@@ -477,6 +483,10 @@ function loadLevel(index) {
     if (vfx) { vfx.scene = scene; vfx.cleanup(); }
     waveManager.scene = scene;
     waveManager.cleanup();
+    // Clear any in-flight rocket projectiles (they reference the old scene)
+    if (weapons && weapons.projectiles) {
+      weapons.projectiles.length = 0;
+    }
     weapons.scene = scene;
   }
 
@@ -625,7 +635,7 @@ function animate() {
   controls.update(delta, currentLevelData ? currentLevelData.colliders : []);
   player.update(delta);
   particles.update(delta);
-  weapons.update(delta);
+  weapons.update(delta, waveManager ? waveManager.enemies : null);
   hud.updateAnnouncement(delta);
   if (vfx) vfx.update(delta, player.hp / player.maxHp);
 

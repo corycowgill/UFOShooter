@@ -336,6 +336,203 @@ export class ParticleSystem {
     this.impacts.push({ group, flash, sparks, light, life: 0.3, maxLife: 0.3, type: 'sword' });
   }
 
+  createMegaExplosion(position, size = 7) {
+    // Spectacular plasma-rocket detonation: huge flash, multiple shockwaves,
+    // plasma core, debris, sparks, and trailing fire.
+    const group = new THREE.Group();
+    group.position.copy(position);
+
+    const accent = 0x00ffee;
+    const hot = 0xffffff;
+    const glow = 0x88ffff;
+
+    // === Core flash - very bright white icosahedron ===
+    const flashGeo = new THREE.IcosahedronGeometry(size * 0.6, 1);
+    const flashMat = new THREE.MeshBasicMaterial({ color: hot, transparent: true, opacity: 1 });
+    const flash = new THREE.Mesh(flashGeo, flashMat);
+    group.add(flash);
+
+    // Secondary core - cyan plasma fireball
+    const coreGeo = new THREE.SphereGeometry(size * 0.5, 16, 16);
+    const coreMat = new THREE.MeshBasicMaterial({ color: accent, transparent: true, opacity: 0.9 });
+    const core = new THREE.Mesh(coreGeo, coreMat);
+    core.scale.set(0.2, 0.2, 0.2);
+    group.add(core);
+
+    // Outer halo - expands wider
+    const haloGeo = new THREE.SphereGeometry(size * 0.9, 14, 14);
+    const haloMat = new THREE.MeshBasicMaterial({ color: glow, transparent: true, opacity: 0.5 });
+    const halo = new THREE.Mesh(haloGeo, haloMat);
+    halo.scale.set(0.15, 0.15, 0.15);
+    group.add(halo);
+
+    // === Multi-layered shockwave rings ===
+    const rings = [];
+    for (let r = 0; r < 3; r++) {
+      const ringGeo = new THREE.TorusGeometry(size * 0.35, 0.12 - r * 0.03, 8, 32);
+      const ringMat = new THREE.MeshBasicMaterial({
+        color: r === 0 ? hot : (r === 1 ? accent : glow),
+        transparent: true, opacity: 0.85 - r * 0.15,
+      });
+      const ring = new THREE.Mesh(ringGeo, ringMat);
+      ring.rotation.x = Math.PI / 2;
+      ring.scale.set(0.05, 0.05, 0.05);
+      ring.userData.delay = r * 0.05;
+      group.add(ring);
+      rings.push(ring);
+    }
+
+    // Vertical shockwave ring (perpendicular)
+    const vRingGeo = new THREE.TorusGeometry(size * 0.4, 0.08, 6, 24);
+    const vRingMat = new THREE.MeshBasicMaterial({ color: accent, transparent: true, opacity: 0.6 });
+    const vRing = new THREE.Mesh(vRingGeo, vRingMat);
+    vRing.scale.set(0.05, 0.05, 0.05);
+    group.add(vRing);
+    rings.push(vRing);
+
+    // Expanding wireframe shell
+    const shellGeo = new THREE.IcosahedronGeometry(size, 2);
+    const shellMat = new THREE.MeshBasicMaterial({
+      color: accent, transparent: true, opacity: 0.5, wireframe: true,
+    });
+    const shell = new THREE.Mesh(shellGeo, shellMat);
+    shell.scale.set(0.1, 0.1, 0.1);
+    group.add(shell);
+
+    // Outer electrified wireframe sphere (larger, slower)
+    const outerShellGeo = new THREE.SphereGeometry(size * 1.2, 14, 10);
+    const outerShellMat = new THREE.MeshBasicMaterial({
+      color: glow, transparent: true, opacity: 0.25, wireframe: true,
+    });
+    const outerShell = new THREE.Mesh(outerShellGeo, outerShellMat);
+    outerShell.scale.set(0.1, 0.1, 0.1);
+    group.add(outerShell);
+
+    // === Plasma fire particles (cyan-white, many) ===
+    const fireParticles = [];
+    for (let i = 0; i < 30; i++) {
+      const pGeo = new THREE.SphereGeometry(0.2 + Math.random() * 0.25, 6, 6);
+      const pMat = new THREE.MeshBasicMaterial({
+        color: Math.random() > 0.4 ? accent : hot,
+        transparent: true, opacity: 1,
+      });
+      const p = new THREE.Mesh(pGeo, pMat);
+      const ang = Math.random() * Math.PI * 2;
+      const speed = size * (2 + Math.random() * 3);
+      p.velocity = new THREE.Vector3(
+        Math.cos(ang) * speed,
+        Math.random() * size * 4 + 1,
+        Math.sin(ang) * speed,
+      );
+      group.add(p);
+      fireParticles.push(p);
+    }
+
+    // === Spark streaks (fast, bright, falling) ===
+    const sparks = [];
+    for (let i = 0; i < 40; i++) {
+      const sparkGeo = new THREE.BoxGeometry(0.04, 0.04, 0.25);
+      const sparkMat = new THREE.MeshBasicMaterial({
+        color: Math.random() > 0.5 ? hot : accent,
+        transparent: true, opacity: 1,
+      });
+      const spark = new THREE.Mesh(sparkGeo, sparkMat);
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.acos(2 * Math.random() - 1);
+      const spd = size * (4 + Math.random() * 4);
+      spark.velocity = new THREE.Vector3(
+        Math.sin(phi) * Math.cos(theta) * spd,
+        Math.cos(phi) * spd + 2,
+        Math.sin(phi) * Math.sin(theta) * spd,
+      );
+      // Orient spark along its velocity
+      spark.lookAt(spark.velocity);
+      group.add(spark);
+      sparks.push(spark);
+    }
+
+    // === Thick dark smoke (rises) ===
+    const smokeParticles = [];
+    for (let i = 0; i < 18; i++) {
+      const sGeo = new THREE.SphereGeometry(0.3, 8, 8);
+      const sMat = new THREE.MeshBasicMaterial({
+        color: 0x1a1a1a, transparent: true, opacity: 0.75,
+      });
+      const s = new THREE.Mesh(sGeo, sMat);
+      s.velocity = new THREE.Vector3(
+        (Math.random() - 0.5) * size * 2,
+        Math.random() * size * 3 + 2,
+        (Math.random() - 0.5) * size * 2,
+      );
+      s.growRate = 2 + Math.random() * 3;
+      group.add(s);
+      smokeParticles.push(s);
+    }
+
+    // === Debris chunks ===
+    const particles = [];
+    const debrisShapes = [
+      () => new THREE.BoxGeometry(0.18, 0.18, 0.18),
+      () => new THREE.TetrahedronGeometry(0.15),
+      () => new THREE.BoxGeometry(0.25, 0.08, 0.08),
+      () => new THREE.OctahedronGeometry(0.12),
+    ];
+    for (let i = 0; i < 25; i++) {
+      const pGeo = debrisShapes[Math.floor(Math.random() * debrisShapes.length)]();
+      const pMat = new THREE.MeshBasicMaterial({
+        color: Math.random() > 0.5 ? accent : 0xffaa00,
+        transparent: true, opacity: 1,
+      });
+      const p = new THREE.Mesh(pGeo, pMat);
+      p.velocity = new THREE.Vector3(
+        (Math.random() - 0.5) * size * 6,
+        Math.random() * size * 5,
+        (Math.random() - 0.5) * size * 6,
+      );
+      p.rotSpeed = new THREE.Vector3(
+        (Math.random() - 0.5) * 15,
+        (Math.random() - 0.5) * 15,
+        (Math.random() - 0.5) * 15,
+      );
+      group.add(p);
+      particles.push(p);
+    }
+
+    // === Ground scorch decal (larger) ===
+    const scorch = new THREE.Mesh(
+      new THREE.CircleGeometry(size * 1.3, 20),
+      new THREE.MeshBasicMaterial({ color: 0x050510, transparent: true, opacity: 0.7 })
+    );
+    scorch.rotation.x = -Math.PI / 2;
+    scorch.position.y = -position.y + 0.03;
+    group.add(scorch);
+    // Scorch glow ring inside the burn mark
+    const scorchGlow = new THREE.Mesh(
+      new THREE.RingGeometry(size * 0.4, size * 1.2, 20),
+      new THREE.MeshBasicMaterial({ color: accent, transparent: true, opacity: 0.35 })
+    );
+    scorchGlow.rotation.x = -Math.PI / 2;
+    scorchGlow.position.y = -position.y + 0.035;
+    group.add(scorchGlow);
+
+    // === Bright point light ===
+    const light = new THREE.PointLight(accent, 18, size * 10);
+    group.add(light);
+    // Secondary hot core light
+    const hotLight = new THREE.PointLight(hot, 12, size * 6);
+    group.add(hotLight);
+
+    this.scene.add(group);
+    this.explosions.push({
+      group, flash, fireball: core, halo, ring: rings[0], rings, vRing,
+      sphere: shell, outerShell,
+      fireParticles, smokeParticles, particles, sparks, scorch, scorchGlow,
+      light, hotLight,
+      life: 1.4, maxLife: 1.4, size,
+      isMega: true,
+    });
+  }
+
   createExplosion(position, color = 0xff4400, size = 3, duration = 0.5) {
     const group = new THREE.Group();
     group.position.copy(position);
@@ -627,10 +824,66 @@ export class ParticleSystem {
       e.life -= delta;
       const progress = 1 - e.life / e.maxLife;
 
-      // Flash fades fast
-      e.flash.material.opacity = Math.max(0, 1 - progress * 3);
-      const flashS = 1 + progress * 0.5;
+      // Flash fades fast - slower fade for mega explosions
+      const flashFade = e.isMega ? 2.2 : 3;
+      e.flash.material.opacity = Math.max(0, 1 - progress * flashFade);
+      const flashS = e.isMega ? (0.5 + progress * 2.5) : (1 + progress * 0.5);
       e.flash.scale.set(flashS, flashS, flashS);
+
+      // Mega halo expansion
+      if (e.halo) {
+        const haloS = 0.15 + progress * 3;
+        e.halo.scale.set(haloS, haloS, haloS);
+        e.halo.material.opacity = Math.max(0, 0.5 * (1 - progress * 1.8));
+      }
+      // Extra shockwave rings
+      if (e.rings) {
+        for (let ri = 0; ri < e.rings.length; ri++) {
+          const r = e.rings[ri];
+          const pr = Math.max(0, (progress - (r.userData.delay || 0)) * 1.5);
+          const rs = 0.05 + pr * 5;
+          if (ri < 3) {
+            r.scale.set(rs, rs, rs * 0.2);
+          } else {
+            r.scale.set(rs, rs, rs);
+            r.rotation.y += delta * 2;
+          }
+          r.material.opacity = Math.max(0, (r.material.userData?.base ?? 0.85) * (1 - pr));
+          if (!r.material.userData.base) r.material.userData.base = r.material.opacity / Math.max(0.01, (1 - pr));
+        }
+      }
+      // Outer wireframe shell
+      if (e.outerShell) {
+        const os = 0.1 + progress * 2.5;
+        e.outerShell.scale.set(os, os, os);
+        e.outerShell.material.opacity = Math.max(0, 0.25 * (1 - progress));
+        e.outerShell.rotation.x += delta * 0.5;
+        e.outerShell.rotation.y += delta * 0.7;
+      }
+      // Scorch glow ring
+      if (e.scorchGlow) {
+        e.scorchGlow.material.opacity = Math.min(0.35, progress * 1.5) * (1 - Math.max(0, progress - 0.7) * 3);
+      }
+      // Sparks
+      if (e.sparks) {
+        for (let si = 0; si < e.sparks.length; si++) {
+          const sp = e.sparks[si];
+          sp.position.x += sp.velocity.x * delta;
+          sp.position.y += sp.velocity.y * delta;
+          sp.position.z += sp.velocity.z * delta;
+          sp.velocity.y -= 20 * delta;
+          sp.lookAt(
+            sp.position.x + sp.velocity.x,
+            sp.position.y + sp.velocity.y,
+            sp.position.z + sp.velocity.z
+          );
+          sp.material.opacity = Math.max(0, 1 - progress * 1.5);
+        }
+      }
+      // Hot core light
+      if (e.hotLight) {
+        e.hotLight.intensity = Math.max(0, 12 * (1 - progress * 2));
+      }
 
       // Fireball expands then fades
       if (e.fireball) {

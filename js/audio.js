@@ -249,6 +249,37 @@ export class AudioManager {
     this._noiseBurst(0.15, 0.3);
   }
 
+  playRocketLaunch() {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    // Deep whoosh: low saw ramping down with noise
+    const osc = this.ctx.createOscillator();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(220, t);
+    osc.frequency.exponentialRampToValueAtTime(60, t + 0.35);
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0.35, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
+    osc.connect(g);
+    g.connect(this.sfxGain);
+    osc.start(t);
+    osc.stop(t + 0.4);
+    // High hiss layer
+    const osc2 = this.ctx.createOscillator();
+    osc2.type = 'square';
+    osc2.frequency.setValueAtTime(1600, t);
+    osc2.frequency.exponentialRampToValueAtTime(300, t + 0.3);
+    const g2 = this.ctx.createGain();
+    g2.gain.setValueAtTime(0.1, t);
+    g2.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
+    osc2.connect(g2);
+    g2.connect(this.sfxGain);
+    osc2.start(t);
+    osc2.stop(t + 0.3);
+    // Noise whoosh
+    this._noiseBurst(0.25, 0.35);
+  }
+
   playExplosion() {
     const t = this.ctx.currentTime;
     // Low boom

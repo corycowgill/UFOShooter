@@ -129,6 +129,8 @@ export class HelpGuide {
       model = buildPreviewRifle(0xff0000);
     } else if (weaponType === 'laserSword') {
       model = buildPreviewSword();
+    } else if (weaponType === 'rocketLauncher') {
+      model = buildPreviewRocket();
     } else {
       model = buildPreviewSniper();
     }
@@ -367,5 +369,90 @@ function buildPreviewSniper() {
     coil.rotation.y = Math.PI / 2;
     group.add(coil);
   }
+  return group;
+}
+
+function buildPreviewRocket() {
+  const group = new THREE.Group();
+  const accent = 0x00ffee;
+  const metalMat = new THREE.MeshPhongMaterial({ color: 0x2a3540, shininess: 70 });
+  const darkMat = new THREE.MeshPhongMaterial({ color: 0x151a22 });
+  const panelMat = new THREE.MeshPhongMaterial({ color: 0x333e4a, shininess: 90 });
+  const glowMat = (c, o = 0.75) => new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: o });
+
+  // Main tube
+  const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.1, 1.1, 14), metalMat);
+  tube.rotation.z = Math.PI / 2;
+  group.add(tube);
+  // Tube reinforcement rings
+  for (const xx of [-0.4, -0.1, 0.2]) {
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.095, 0.012, 6, 16), panelMat);
+    ring.position.x = xx;
+    group.add(ring);
+  }
+  // Muzzle flare
+  const muzzle = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.09, 0.1, 14), panelMat);
+  muzzle.rotation.z = Math.PI / 2;
+  muzzle.position.x = -0.6;
+  group.add(muzzle);
+  const muzzleGlow = new THREE.Mesh(new THREE.CircleGeometry(0.085, 14), glowMat(accent, 0.6));
+  muzzleGlow.rotation.y = -Math.PI / 2;
+  muzzleGlow.position.x = -0.66;
+  group.add(muzzleGlow);
+  // Energy coils
+  for (let c = 0; c < 3; c++) {
+    const coil = new THREE.Mesh(new THREE.TorusGeometry(0.105, 0.01, 6, 16), glowMat(accent, 0.7 - c * 0.15));
+    coil.position.x = -0.35 + c * 0.12;
+    group.add(coil);
+  }
+  // Plasma window
+  const win = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.005, 0.04), glowMat(accent, 0.8));
+  win.position.set(0.05, 0.095, 0);
+  group.add(win);
+  // Side canisters
+  for (const side of [-1, 1]) {
+    for (let i = 0; i < 2; i++) {
+      const can = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.028, 0.22, 8), panelMat);
+      can.rotation.z = Math.PI / 2;
+      can.position.set(-0.1 + i * 0.28, -0.02, side * 0.13);
+      group.add(can);
+      const tip = new THREE.Mesh(new THREE.SphereGeometry(0.02, 6, 6), glowMat(accent, 0.9));
+      tip.position.set(-0.22 + i * 0.28, -0.02, side * 0.13);
+      group.add(tip);
+    }
+  }
+  // Receiver
+  const rec = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.14, 0.18), panelMat);
+  rec.position.set(0.35, -0.03, 0);
+  group.add(rec);
+  // Sight
+  const sightBase = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.025, 0.1), darkMat);
+  sightBase.position.set(0.28, 0.075, 0);
+  group.add(sightBase);
+  const sightScreen = new THREE.Mesh(new THREE.PlaneGeometry(0.08, 0.04), glowMat(accent, 0.8));
+  sightScreen.rotation.y = Math.PI / 2;
+  sightScreen.rotation.x = -Math.PI / 3;
+  sightScreen.position.set(0.24, 0.095, 0);
+  group.add(sightScreen);
+  // Grip
+  const grip = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.2, 0.06), darkMat);
+  grip.position.set(0.4, -0.2, 0);
+  grip.rotation.z = -0.25;
+  group.add(grip);
+  // Rear shoulder rest
+  const rest = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.12, 0.14), darkMat);
+  rest.position.set(0.58, -0.02, 0);
+  group.add(rest);
+  // Status LEDs
+  for (let i = 0; i < 4; i++) {
+    const led = new THREE.Mesh(
+      new THREE.SphereGeometry(0.007, 6, 6),
+      glowMat(i === 0 ? 0x00ff44 : (i === 1 ? 0xffaa00 : accent), 0.9)
+    );
+    led.position.set(0.25 + i * 0.03, 0.02, 0.1);
+    group.add(led);
+  }
+
+  group.rotation.set(0.1, 0.4, 0);
   return group;
 }
