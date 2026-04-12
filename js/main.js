@@ -10,6 +10,12 @@ import { HelpGuide } from './help.js';
 import { VFXManager } from './vfx.js';
 import { LEVELS } from './levels.js';
 import { ALIEN_TYPES } from './aliens.js';
+import { disposeTree } from './particles.js';
+
+// Dispose a rocket projectile mesh + its GPU buffers.
+function _disposeProjectile(mesh) {
+  disposeTree(mesh);
+}
 
 // ===== GAME STATE =====
 const GameState = {
@@ -474,16 +480,13 @@ function loadLevel(index) {
   // Clean up previous level
   if (currentLevelData) {
     scene.remove(currentLevelData.group);
+    // Dispose all GPU buffers from the old level (buildings, cars, props)
+    disposeTree(currentLevelData.group);
     // Remove fog and lights from scene
     scene.fog = null;
-    // Remove all non-essential objects
-    const toRemove = [];
-    scene.traverse(child => {
-      if (child !== camera && child.type !== 'Scene') {
-        toRemove.push(child);
-      }
-    });
-    // Actually just rebuild the scene
+    // Dispose any remaining GPU resources on scene before rebuilding
+    disposeTree(scene);
+    // Rebuild the scene
     scene = new THREE.Scene();
     controls.camera = camera;
     particles.scene = scene;
@@ -493,6 +496,9 @@ function loadLevel(index) {
     waveManager.cleanup();
     // Clear any in-flight rocket projectiles (they reference the old scene)
     if (weapons && weapons.projectiles) {
+      for (const p of weapons.projectiles) {
+        if (p.mesh) _disposeProjectile(p.mesh);
+      }
       weapons.projectiles.length = 0;
     }
     weapons.scene = scene;

@@ -1,6 +1,8 @@
 // vfx.js - Screen-space visual effects: shake, hit markers, damage numbers,
 //          kill feed, low-health vignette, alien death/spawn VFX, environment particles
 
+import { disposeTree } from './particles.js';
+
 export class VFXManager {
   constructor(camera, scene) {
     this.camera = camera;
@@ -340,6 +342,7 @@ export class VFXManager {
 
       if (d.life <= 0) {
         this.scene.remove(d.group);
+        disposeTree(d.group);
         this.deathEffects.splice(i, 1);
       }
     }
@@ -453,6 +456,7 @@ export class VFXManager {
 
       if (s.life <= 0) {
         this.scene.remove(s.group);
+        disposeTree(s.group);
         this.spawnEffects.splice(i, 1);
       }
     }
@@ -617,11 +621,23 @@ export class VFXManager {
   }
 
   cleanup() {
-    // Remove 3D effects
-    for (const d of this.deathEffects) this.scene.remove(d.group);
-    for (const s of this.spawnEffects) this.scene.remove(s.group);
-    if (this.envParticles) this.scene.remove(this.envParticles);
-    if (this._envParticles2) this.scene.remove(this._envParticles2);
+    // Remove and dispose 3D effects
+    for (const d of this.deathEffects) {
+      this.scene.remove(d.group);
+      disposeTree(d.group);
+    }
+    for (const s of this.spawnEffects) {
+      this.scene.remove(s.group);
+      disposeTree(s.group);
+    }
+    if (this.envParticles) {
+      this.scene.remove(this.envParticles);
+      disposeTree(this.envParticles);
+    }
+    if (this._envParticles2) {
+      this.scene.remove(this._envParticles2);
+      disposeTree(this._envParticles2);
+    }
     this.deathEffects = [];
     this.spawnEffects = [];
     this.envParticles = null;

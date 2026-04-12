@@ -14,6 +14,29 @@ function glowMat(color, opacity = 1.0) {
   });
 }
 
+// Recursively dispose all geometries and materials in a subtree. Essential to
+// prevent GPU buffer leaks: Three.js does NOT auto-free GPU resources when a
+// mesh is removed from the scene — you must dispose() explicitly. Without this
+// the game leaks VBOs/textures on every shot, causing frame rate to degrade.
+export function disposeTree(obj) {
+  if (!obj) return;
+  obj.traverse((child) => {
+    if (child.geometry && !child.geometry.__shared) {
+      child.geometry.dispose();
+    }
+    const mat = child.material;
+    if (mat) {
+      if (Array.isArray(mat)) {
+        for (const m of mat) {
+          if (m && !m.__shared) m.dispose();
+        }
+      } else if (!mat.__shared) {
+        mat.dispose();
+      }
+    }
+  });
+}
+
 export class ParticleSystem {
   constructor(scene) {
     this.scene = scene;
@@ -757,13 +780,18 @@ export class ParticleSystem {
         }
         if (b.boltProgress >= 1 || b.life <= 0) {
           this.scene.remove(b.bolt);
+          disposeTree(b.bolt);
           b.bolt = null;
         }
       }
 
       if (b.life <= 0) {
         this.scene.remove(b.mesh);
-        if (b.bolt) this.scene.remove(b.bolt);
+        disposeTree(b.mesh);
+        if (b.bolt) {
+          this.scene.remove(b.bolt);
+          disposeTree(b.bolt);
+        }
         this.beams.splice(i, 1);
       }
     }
@@ -802,6 +830,7 @@ export class ParticleSystem {
 
       if (imp.life <= 0) {
         this.scene.remove(imp.group);
+        disposeTree(imp.group);
         this.impacts.splice(i, 1);
       }
     }
@@ -946,6 +975,7 @@ export class ParticleSystem {
 
       if (e.life <= 0) {
         this.scene.remove(e.group);
+        disposeTree(e.group);
         this.explosions.splice(i, 1);
       }
     }
@@ -955,21 +985,42 @@ export class ParticleSystem {
       const m = this.muzzleFlashes[i];
       m.life -= delta;
       if (m.life <= 0) {
-        if (m.group) this.scene.remove(m.group);
-        else if (m.light) this.scene.remove(m.light);
+        if (m.group) {
+          this.scene.remove(m.group);
+          disposeTree(m.group);
+        } else if (m.light) {
+          this.scene.remove(m.light);
+        }
         this.muzzleFlashes.splice(i, 1);
       }
     }
   }
 
   cleanup() {
-    this.beams.forEach(b => this.scene.remove(b.mesh));
-    this.explosions.forEach(e => this.scene.remove(e.group));
-    this.muzzleFlashes.forEach(m => {
-      if (m.group) this.scene.remove(m.group);
-      else if (m.light) this.scene.remove(m.light);
+    this.beams.forEach(b => {
+      this.scene.remove(b.mesh);
+      disposeTree(b.mesh);
+      if (b.bolt) {
+        this.scene.remove(b.bolt);
+        disposeTree(b.bolt);
+      }
     });
-    this.impacts.forEach(imp => this.scene.remove(imp.group));
+    this.explosions.forEach(e => {
+      this.scene.remove(e.group);
+      disposeTree(e.group);
+    });
+    this.muzzleFlashes.forEach(m => {
+      if (m.group) {
+        this.scene.remove(m.group);
+        disposeTree(m.group);
+      } else if (m.light) {
+        this.scene.remove(m.light);
+      }
+    });
+    this.impacts.forEach(imp => {
+      this.scene.remove(imp.group);
+      disposeTree(imp.group);
+    });
     this.beams = [];
     this.explosions = [];
     this.muzzleFlashes = [];

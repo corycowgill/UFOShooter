@@ -1,4 +1,6 @@
 // aliens.js - Three alien types with procedural models and AI
+import { disposeTree } from './particles.js';
+
 export const ALIEN_TYPES = {
   grunt: {
     name: 'Grunt Alien',
@@ -3156,6 +3158,7 @@ export class Alien {
       if (Math.random() < delta * 3) {
         if (!Alien._sparkGeo) {
           Alien._sparkGeo = new THREE.BoxGeometry(0.02, 0.02, 0.06);
+          Alien._sparkGeo.__shared = true;
         }
         const sparkMesh = new THREE.Mesh(
           Alien._sparkGeo,
@@ -3344,6 +3347,7 @@ export class Alien {
 
       if (bolt.life <= 0) {
         this.scene.remove(bolt.mesh);
+        disposeTree(bolt.mesh);
         this.projectiles.splice(i, 1);
         continue;
       }
@@ -3380,8 +3384,11 @@ export class Alien {
     this.deathTimer = 1.0;
     this.audio.playAlienDeath();
 
-    // Clean up projectiles
-    this.projectiles.forEach(p => this.scene.remove(p.mesh));
+    // Clean up projectiles (dispose their GPU buffers)
+    this.projectiles.forEach(p => {
+      this.scene.remove(p.mesh);
+      disposeTree(p.mesh);
+    });
     this.projectiles = [];
 
     // Bloater explodes on death
@@ -3421,6 +3428,7 @@ export class Alien {
       if (bolt.mesh.position.distanceToSquared(playerPos) < hitRadiusSq) {
         const dmg = bolt.damage;
         this.scene.remove(bolt.mesh);
+        disposeTree(bolt.mesh);
         this.projectiles.splice(i, 1);
         return { damage: dmg, type: 'projectile' };
       }
@@ -3430,10 +3438,18 @@ export class Alien {
   }
 
   cleanup() {
-    this.projectiles.forEach(p => this.scene.remove(p.mesh));
-    this._damageSmoke.forEach(s => this.mesh.remove(s));
+    this.projectiles.forEach(p => {
+      this.scene.remove(p.mesh);
+      disposeTree(p.mesh);
+    });
+    this.projectiles = [];
+    this._damageSmoke.forEach(s => {
+      this.mesh.remove(s);
+      if (s.material) s.material.dispose();
+    });
     this._damageSmoke = [];
     this.scene.remove(this.mesh);
+    disposeTree(this.mesh);
   }
 
   getBoundingSphere() {

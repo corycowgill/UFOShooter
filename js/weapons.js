@@ -1,4 +1,6 @@
 // weapons.js - Three weapon types: Laser Rifle, Laser Sword, Sniper Laser Rifle
+import { disposeTree } from './particles.js';
+
 export const WEAPONS = {
   laserRifle: {
     name: 'LASER RIFLE',
@@ -1808,9 +1810,14 @@ export class WeaponManager {
     for (let i = this.projectiles.length - 1; i >= 0; i--) {
       const p = this.projectiles[i];
       p.age += delta;
-      const step = p.velocity.clone().multiplyScalar(delta);
-      p.position.add(step);
-      p.distanceTraveled += step.length();
+      // Inline velocity * delta without allocating a new Vector3 each frame
+      const stepX = p.velocity.x * delta;
+      const stepY = p.velocity.y * delta;
+      const stepZ = p.velocity.z * delta;
+      p.position.x += stepX;
+      p.position.y += stepY;
+      p.position.z += stepZ;
+      p.distanceTraveled += Math.sqrt(stepX * stepX + stepY * stepY + stepZ * stepZ);
       p.mesh.position.copy(p.position);
 
       // Animate core/halo pulsing
@@ -1844,6 +1851,7 @@ export class WeaponManager {
       if (hitEnemy || hitGround || outOfRange) {
         this._detonateRocket(p, enemies);
         this.scene.remove(p.mesh);
+        disposeTree(p.mesh);
         this.projectiles.splice(i, 1);
       }
     }
