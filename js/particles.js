@@ -1,4 +1,19 @@
 // particles.js - Enhanced laser beams, explosions, muzzle flashes, sword slashes
+
+// Additive glow material: transparent + additive blending for bright HDR-feel
+// highlights on lasers, bolts, sparks, muzzle flashes. Depth-write off so they
+// stack correctly.
+function glowMat(color, opacity = 1.0) {
+  return new THREE.MeshBasicMaterial({
+    color,
+    transparent: true,
+    opacity,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    toneMapped: false,
+  });
+}
+
 export class ParticleSystem {
   constructor(scene) {
     this.scene = scene;
@@ -12,15 +27,10 @@ export class ParticleSystem {
     const dir = new THREE.Vector3().subVectors(to, from);
     const len = dir.length();
 
-    // Core beam - bright white center
+    // Core beam - bright white center (additive)
     const coreGeo = new THREE.CylinderGeometry(width, width, len, 8);
     coreGeo.rotateX(Math.PI / 2);
-    const coreMat = new THREE.MeshBasicMaterial({
-      color: 0xffffff,
-      transparent: true,
-      opacity: 1.0,
-    });
-    const core = new THREE.Mesh(coreGeo, coreMat);
+    const core = new THREE.Mesh(coreGeo, glowMat(0xffffff, 1.0));
     const mid = new THREE.Vector3().addVectors(from, to).multiplyScalar(0.5);
     core.position.copy(mid);
     core.lookAt(to);
@@ -28,22 +38,12 @@ export class ParticleSystem {
     // Inner glow layer
     const innerGeo = new THREE.CylinderGeometry(width * 2.5, width * 2.5, len, 8);
     innerGeo.rotateX(Math.PI / 2);
-    const innerMat = new THREE.MeshBasicMaterial({
-      color: color,
-      transparent: true,
-      opacity: 0.6,
-    });
-    core.add(new THREE.Mesh(innerGeo, innerMat));
+    core.add(new THREE.Mesh(innerGeo, glowMat(color, 0.7)));
 
     // Outer glow layer
     const outerGeo = new THREE.CylinderGeometry(width * 5, width * 5, len, 8);
     outerGeo.rotateX(Math.PI / 2);
-    const outerMat = new THREE.MeshBasicMaterial({
-      color: color,
-      transparent: true,
-      opacity: 0.15,
-    });
-    core.add(new THREE.Mesh(outerGeo, outerMat));
+    core.add(new THREE.Mesh(outerGeo, glowMat(color, 0.22)));
 
     this.scene.add(core);
     this.beams.push({ mesh: core, life: duration, maxLife: duration });
@@ -61,7 +61,7 @@ export class ParticleSystem {
     // Central flash
     const flash = new THREE.Mesh(
       new THREE.SphereGeometry(0.15, 8, 8),
-      new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 1 })
+      glowMat(0xffffff, 1)
     );
     group.add(flash);
 
@@ -70,7 +70,7 @@ export class ParticleSystem {
     for (let i = 0; i < 6; i++) {
       const spark = new THREE.Mesh(
         new THREE.BoxGeometry(0.02, 0.02, 0.12),
-        new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.9 })
+        glowMat(color, 0.95)
       );
       spark.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
       spark.velocity = new THREE.Vector3(
@@ -95,25 +95,25 @@ export class ParticleSystem {
       // Acid glob - larger, dripping, yellow-green
       const core = new THREE.Mesh(
         new THREE.SphereGeometry(0.12, 8, 8),
-        new THREE.MeshBasicMaterial({ color: 0xaaff00 })
+        glowMat(0xccff33, 1)
       );
       core.scale.set(0.8, 1, 1.5);
       boltGroup.add(core);
       const innerGlow = new THREE.Mesh(
         new THREE.SphereGeometry(0.2, 8, 8),
-        new THREE.MeshBasicMaterial({ color: 0x88cc00, transparent: true, opacity: 0.5 })
+        glowMat(0x88cc00, 0.6)
       );
       boltGroup.add(innerGlow);
       const outerGlow = new THREE.Mesh(
         new THREE.SphereGeometry(0.35, 6, 6),
-        new THREE.MeshBasicMaterial({ color: 0x66aa00, transparent: true, opacity: 0.15 })
+        glowMat(0x66aa00, 0.2)
       );
       boltGroup.add(outerGlow);
       // Dripping acid trail
       for (let i = 1; i <= 5; i++) {
         const drip = new THREE.Mesh(
           new THREE.SphereGeometry(0.04 + (0.08 / i), 4, 4),
-          new THREE.MeshBasicMaterial({ color: 0xaaff00, transparent: true, opacity: 0.6 / i })
+          glowMat(0xaaff00, 0.7 / i)
         );
         drip.position.set((Math.random() - 0.5) * 0.1, (Math.random() - 0.5) * 0.1, -i * 0.2);
         boltGroup.add(drip);
@@ -122,13 +122,13 @@ export class ParticleSystem {
       // Rapid energy pulse - small, fast, blue-white
       const core = new THREE.Mesh(
         new THREE.SphereGeometry(0.06, 6, 6),
-        new THREE.MeshBasicMaterial({ color: 0xaaddff })
+        glowMat(0xddeeff, 1)
       );
       core.scale.set(1, 1, 3);
       boltGroup.add(core);
       const glow = new THREE.Mesh(
         new THREE.SphereGeometry(0.12, 6, 6),
-        new THREE.MeshBasicMaterial({ color: 0x4488ff, transparent: true, opacity: 0.4 })
+        glowMat(0x4488ff, 0.5)
       );
       glow.scale.set(1, 1, 2);
       boltGroup.add(glow);
@@ -136,7 +136,7 @@ export class ParticleSystem {
       for (let i = 0; i < 3; i++) {
         const crackle = new THREE.Mesh(
           new THREE.BoxGeometry(0.015, 0.015, 0.25),
-          new THREE.MeshBasicMaterial({ color: 0x88ccff, transparent: true, opacity: 0.6 })
+          glowMat(0x88ccff, 0.8)
         );
         crackle.rotation.set(Math.random() * 0.5, 0, Math.random() * Math.PI);
         boltGroup.add(crackle);
@@ -145,26 +145,26 @@ export class ParticleSystem {
       // Standard green energy bolt (grunt)
       const core = new THREE.Mesh(
         new THREE.SphereGeometry(0.08, 8, 8),
-        new THREE.MeshBasicMaterial({ color: 0x66ff66 })
+        glowMat(0xaaffaa, 1)
       );
       core.scale.set(1, 1, 2);
       boltGroup.add(core);
       const innerGlow = new THREE.Mesh(
         new THREE.SphereGeometry(0.15, 8, 8),
-        new THREE.MeshBasicMaterial({ color: 0x00ff00, transparent: true, opacity: 0.5 })
+        glowMat(0x00ff00, 0.6)
       );
       innerGlow.scale.set(1, 1, 1.5);
       boltGroup.add(innerGlow);
       const outerGlow = new THREE.Mesh(
         new THREE.SphereGeometry(0.3, 6, 6),
-        new THREE.MeshBasicMaterial({ color: 0x00ff00, transparent: true, opacity: 0.15 })
+        glowMat(0x00ff00, 0.2)
       );
       boltGroup.add(outerGlow);
       // Trail particles
       for (let i = 1; i <= 3; i++) {
         const trail = new THREE.Mesh(
           new THREE.SphereGeometry(0.05 / i, 4, 4),
-          new THREE.MeshBasicMaterial({ color: 0x00ff00, transparent: true, opacity: 0.4 / i })
+          glowMat(0x00ff00, 0.5 / i)
         );
         trail.position.z = -i * 0.15;
         boltGroup.add(trail);
@@ -187,8 +187,7 @@ export class ParticleSystem {
     // Bright core beam
     const coreGeo = new THREE.CylinderGeometry(0.015, 0.015, len, 8);
     coreGeo.rotateX(Math.PI / 2);
-    const coreMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 1 });
-    const core = new THREE.Mesh(coreGeo, coreMat);
+    const core = new THREE.Mesh(coreGeo, glowMat(0xffffff, 1));
     const mid = new THREE.Vector3().addVectors(from, to).multiplyScalar(0.5);
     core.position.copy(mid);
     core.lookAt(to);
@@ -196,26 +195,22 @@ export class ParticleSystem {
     // Inner glow
     const innerGeo = new THREE.CylinderGeometry(0.04, 0.04, len, 8);
     innerGeo.rotateX(Math.PI / 2);
-    core.add(new THREE.Mesh(innerGeo, new THREE.MeshBasicMaterial({
-      color, transparent: true, opacity: 0.7
-    })));
+    core.add(new THREE.Mesh(innerGeo, glowMat(color, 0.8)));
 
     // Wide outer glow
     const outerGeo = new THREE.CylinderGeometry(0.1, 0.1, len, 8);
     outerGeo.rotateX(Math.PI / 2);
-    core.add(new THREE.Mesh(outerGeo, new THREE.MeshBasicMaterial({
-      color, transparent: true, opacity: 0.12
-    })));
+    core.add(new THREE.Mesh(outerGeo, glowMat(color, 0.18)));
 
     // Traveling bolt along beam path
     const bolt = new THREE.Mesh(
       new THREE.SphereGeometry(0.08, 8, 8),
-      new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 1 })
+      glowMat(0xffffff, 1)
     );
     bolt.scale.set(1, 1, 4);
     const boltGlow = new THREE.Mesh(
       new THREE.SphereGeometry(0.2, 6, 6),
-      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.5 })
+      glowMat(color, 0.6)
     );
     bolt.add(boltGlow);
     bolt.position.copy(from);

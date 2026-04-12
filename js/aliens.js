@@ -76,6 +76,55 @@ export const ALIEN_TYPES = {
   },
 };
 
+// Fresnel rim-light shader patch: injects an edge glow into MeshPhongMaterial
+// so alien silhouettes visibly glow against dark scenes.
+function applyRimLight(material, rimColorHex, rimIntensity = 0.9, rimPower = 2.2) {
+  const rimColor = new THREE.Color(rimColorHex);
+  material.onBeforeCompile = (shader) => {
+    shader.uniforms.rimColor = { value: rimColor };
+    shader.uniforms.rimIntensity = { value: rimIntensity };
+    shader.uniforms.rimPower = { value: rimPower };
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        '#include <common>',
+        `#include <common>
+         uniform vec3 rimColor;
+         uniform float rimIntensity;
+         uniform float rimPower;`
+      )
+      .replace(
+        '#include <output_fragment>',
+        `float rimDot = 1.0 - max(0.0, dot(normalize(vViewPosition), normal));
+         float rim = pow(rimDot, rimPower) * rimIntensity;
+         outgoingLight += rimColor * rim;
+         #include <output_fragment>`
+      );
+  };
+  material.customProgramCacheKey = () =>
+    'rim_' + rimColor.getHexString() + '_' + rimIntensity.toFixed(2) + '_' + rimPower.toFixed(2);
+  material.needsUpdate = true;
+}
+
+// Walk a group and rim-light every phong material found.
+function rimLightGroup(group, rimColorHex, intensity = 0.9, power = 2.2) {
+  const patched = new WeakSet();
+  group.traverse(child => {
+    const mat = child.material;
+    if (!mat) return;
+    if (Array.isArray(mat)) {
+      mat.forEach(m => {
+        if (m && m.isMeshPhongMaterial && !patched.has(m)) {
+          applyRimLight(m, rimColorHex, intensity, power);
+          patched.add(m);
+        }
+      });
+    } else if (mat.isMeshPhongMaterial && !patched.has(mat)) {
+      applyRimLight(mat, rimColorHex, intensity, power);
+      patched.add(mat);
+    }
+  });
+}
+
 export function createAlienModel(type) {
   const data = ALIEN_TYPES[type];
   const group = new THREE.Group();
@@ -2856,6 +2905,18 @@ export function createAlienModel(type) {
     bottomVortex2.rotation.x = Math.PI / 2;
     group.add(bottomVortex2);
   }
+
+  // Per-type rim light color: pulls from the alien's signature color, but
+  // boosted toward saturated hues so silhouettes pop against dark levels.
+  const rimColorMap = {
+    grunt:   0x22ff66,
+    swarmer: 0xbb44ff,
+    bloater: 0xff6622,
+    stalker: 0x00ffff,
+    spitter: 0xaaff00,
+    drone:   0x66bbff,
+  };
+  rimLightGroup(group, rimColorMap[type] || data.color, 1.0, 2.0);
 
   return group;
 }
