@@ -9,6 +9,16 @@ function makeMaterial(color, emissive = 0x000000) {
   return new THREE.MeshPhongMaterial({ color, emissive });
 }
 
+// Freeze static level geometry: compute world matrices once, then disable
+// per-frame matrix auto-updates. Huge savings on scene.updateMatrixWorld()
+// since static buildings, ground, roads, etc. never move.
+function freezeStaticGroup(group) {
+  group.updateMatrixWorld(true);
+  group.traverse(child => {
+    child.matrixAutoUpdate = false;
+  });
+}
+
 function makeBox(w, h, d, color, x, y, z) {
   const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), makeMaterial(color));
   mesh.position.set(x, y + h / 2, z);
@@ -1901,6 +1911,7 @@ function buildDowntownChicago(scene) {
   }
 
   scene.add(group);
+  freezeStaticGroup(group);
   return { group, colliders, ufo, spawnPoints: generateSpawnPoints(80) };
 }
 
@@ -2174,6 +2185,7 @@ function buildLincolnParkZoo(scene) {
   }
 
   scene.add(group);
+  freezeStaticGroup(group);
   return { group, colliders, ufo, spawnPoints: generateSpawnPoints(70) };
 }
 
@@ -2577,6 +2589,7 @@ function buildRavenswood(scene) {
   }
 
   scene.add(group);
+  freezeStaticGroup(group);
   return { group, colliders, ufo, spawnPoints: generateSpawnPoints(75) };
 }
 

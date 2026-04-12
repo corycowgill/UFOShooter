@@ -2603,10 +2603,12 @@ export class Alien {
 
   checkPlayerCollision(playerPos, delta) {
     if (this.dead) return null;
-    const dist = this.mesh.position.distanceTo(playerPos);
+    // Use squared distance to avoid sqrt
+    const distSq = this.mesh.position.distanceToSquared(playerPos);
+    const attackRangeSq = this.data.attackRange * this.data.attackRange;
 
     // Swarmer/Stalker melee attack
-    if ((this.type === 'swarmer' || this.type === 'stalker') && dist < this.data.attackRange) {
+    if ((this.type === 'swarmer' || this.type === 'stalker') && distSq < attackRangeSq) {
       this.meleeCooldown = (this.meleeCooldown || 0) - (delta || 0.016);
       if (this.meleeCooldown <= 0) {
         this.meleeCooldown = this.data.attackRate;
@@ -2616,16 +2618,16 @@ export class Alien {
     }
 
     // Bloater explosion
-    if (this.type === 'bloater' && dist < this.data.attackRange) {
+    if (this.type === 'bloater' && distSq < attackRangeSq) {
       this.die();
       return { damage: this.data.damage, type: 'explosion', radius: this.data.explosionRadius };
     }
 
     // Check projectile hits (this is the authoritative check)
+    const hitRadiusSq = 1.5 * 1.5;
     for (let i = this.projectiles.length - 1; i >= 0; i--) {
       const bolt = this.projectiles[i];
-      const boltDist = bolt.mesh.position.distanceTo(playerPos);
-      if (boltDist < 1.5) {
+      if (bolt.mesh.position.distanceToSquared(playerPos) < hitRadiusSq) {
         const dmg = bolt.damage;
         this.scene.remove(bolt.mesh);
         this.projectiles.splice(i, 1);

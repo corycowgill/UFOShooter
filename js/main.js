@@ -519,10 +519,12 @@ function processHit(hit) {
       if (vfx) vfx.shake(0.15, 0.3);
 
       // Damage nearby enemies
+      const radiusSq = radius * radius;
       for (const other of waveManager.enemies) {
         if (other === hit.enemy || other.dead) continue;
-        const dist = other.mesh.position.distanceTo(pos);
-        if (dist < radius) {
+        const distSq = other.mesh.position.distanceToSquared(pos);
+        if (distSq < radiusSq) {
+          const dist = Math.sqrt(distSq);
           const dmg = ALIEN_TYPES.bloater.damage * (1 - dist / radius);
           const chainKill = other.takeDamage(dmg);
           if (chainKill) {

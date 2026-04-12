@@ -60,6 +60,9 @@ export class WeaponManager {
     this._tmpEnd = new THREE.Vector3();
     this._tmpToEnemy = new THREE.Vector3();
     this._tmpRaycaster = new THREE.Raycaster();
+    this._tmpSphere = new THREE.Sphere();
+    // Rough bounding radius by alien type (for ray prefilter)
+    this._alienRadius = { bloater: 1.5, grunt: 0.9, spitter: 1.0, drone: 0.7, stalker: 0.9, swarmer: 0.6 };
 
     this._initWeaponView();
   }
@@ -1322,12 +1325,21 @@ export class WeaponManager {
     raycaster.set(origin, dir);
     raycaster.near = 0;
     raycaster.far = weapon.range;
+    const ray = raycaster.ray;
+    const sphere = this._tmpSphere;
     let closestHit = null;
     let closestDist = Infinity;
 
     for (let i = 0, n = enemies.length; i < n; i++) {
       const enemy = enemies[i];
       if (enemy.dead) continue;
+      // Cheap bounding-sphere prefilter: skip deep raycast if the ray
+      // cannot possibly intersect the enemy's rough bounds.
+      const r = this._alienRadius[enemy.type] || 1.0;
+      sphere.center.copy(enemy.mesh.position);
+      sphere.center.y += 0.8;
+      sphere.radius = r + 0.3;
+      if (!ray.intersectsSphere(sphere)) continue;
       const intersects = raycaster.intersectObject(enemy.mesh, true);
       if (intersects.length > 0 && intersects[0].distance < closestDist) {
         closestDist = intersects[0].distance;
