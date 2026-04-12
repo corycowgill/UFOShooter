@@ -466,25 +466,30 @@ export class VFXManager {
     if (this.envParticles) {
       this.scene.remove(this.envParticles);
     }
+    if (this._envParticles2) {
+      this.scene.remove(this._envParticles2);
+      this._envParticles2 = null;
+    }
 
-    const count = 200;
+    // Primary particles - increased count
+    const count = 350;
     const geo = new THREE.BufferGeometry();
     const positions = new Float32Array(count * 3);
     const velocities = new Float32Array(count * 3);
 
     for (let i = 0; i < count; i++) {
-      positions[i * 3] = (Math.random() - 0.5) * 60;
-      positions[i * 3 + 1] = Math.random() * 15;
-      positions[i * 3 + 2] = (Math.random() - 0.5) * 60;
+      positions[i * 3] = (Math.random() - 0.5) * 80;
+      positions[i * 3 + 1] = Math.random() * 18;
+      positions[i * 3 + 2] = (Math.random() - 0.5) * 80;
 
       if (type === 'embers') {
-        velocities[i * 3] = (Math.random() - 0.5) * 0.3;
-        velocities[i * 3 + 1] = 0.5 + Math.random() * 1.0;
-        velocities[i * 3 + 2] = (Math.random() - 0.5) * 0.3;
+        velocities[i * 3] = (Math.random() - 0.5) * 0.4;
+        velocities[i * 3 + 1] = 0.5 + Math.random() * 1.2;
+        velocities[i * 3 + 2] = (Math.random() - 0.5) * 0.4;
       } else {
-        velocities[i * 3] = (Math.random() - 0.5) * 0.5;
+        velocities[i * 3] = (Math.random() - 0.5) * 0.6;
         velocities[i * 3 + 1] = -0.1 + Math.random() * 0.2;
-        velocities[i * 3 + 2] = (Math.random() - 0.5) * 0.5;
+        velocities[i * 3 + 2] = (Math.random() - 0.5) * 0.6;
       }
     }
 
@@ -503,6 +508,30 @@ export class VFXManager {
 
     this.envParticles = new THREE.Points(geo, mat);
     this.scene.add(this.envParticles);
+
+    // Secondary particle layer - ash/debris floating (always present)
+    const count2 = 120;
+    const geo2 = new THREE.BufferGeometry();
+    const pos2 = new Float32Array(count2 * 3);
+    const vel2 = new Float32Array(count2 * 3);
+    for (let i = 0; i < count2; i++) {
+      pos2[i * 3] = (Math.random() - 0.5) * 70;
+      pos2[i * 3 + 1] = 1 + Math.random() * 10;
+      pos2[i * 3 + 2] = (Math.random() - 0.5) * 70;
+      vel2[i * 3] = (Math.random() - 0.5) * 0.3;
+      vel2[i * 3 + 1] = -0.05 + Math.random() * 0.15;
+      vel2[i * 3 + 2] = (Math.random() - 0.5) * 0.3;
+    }
+    geo2.setAttribute('position', new THREE.Float32BufferAttribute(pos2, 3));
+    geo2.userData.velocities = vel2;
+    const mat2 = new THREE.PointsMaterial({
+      color: 0x555544,
+      size: 0.12,
+      transparent: true,
+      opacity: 0.2,
+    });
+    this._envParticles2 = new THREE.Points(geo2, mat2);
+    this.scene.add(this._envParticles2);
   }
 
   _updateEnvironmentParticles(delta) {
@@ -538,6 +567,39 @@ export class VFXManager {
     }
 
     this.envParticles.geometry.attributes.position.needsUpdate = true;
+
+    // Update secondary ash/debris particles
+    if (this._envParticles2) {
+      const pos2 = this._envParticles2.geometry.attributes.position.array;
+      const vel2 = this._envParticles2.geometry.userData.velocities;
+      const time = performance.now() * 0.001;
+
+      for (let i = 0; i < pos2.length / 3; i++) {
+        const idx = i * 3;
+        pos2[idx] += vel2[idx] * delta;
+        pos2[idx + 1] += vel2[idx + 1] * delta;
+        pos2[idx + 2] += vel2[idx + 2] * delta;
+
+        // Gentle swaying drift
+        pos2[idx] += Math.sin(time * 0.5 + i * 1.7) * 0.002;
+        pos2[idx + 1] += Math.cos(time * 0.3 + i * 2.1) * 0.001;
+
+        // Respawn if too far from camera or out of bounds
+        const dx2 = pos2[idx] - camPos.x;
+        const dz2 = pos2[idx + 2] - camPos.z;
+        const dist2 = Math.sqrt(dx2 * dx2 + dz2 * dz2);
+
+        if (dist2 > 35 || pos2[idx + 1] > 14 || pos2[idx + 1] < -0.5) {
+          const angle2 = Math.random() * Math.PI * 2;
+          const r2 = 4 + Math.random() * 28;
+          pos2[idx] = camPos.x + Math.cos(angle2) * r2;
+          pos2[idx + 1] = 0.5 + Math.random() * 10;
+          pos2[idx + 2] = camPos.z + Math.sin(angle2) * r2;
+        }
+      }
+
+      this._envParticles2.geometry.attributes.position.needsUpdate = true;
+    }
   }
 
   // ========================
@@ -559,9 +621,11 @@ export class VFXManager {
     for (const d of this.deathEffects) this.scene.remove(d.group);
     for (const s of this.spawnEffects) this.scene.remove(s.group);
     if (this.envParticles) this.scene.remove(this.envParticles);
+    if (this._envParticles2) this.scene.remove(this._envParticles2);
     this.deathEffects = [];
     this.spawnEffects = [];
     this.envParticles = null;
+    this._envParticles2 = null;
 
     // Clear DOM elements
     for (const dn of this.damageNumbers) dn.el.remove();

@@ -768,16 +768,65 @@ function addGround(group, size, color = 0x333333) {
   const gridStep = 4;
   const gridMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.08 });
   for (let i = -size; i <= size; i += gridStep) {
-    // Horizontal lines
     const hLine = new THREE.Mesh(new THREE.PlaneGeometry(gridSize, 0.03), gridMat);
     hLine.rotation.x = -Math.PI / 2;
     hLine.position.set(0, 0.005, i);
     group.add(hLine);
-    // Vertical lines
     const vLine = new THREE.Mesh(new THREE.PlaneGeometry(0.03, gridSize), gridMat);
     vLine.rotation.x = -Math.PI / 2;
     vLine.position.set(i, 0.005, 0);
     group.add(vLine);
+  }
+
+  // Ground surface variation - stains, cracks, worn patches
+  const stainMat = new THREE.MeshBasicMaterial({ color: 0x1a1a1a, transparent: true, opacity: 0.12 });
+  const crackMat = new THREE.MeshBasicMaterial({ color: 0x111111, transparent: true, opacity: 0.15 });
+  const wetMat = new THREE.MeshBasicMaterial({ color: 0x222233, transparent: true, opacity: 0.08 });
+
+  // Scattered dark stains
+  for (let i = 0; i < 25; i++) {
+    const sx = (Math.random() - 0.5) * size * 1.6;
+    const sz = (Math.random() - 0.5) * size * 1.6;
+    const ss = 1 + Math.random() * 3;
+    const stain = new THREE.Mesh(new THREE.CircleGeometry(ss, 6), stainMat);
+    stain.rotation.x = -Math.PI / 2;
+    stain.position.set(sx, 0.006, sz);
+    stain.scale.set(1 + Math.random() * 0.5, 1, 1 + Math.random() * 0.5);
+    stain.rotation.z = Math.random() * Math.PI;
+    group.add(stain);
+  }
+
+  // Crack lines
+  for (let i = 0; i < 15; i++) {
+    const cx = (Math.random() - 0.5) * size * 1.4;
+    const cz = (Math.random() - 0.5) * size * 1.4;
+    const cLen = 2 + Math.random() * 6;
+    const cAngle = Math.random() * Math.PI;
+    const crack = new THREE.Mesh(new THREE.PlaneGeometry(cLen, 0.04), crackMat);
+    crack.rotation.x = -Math.PI / 2;
+    crack.rotation.z = cAngle;
+    crack.position.set(cx, 0.007, cz);
+    group.add(crack);
+    // Branch crack
+    if (Math.random() > 0.5) {
+      const branch = new THREE.Mesh(new THREE.PlaneGeometry(cLen * 0.5, 0.03), crackMat);
+      branch.rotation.x = -Math.PI / 2;
+      branch.rotation.z = cAngle + 0.5 + Math.random() * 0.5;
+      branch.position.set(cx + Math.cos(cAngle) * cLen * 0.3, 0.007, cz + Math.sin(cAngle) * cLen * 0.3);
+      group.add(branch);
+    }
+  }
+
+  // Wet/reflective puddle patches
+  for (let i = 0; i < 8; i++) {
+    const px = (Math.random() - 0.5) * size * 1.2;
+    const pz = (Math.random() - 0.5) * size * 1.2;
+    const ps = 1.5 + Math.random() * 2.5;
+    const puddle = new THREE.Mesh(new THREE.CircleGeometry(ps, 8), wetMat);
+    puddle.rotation.x = -Math.PI / 2;
+    puddle.position.set(px, 0.008, pz);
+    puddle.scale.set(1 + Math.random() * 0.8, 1, 1 + Math.random() * 0.3);
+    group.add(puddle);
   }
 }
 
@@ -788,11 +837,17 @@ function addSky(scene) {
   const posAttr = skyGeo.attributes.position;
   for (let i = 0; i < posAttr.count; i++) {
     const y = posAttr.getY(i);
+    const x = posAttr.getX(i);
+    const z = posAttr.getZ(i);
     const t = (y / 500 + 1) * 0.5; // 0 at bottom, 1 at top
-    // Gradient: dark purple-brown at horizon -> deep blue-black at zenith
-    const r = 0.04 + (1 - t) * 0.06;
-    const g = 0.03 + (1 - t) * 0.02;
-    const b = 0.12 + t * 0.06;
+    // Base gradient: dark purple-brown at horizon -> deep blue-black at zenith
+    let r = 0.04 + (1 - t) * 0.06;
+    let g = 0.03 + (1 - t) * 0.02;
+    let b = 0.12 + t * 0.06;
+    // Add subtle color variation based on direction (warmer toward UFO, cooler away)
+    const dirAngle = Math.atan2(x, z);
+    r += Math.max(0, Math.sin(dirAngle + 0.5)) * 0.02 * t;
+    b += Math.max(0, Math.cos(dirAngle)) * 0.03 * t;
     skyColors.push(r, g, b);
   }
   skyGeo.setAttribute('color', new THREE.Float32BufferAttribute(skyColors, 3));
@@ -815,21 +870,41 @@ function addSky(scene) {
   horizon.position.y = -5;
   scene.add(horizon);
 
-  // Stars - varied sizes and brightness
+  // Secondary horizon glow (reddish-orange distant city light)
+  const cityGlowGeo = new THREE.CylinderGeometry(490, 490, 15, 16, 1, true);
+  const cityGlowMat = new THREE.MeshBasicMaterial({
+    color: 0x221108,
+    transparent: true,
+    opacity: 0.25,
+    side: THREE.BackSide,
+  });
+  const cityGlow = new THREE.Mesh(cityGlowGeo, cityGlowMat);
+  cityGlow.position.y = 5;
+  scene.add(cityGlow);
+
+  // Stars - varied sizes and brightness with color tints
   const starGeo = new THREE.BufferGeometry();
   const starVerts = [];
+  const starColors2 = [];
   for (let i = 0; i < 3000; i++) {
     const theta = Math.random() * Math.PI * 2;
     const phi = Math.acos(Math.random() * 2 - 1);
-    const r = 490;
+    const sr = 490;
     starVerts.push(
-      r * Math.sin(phi) * Math.cos(theta),
-      r * Math.sin(phi) * Math.sin(theta),
-      r * Math.cos(phi)
+      sr * Math.sin(phi) * Math.cos(theta),
+      sr * Math.sin(phi) * Math.sin(theta),
+      sr * Math.cos(phi)
     );
+    // Subtle color tints: warm white, cool blue-white, pale yellow
+    const tint = Math.random();
+    if (tint < 0.15) { starColors2.push(1.0, 0.85, 0.7); }       // warm
+    else if (tint < 0.3) { starColors2.push(0.75, 0.85, 1.0); }   // cool blue
+    else if (tint < 0.4) { starColors2.push(1.0, 1.0, 0.8); }     // pale yellow
+    else { starColors2.push(1.0, 1.0, 1.0); }                      // white
   }
   starGeo.setAttribute('position', new THREE.Float32BufferAttribute(starVerts, 3));
-  const starMat = new THREE.PointsMaterial({ color: 0xffffff, size: 0.6, transparent: true, opacity: 0.8 });
+  starGeo.setAttribute('color', new THREE.Float32BufferAttribute(starColors2, 3));
+  const starMat = new THREE.PointsMaterial({ vertexColors: true, size: 0.6, transparent: true, opacity: 0.8 });
   scene.add(new THREE.Points(starGeo, starMat));
   // Bright stars (fewer, larger)
   const brightStarGeo = new THREE.BufferGeometry();
@@ -837,16 +912,65 @@ function addSky(scene) {
   for (let i = 0; i < 200; i++) {
     const theta = Math.random() * Math.PI * 2;
     const phi = Math.acos(Math.random() * 2 - 1);
-    const r = 488;
+    const sr = 488;
     brightVerts.push(
-      r * Math.sin(phi) * Math.cos(theta),
-      r * Math.sin(phi) * Math.sin(theta),
-      r * Math.cos(phi)
+      sr * Math.sin(phi) * Math.cos(theta),
+      sr * Math.sin(phi) * Math.sin(theta),
+      sr * Math.cos(phi)
     );
   }
   brightStarGeo.setAttribute('position', new THREE.Float32BufferAttribute(brightVerts, 3));
   const brightStarMat = new THREE.PointsMaterial({ color: 0xeeeeff, size: 1.2, transparent: true, opacity: 0.9 });
   scene.add(new THREE.Points(brightStarGeo, brightStarMat));
+
+  // Nebula patches (soft colored cloud patches in the sky)
+  const nebulaData = [
+    { x: 150, y: 300, z: -200, color: 0x220044, scale: 80, opacity: 0.06 },
+    { x: -200, y: 350, z: -100, color: 0x001133, scale: 100, opacity: 0.05 },
+    { x: 100, y: 280, z: 200, color: 0x110022, scale: 70, opacity: 0.04 },
+    { x: -100, y: 320, z: -250, color: 0x002244, scale: 90, opacity: 0.05 },
+    { x: 250, y: 350, z: 50, color: 0x180030, scale: 60, opacity: 0.04 },
+  ];
+  for (const nd of nebulaData) {
+    const nebula = new THREE.Mesh(
+      new THREE.SphereGeometry(nd.scale, 8, 6),
+      new THREE.MeshBasicMaterial({ color: nd.color, transparent: true, opacity: nd.opacity })
+    );
+    nebula.position.set(nd.x, nd.y, nd.z);
+    nebula.scale.set(1.5, 0.6, 1.2);
+    scene.add(nebula);
+    // Secondary softer halo
+    const halo = new THREE.Mesh(
+      new THREE.SphereGeometry(nd.scale * 1.4, 6, 4),
+      new THREE.MeshBasicMaterial({ color: nd.color, transparent: true, opacity: nd.opacity * 0.4 })
+    );
+    halo.position.copy(nebula.position);
+    halo.scale.set(2, 0.8, 1.5);
+    scene.add(halo);
+  }
+
+  // Aurora-like streaks (elongated glowing bands)
+  for (let i = 0; i < 4; i++) {
+    const auroraGeo = new THREE.PlaneGeometry(120 + Math.random() * 80, 8 + Math.random() * 6);
+    const auroraMat = new THREE.MeshBasicMaterial({
+      color: i < 2 ? 0x00ff66 : 0x4400ff,
+      transparent: true,
+      opacity: 0.015 + Math.random() * 0.01,
+      side: THREE.DoubleSide,
+    });
+    const aurora = new THREE.Mesh(auroraGeo, auroraMat);
+    aurora.position.set(
+      (Math.random() - 0.5) * 300,
+      200 + Math.random() * 150,
+      -150 + Math.random() * 100
+    );
+    aurora.rotation.set(
+      0.3 + Math.random() * 0.3,
+      Math.random() * Math.PI,
+      Math.random() * 0.3
+    );
+    scene.add(aurora);
+  }
 
   // Moon
   const moonGroup = new THREE.Group();
@@ -855,12 +979,17 @@ function addSky(scene) {
     new THREE.MeshBasicMaterial({ color: 0xddddbb })
   );
   moonGroup.add(moon);
-  // Moon glow
+  // Moon glow (multi-layered)
   const moonGlow = new THREE.Mesh(
     new THREE.SphereGeometry(20, 10, 10),
     new THREE.MeshBasicMaterial({ color: 0xddddaa, transparent: true, opacity: 0.08 })
   );
   moonGroup.add(moonGlow);
+  const moonGlow2 = new THREE.Mesh(
+    new THREE.SphereGeometry(28, 8, 8),
+    new THREE.MeshBasicMaterial({ color: 0xccccaa, transparent: true, opacity: 0.03 })
+  );
+  moonGroup.add(moonGlow2);
   // Craters
   for (let i = 0; i < 8; i++) {
     const crater = new THREE.Mesh(
@@ -877,6 +1006,18 @@ function addSky(scene) {
     crater.lookAt(0, 0, 0);
     moonGroup.add(crater);
   }
+  // Moon maria (dark patches)
+  for (let i = 0; i < 3; i++) {
+    const maria = new THREE.Mesh(
+      new THREE.CircleGeometry(4 + Math.random() * 3, 8),
+      new THREE.MeshBasicMaterial({ color: 0x999977, transparent: true, opacity: 0.15 })
+    );
+    const ma1 = 0.2 + Math.random() * 0.4;
+    const ma2 = -0.3 + Math.random() * 0.6;
+    maria.position.set(Math.sin(ma1) * 14, Math.cos(ma1) * Math.sin(ma2) * 14, Math.cos(ma1) * Math.cos(ma2) * 14);
+    maria.lookAt(0, 0, 0);
+    moonGroup.add(maria);
+  }
   moonGroup.position.set(200, 250, -300);
   scene.add(moonGroup);
   // Moonlight
@@ -884,17 +1025,17 @@ function addSky(scene) {
   moonLight.position.set(200, 250, -300);
   scene.add(moonLight);
 
-  // Wispy clouds (semi-transparent planes at various heights)
-  for (let i = 0; i < 12; i++) {
+  // Wispy clouds (semi-transparent volumes)
+  for (let i = 0; i < 15; i++) {
     const cloudGroup = new THREE.Group();
-    const cloudCount = 3 + Math.floor(Math.random() * 4);
+    const cloudCount = 3 + Math.floor(Math.random() * 5);
     for (let j = 0; j < cloudCount; j++) {
       const cloud = new THREE.Mesh(
-        new THREE.SphereGeometry(8 + Math.random() * 12, 8, 6),
+        new THREE.SphereGeometry(8 + Math.random() * 12, 6, 4),
         new THREE.MeshBasicMaterial({
-          color: 0x222244,
+          color: i < 5 ? 0x1a1a33 : 0x222244,
           transparent: true,
-          opacity: 0.12 + Math.random() * 0.08,
+          opacity: 0.08 + Math.random() * 0.08,
         })
       );
       cloud.scale.set(1.5 + Math.random(), 0.3 + Math.random() * 0.2, 1 + Math.random() * 0.5);
@@ -906,90 +1047,209 @@ function addSky(scene) {
       cloudGroup.add(cloud);
     }
     cloudGroup.position.set(
-      (Math.random() - 0.5) * 500,
-      60 + Math.random() * 60,
-      (Math.random() - 0.5) * 500
+      (Math.random() - 0.5) * 600,
+      50 + Math.random() * 80,
+      (Math.random() - 0.5) * 600
     );
     scene.add(cloudGroup);
   }
 
-  // UFO mothership - enhanced
+  // UFO mothership - enhanced with more detail
   const ufoGroup = new THREE.Group();
+  // Main hull
   const ufoBody = new THREE.Mesh(
     new THREE.CylinderGeometry(8, 12, 2, 24),
-    new THREE.MeshPhongMaterial({ color: 0x445566, emissive: 0x223344 })
+    new THREE.MeshPhongMaterial({ color: 0x445566, emissive: 0x223344, shininess: 60 })
   );
   ufoGroup.add(ufoBody);
+  // Hull panel lines (concentric rings)
+  for (const rr of [9, 10.5]) {
+    const panelRing = new THREE.Mesh(
+      new THREE.TorusGeometry(rr, 0.06, 4, 24),
+      new THREE.MeshPhongMaterial({ color: 0x334455, emissive: 0x112233 })
+    );
+    panelRing.rotation.x = Math.PI / 2;
+    panelRing.position.y = -0.5;
+    ufoGroup.add(panelRing);
+  }
   // Bottom plate
   const ufoBottom = new THREE.Mesh(
     new THREE.CylinderGeometry(11.5, 9, 0.5, 24),
-    new THREE.MeshPhongMaterial({ color: 0x334455, emissive: 0x112233 })
+    new THREE.MeshPhongMaterial({ color: 0x334455, emissive: 0x112233, shininess: 50 })
   );
   ufoBottom.position.y = -1.2;
   ufoGroup.add(ufoBottom);
+  // Top hull
   const ufoTop = new THREE.Mesh(
     new THREE.SphereGeometry(5, 16, 12, 0, Math.PI * 2, 0, Math.PI / 2),
-    new THREE.MeshPhongMaterial({ color: 0x556677, emissive: 0x334455 })
+    new THREE.MeshPhongMaterial({ color: 0x556677, emissive: 0x334455, shininess: 80 })
   );
   ufoTop.position.y = 1;
   ufoGroup.add(ufoTop);
   // Dome glass
   const ufoDome = new THREE.Mesh(
     new THREE.SphereGeometry(3, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2),
-    new THREE.MeshPhongMaterial({ color: 0x66ff99, emissive: 0x113322, transparent: true, opacity: 0.25 })
+    new THREE.MeshPhongMaterial({ color: 0x66ff99, emissive: 0x225533, transparent: true, opacity: 0.3, shininess: 120 })
   );
   ufoDome.position.y = 1;
   ufoGroup.add(ufoDome);
-  // Ring detail
+  // Dome inner glow
+  const domeGlow = new THREE.Mesh(
+    new THREE.SphereGeometry(2.5, 8, 6, 0, Math.PI * 2, 0, Math.PI / 2),
+    new THREE.MeshBasicMaterial({ color: 0x44ff88, transparent: true, opacity: 0.12 })
+  );
+  domeGlow.position.y = 1.2;
+  ufoGroup.add(domeGlow);
+  // Main ring detail
   const ufoRing = new THREE.Mesh(
-    new THREE.TorusGeometry(10, 0.15, 6, 32),
+    new THREE.TorusGeometry(10, 0.15, 6, 24),
     new THREE.MeshPhongMaterial({ color: 0x667788, emissive: 0x334455 })
   );
   ufoRing.rotation.x = Math.PI / 2;
   ufoRing.position.y = -0.5;
   ufoGroup.add(ufoRing);
+  // Secondary outer ring
+  const ufoRing2 = new THREE.Mesh(
+    new THREE.TorusGeometry(11.8, 0.08, 4, 24),
+    new THREE.MeshBasicMaterial({ color: 0x00ff88, transparent: true, opacity: 0.25 })
+  );
+  ufoRing2.rotation.x = Math.PI / 2;
+  ufoRing2.position.y = -1.0;
+  ufoGroup.add(ufoRing2);
+  // Engine nacelles (4 under-hull protrusions)
+  for (let i = 0; i < 4; i++) {
+    const angle = (i / 4) * Math.PI * 2 + Math.PI / 4;
+    const nacelle = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.8, 1.2, 1.0, 8),
+      new THREE.MeshPhongMaterial({ color: 0x445566, emissive: 0x112233 })
+    );
+    nacelle.position.set(Math.cos(angle) * 8, -1.5, Math.sin(angle) * 8);
+    ufoGroup.add(nacelle);
+    // Engine glow
+    const engineGlow = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.6, 0.6, 0.3, 8),
+      new THREE.MeshBasicMaterial({ color: 0x00ff88, transparent: true, opacity: 0.5 })
+    );
+    engineGlow.position.set(Math.cos(angle) * 8, -2.1, Math.sin(angle) * 8);
+    ufoGroup.add(engineGlow);
+    // Engine exhaust cone
+    const exhaust = new THREE.Mesh(
+      new THREE.ConeGeometry(0.8, 3, 8),
+      new THREE.MeshBasicMaterial({ color: 0x00ff88, transparent: true, opacity: 0.06 })
+    );
+    exhaust.position.set(Math.cos(angle) * 8, -3.5, Math.sin(angle) * 8);
+    exhaust.rotation.x = Math.PI;
+    ufoGroup.add(exhaust);
+  }
+  // Under-hull scanner array
+  const scanner = new THREE.Mesh(
+    new THREE.CylinderGeometry(2, 2, 0.4, 12),
+    new THREE.MeshPhongMaterial({ color: 0x334455, emissive: 0x112233 })
+  );
+  scanner.position.y = -1.6;
+  ufoGroup.add(scanner);
+  const scannerLens = new THREE.Mesh(
+    new THREE.CircleGeometry(1.5, 12),
+    new THREE.MeshBasicMaterial({ color: 0x00ffaa, transparent: true, opacity: 0.4 })
+  );
+  scannerLens.position.y = -1.81;
+  scannerLens.rotation.x = Math.PI / 2;
+  ufoGroup.add(scannerLens);
   // Lights under UFO
   const ufoLight = new THREE.PointLight(0x00ff88, 3, 150);
   ufoLight.position.y = -2;
   ufoGroup.add(ufoLight);
+  // Secondary warm light for color contrast
+  const ufoLight2 = new THREE.PointLight(0x00aaff, 1, 80);
+  ufoLight2.position.y = -3;
+  ufoGroup.add(ufoLight2);
   // Tractor beam cone
-  const beamGeo = new THREE.CylinderGeometry(1, 15, 80, 16, 1, true);
-  const beamMat = new THREE.MeshBasicMaterial({ color: 0x00ff88, transparent: true, opacity: 0.04, side: THREE.DoubleSide });
-  const beam = new THREE.Mesh(beamGeo, beamMat);
+  const beamGeo = new THREE.CylinderGeometry(1, 15, 80, 12, 1, true);
+  const beamMeshMat = new THREE.MeshBasicMaterial({ color: 0x00ff88, transparent: true, opacity: 0.04, side: THREE.DoubleSide });
+  const beam = new THREE.Mesh(beamGeo, beamMeshMat);
   beam.position.y = -42;
   ufoGroup.add(beam);
-  // Inner beam
+  // Inner beam (brighter core)
   const innerBeamGeo = new THREE.CylinderGeometry(0.5, 5, 80, 8, 1, true);
-  const innerBeamMat = new THREE.MeshBasicMaterial({ color: 0x88ffbb, transparent: true, opacity: 0.02, side: THREE.DoubleSide });
+  const innerBeamMat = new THREE.MeshBasicMaterial({ color: 0x88ffbb, transparent: true, opacity: 0.025, side: THREE.DoubleSide });
   const innerBeam = new THREE.Mesh(innerBeamGeo, innerBeamMat);
   innerBeam.position.y = -42;
   ufoGroup.add(innerBeam);
-  // Running lights
+  // Beam ground glow ring
+  const beamGroundGlow = new THREE.Mesh(
+    new THREE.RingGeometry(8, 16, 16),
+    new THREE.MeshBasicMaterial({ color: 0x00ff88, transparent: true, opacity: 0.04, side: THREE.DoubleSide })
+  );
+  beamGroundGlow.rotation.x = -Math.PI / 2;
+  beamGroundGlow.position.y = -79;
+  ufoGroup.add(beamGroundGlow);
+  // Running lights (alternating green/cyan with glow halos)
   for (let i = 0; i < 16; i++) {
     const angle = (i / 16) * Math.PI * 2;
+    const lightColor = i % 2 === 0 ? 0x00ff88 : 0x00ffcc;
     const rl = new THREE.Mesh(
       new THREE.SphereGeometry(0.3, 6, 6),
-      new THREE.MeshBasicMaterial({ color: i % 2 === 0 ? 0x00ff88 : 0x00ffcc })
+      new THREE.MeshBasicMaterial({ color: lightColor })
     );
     rl.position.set(Math.cos(angle) * 10.5, -1, Math.sin(angle) * 10.5);
     ufoGroup.add(rl);
+    // Light halo
+    if (i % 4 === 0) {
+      const rlHalo = new THREE.Mesh(
+        new THREE.SphereGeometry(0.6, 4, 4),
+        new THREE.MeshBasicMaterial({ color: lightColor, transparent: true, opacity: 0.15 })
+      );
+      rlHalo.position.copy(rl.position);
+      ufoGroup.add(rlHalo);
+    }
   }
-  // Window ports
-  for (let i = 0; i < 12; i++) {
-    const angle = (i / 12) * Math.PI * 2;
+  // Top antenna/sensor array
+  const antenna = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.08, 0.08, 3, 4),
+    new THREE.MeshPhongMaterial({ color: 0x667788 })
+  );
+  antenna.position.y = 4;
+  ufoGroup.add(antenna);
+  const antennaTip = new THREE.Mesh(
+    new THREE.SphereGeometry(0.2, 6, 6),
+    new THREE.MeshBasicMaterial({ color: 0xff0044, transparent: true, opacity: 0.8 })
+  );
+  antennaTip.position.y = 5.5;
+  ufoGroup.add(antennaTip);
+  // Window ports with glow backing
+  for (let i = 0; i < 16; i++) {
+    const angle = (i / 16) * Math.PI * 2;
     const port = new THREE.Mesh(
-      new THREE.CircleGeometry(0.4, 8),
+      new THREE.CircleGeometry(0.35, 8),
       new THREE.MeshBasicMaterial({ color: 0x88ffbb, transparent: true, opacity: 0.5 })
     );
     port.position.set(Math.cos(angle) * 9, 0, Math.sin(angle) * 9);
     port.rotation.y = -angle + Math.PI / 2;
     ufoGroup.add(port);
+    // Port frame
+    const frame = new THREE.Mesh(
+      new THREE.TorusGeometry(0.4, 0.05, 4, 8),
+      new THREE.MeshPhongMaterial({ color: 0x556677, emissive: 0x223344 })
+    );
+    frame.position.copy(port.position);
+    frame.rotation.y = port.rotation.y;
+    ufoGroup.add(frame);
   }
   ufoGroup.position.set(0, 80, -30);
   scene.add(ufoGroup);
 
-  // Light fog
-  scene.fog = new THREE.FogExp2(0x0e0e2a, 0.003);
+  // Atmospheric light pillars (subtle vertical glow from UFO)
+  for (let i = 0; i < 3; i++) {
+    const pillar = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.5, 2, 40, 6, 1, true),
+      new THREE.MeshBasicMaterial({ color: 0x00ff88, transparent: true, opacity: 0.012, side: THREE.DoubleSide })
+    );
+    pillar.position.set((i - 1) * 12, 40, -30);
+    scene.add(pillar);
+  }
+
+  // Enhanced fog with better density
+  scene.fog = new THREE.FogExp2(0x0e0e2a, 0.0035);
 
   return ufoGroup;
 }
@@ -1408,17 +1668,40 @@ function buildDowntownChicago(scene) {
   ];
 
   function addBuilding(bd, facingSide) {
-    const colors = [0x333344, 0x3a3a4a, 0x2e2e3e, 0x404050, 0x353545];
-    const bldg = makeBox(bd.w, bd.h, bd.d, colors[Math.floor(Math.random() * colors.length)], bd.x, 0, bd.z);
+    const colors = [0x333344, 0x3a3a4a, 0x2e2e3e, 0x404050, 0x353545, 0x2a2a3a, 0x383848];
+    const bldgColor = colors[Math.floor(Math.random() * colors.length)];
+    const bldg = makeBox(bd.w, bd.h, bd.d, bldgColor, bd.x, 0, bd.z);
     group.add(bldg);
     addCollider(colliders, bldg);
-    // Window grid
+
+    // Facade horizontal band (floor dividers)
+    const bandMat = makeMaterial(0x2a2a3a, 0x111122);
+    for (let y = 3; y < bd.h; y += 3) {
+      const band = new THREE.Mesh(
+        new THREE.PlaneGeometry(bd.d * 0.95, 0.12),
+        bandMat
+      );
+      band.position.set(bd.x + facingSide * (bd.w / 2 + 0.02), y - 0.3, bd.z);
+      band.rotation.y = facingSide > 0 ? -Math.PI / 2 : Math.PI / 2;
+      group.add(band);
+    }
+
+    // Window grid with varied colors and glow
+    const winColors = [
+      { color: 0xffdd44, opacity: 0.7 },  // warm yellow (occupied)
+      { color: 0xffc833, opacity: 0.6 },  // golden
+      { color: 0xeebb55, opacity: 0.5 },  // amber
+      { color: 0x88aacc, opacity: 0.4 },  // cool blue (TV glow)
+      { color: 0x222244, opacity: 0.3 },  // dark (unlit)
+      { color: 0x181830, opacity: 0.2 },  // very dark
+    ];
     for (let y = 2; y < bd.h; y += 3) {
       for (let wOff = -bd.d / 3; wOff <= bd.d / 3; wOff += bd.d / 3) {
-        if (Math.random() > 0.3) {
+        if (Math.random() > 0.2) {
+          const wc = winColors[Math.floor(Math.random() * winColors.length)];
           const win = new THREE.Mesh(
             new THREE.PlaneGeometry(0.8, 1.5),
-            new THREE.MeshBasicMaterial({ color: Math.random() > 0.4 ? 0xffdd44 : 0x222244, transparent: true, opacity: 0.6 + Math.random() * 0.4 })
+            new THREE.MeshBasicMaterial({ color: wc.color, transparent: true, opacity: wc.opacity })
           );
           win.position.set(
             bd.x + facingSide * (bd.w / 2 + 0.01),
@@ -1427,16 +1710,52 @@ function buildDowntownChicago(scene) {
           );
           win.rotation.y = facingSide > 0 ? -Math.PI / 2 : Math.PI / 2;
           group.add(win);
+          // Window frame (subtle darker border)
+          const frame = new THREE.Mesh(
+            new THREE.PlaneGeometry(0.9, 1.6),
+            new THREE.MeshBasicMaterial({ color: 0x1a1a2a, transparent: true, opacity: 0.4 })
+          );
+          frame.position.set(
+            bd.x + facingSide * (bd.w / 2 + 0.005),
+            y,
+            bd.z + wOff
+          );
+          frame.rotation.y = win.rotation.y;
+          group.add(frame);
         }
       }
     }
+
     // Rooftop details
-    if (bd.h > 20) {
-      // AC units on roof
-      const ac = makeBox(1.5, 1, 1.5, 0x666666, bd.x + 1, bd.h, bd.z);
+    if (bd.h > 15) {
+      // AC units
+      const ac = makeBox(1.5, 1, 1.5, 0x555555, bd.x + 1, bd.h, bd.z);
       group.add(ac);
-      const ac2 = makeBox(1, 0.8, 1, 0x666666, bd.x - 1.5, bd.h, bd.z + 1);
+      const ac2 = makeBox(1, 0.8, 1, 0x555555, bd.x - 1.5, bd.h, bd.z + 1);
       group.add(ac2);
+      // Rooftop edge parapet
+      const parapet = new THREE.Mesh(
+        new THREE.BoxGeometry(bd.w + 0.2, 0.4, bd.d + 0.2),
+        makeMaterial(0x2e2e3e, 0x111122)
+      );
+      parapet.position.set(bd.x, bd.h + 0.2, bd.z);
+      group.add(parapet);
+    }
+    if (bd.h > 30) {
+      // Antenna/spire on tall buildings
+      const spire = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.05, 0.08, 4, 4),
+        makeMaterial(0x888888)
+      );
+      spire.position.set(bd.x, bd.h + 2, bd.z);
+      group.add(spire);
+      // Aircraft warning light
+      const warnLight = new THREE.Mesh(
+        new THREE.SphereGeometry(0.15, 4, 4),
+        new THREE.MeshBasicMaterial({ color: 0xff0000, transparent: true, opacity: 0.8 })
+      );
+      warnLight.position.set(bd.x, bd.h + 4, bd.z);
+      group.add(warnLight);
     }
   }
 
