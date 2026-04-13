@@ -1791,7 +1791,7 @@ export class WeaponManager {
 
     this.projectiles.push({
       mesh: rocket,
-      body, nose, core, halo, exhaust, light: rocketLight,
+      body, nose, core, halo, exhaust,
       position: spawn.clone(),
       velocity: dir.clone().multiplyScalar(weapon.projectileSpeed),
       damage: weapon.damage,
