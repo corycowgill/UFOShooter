@@ -339,6 +339,30 @@ _UNIT_SPHERE_6.__shared = true;
 const _UNIT_BOX = new THREE.BoxGeometry(1, 1, 1);
 _UNIT_BOX.__shared = true;
 
+// Muzzle flash geometries — identical on every shot, so cache at module level.
+// Cone already points along +Z (rotated from default +Y) to match the flash
+// orientation in createMuzzleFlash.
+const _MUZZLE_CONE = new THREE.ConeGeometry(0.12, 0.3, 6);
+_MUZZLE_CONE.rotateX(-Math.PI / 2);
+_MUZZLE_CONE.translate(0, 0, 0.15);
+_MUZZLE_CONE.__shared = true;
+const _MUZZLE_FLARE = new THREE.PlaneGeometry(0.3, 0.05);
+_MUZZLE_FLARE.__shared = true;
+
+// Sword slash arcs — four toruses, all constant across every melee swing.
+const _SWORD_MAIN = new THREE.TorusGeometry(1.2, 0.04, 4, 20, Math.PI);
+_SWORD_MAIN.__shared = true;
+const _SWORD_INNER = new THREE.TorusGeometry(1.2, 0.015, 4, 20, Math.PI);
+_SWORD_INNER.__shared = true;
+const _SWORD_TRAIL_1 = new THREE.TorusGeometry(1.2, 0.08, 4, 16, Math.PI);
+_SWORD_TRAIL_1.__shared = true;
+const _SWORD_TRAIL_2 = new THREE.TorusGeometry(1.2, 0.12, 4, 16, Math.PI);
+_SWORD_TRAIL_2.__shared = true;
+
+// Scratch vectors shared by hot per-shot paths to avoid allocating Vector3
+// on every muzzle flash / sword slash.
+const _scratchVec = new THREE.Vector3();
+
 export class ParticleSystem {
   constructor(scene) {
     this.scene = scene;
@@ -912,36 +936,31 @@ export class ParticleSystem {
     const group = new THREE.Group();
     group.position.copy(position);
 
-    // Flash cone
-    const cone = new THREE.Mesh(
-      new THREE.ConeGeometry(0.12, 0.3, 6),
-      glowMat(0xffffff, 1.0)
-    );
-    cone.rotation.x = -Math.PI / 2;
-    cone.position.z = 0.15;
+    // Flash cone (shared geometry, already +Z-oriented with 0.15 z-offset baked in)
+    const cone = new THREE.Mesh(_MUZZLE_CONE, glowMat(0xffffff, 1.0));
     group.add(cone);
 
-    // Flash sphere
-    const sphere = new THREE.Mesh(
-      new THREE.SphereGeometry(0.08, 6, 6),
-      glowMat(color, 0.9)
-    );
+    // Flash sphere (shared unit sphere scaled to 0.08 radius)
+    const sphere = new THREE.Mesh(_UNIT_SPHERE_6, glowMat(color, 0.9));
+    sphere.scale.setScalar(0.08);
     group.add(sphere);
 
-    // Star flare planes (cross pattern)
+    // Star flare planes (cross pattern) — shared plane geometry
     for (let i = 0; i < 3; i++) {
-      const flare = new THREE.Mesh(
-        new THREE.PlaneGeometry(0.3, 0.05),
-        glowMat(color, 0.75)
-      );
-      flare.material.side = THREE.DoubleSide;
+      const flareMat = glowMat(color, 0.75);
+      flareMat.side = THREE.DoubleSide;
+      const flare = new THREE.Mesh(_MUZZLE_FLARE, flareMat);
       flare.rotation.z = (i / 3) * Math.PI;
       group.add(flare);
     }
 
-    // Orient to face direction
-    const target = position.clone().add(direction);
-    group.lookAt(target);
+    // Orient to face direction using scratch vector (no per-shot Vector3 alloc)
+    _scratchVec.set(
+      position.x + direction.x,
+      position.y + direction.y,
+      position.z + direction.z
+    );
+    group.lookAt(_scratchVec);
 
     // Pooled point light (decay handled by pool)
     borrowLight(position, color, 5, 8, 0.1);
@@ -953,39 +972,36 @@ export class ParticleSystem {
   createSwordSlash(camera, color = 0x0088ff) {
     const group = new THREE.Group();
 
-    // Main arc - bright edge
-    const mainGeo = new THREE.TorusGeometry(1.2, 0.04, 4, 20, Math.PI);
-    group.add(new THREE.Mesh(mainGeo, glowMat(0xaaddff, 1.0)));
+    // Main arc - bright edge (shared torus)
+    group.add(new THREE.Mesh(_SWORD_MAIN, glowMat(0xaaddff, 1.0)));
 
     // Inner arc - white core
-    const innerGeo = new THREE.TorusGeometry(1.2, 0.015, 4, 20, Math.PI);
-    group.add(new THREE.Mesh(innerGeo, glowMat(0xffffff, 1.0)));
+    group.add(new THREE.Mesh(_SWORD_INNER, glowMat(0xffffff, 1.0)));
 
     // Trailing glow arcs
-    for (let i = 1; i <= 2; i++) {
-      const trailGeo = new THREE.TorusGeometry(1.2, 0.04 + i * 0.04, 4, 16, Math.PI);
-      const trail = new THREE.Mesh(trailGeo, glowMat(color, 0.5 / i));
-      trail.rotation.z = i * 0.08;
-      group.add(trail);
-    }
+    const trail1 = new THREE.Mesh(_SWORD_TRAIL_1, glowMat(color, 0.5));
+    trail1.rotation.z = 0.08;
+    group.add(trail1);
+    const trail2 = new THREE.Mesh(_SWORD_TRAIL_2, glowMat(color, 0.25));
+    trail2.rotation.z = 0.16;
+    group.add(trail2);
 
-    // Sparkle particles along the arc
+    // Sparkle particles along the arc (shared unit box)
     for (let i = 0; i < 8; i++) {
       const angle = (i / 8) * Math.PI;
-      const sparkle = new THREE.Mesh(
-        new THREE.BoxGeometry(0.03, 0.03, 0.03),
-        glowMat(0xffffff, 1.0)
-      );
+      const sparkle = new THREE.Mesh(_UNIT_BOX, glowMat(0xffffff, 1.0));
+      sparkle.scale.setScalar(0.03);
       sparkle.position.set(Math.cos(angle) * 1.2, Math.sin(angle) * 1.2, 0);
       group.add(sparkle);
     }
 
-    const pos = camera.position.clone();
-    const dir = new THREE.Vector3();
-    camera.getWorldDirection(dir);
-    pos.add(dir.multiplyScalar(1.5));
-    pos.y -= 0.3;
-    group.position.copy(pos);
+    // Position in front of camera using scratch vector (no per-slash Vector3 alloc)
+    camera.getWorldDirection(_scratchVec);
+    group.position.set(
+      camera.position.x + _scratchVec.x * 1.5,
+      camera.position.y + _scratchVec.y * 1.5 - 0.3,
+      camera.position.z + _scratchVec.z * 1.5
+    );
     group.quaternion.copy(camera.quaternion);
     this.scene.add(group);
     this.beams.push({ mesh: group, life: 0.2, maxLife: 0.2 });
