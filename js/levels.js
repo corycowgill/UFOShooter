@@ -1925,8 +1925,8 @@ function buildDowntownChicago(scene) {
   const dirLight = new THREE.DirectionalLight(0xbbccff, 1.25);
   dirLight.position.set(15, 40, 15);
   dirLight.castShadow = true;
-  dirLight.shadow.mapSize.width = 2048;
-  dirLight.shadow.mapSize.height = 2048;
+  dirLight.shadow.mapSize.width = 1024;
+  dirLight.shadow.mapSize.height = 1024;
   dirLight.shadow.camera.left = -70;
   dirLight.shadow.camera.right = 70;
   dirLight.shadow.camera.top = 70;
@@ -2816,8 +2816,8 @@ function buildLincolnParkZoo(scene) {
   const dirLight = new THREE.DirectionalLight(0xccffbb, 1.3);
   dirLight.position.set(-15, 35, 15);
   dirLight.castShadow = true;
-  dirLight.shadow.mapSize.width = 2048;
-  dirLight.shadow.mapSize.height = 2048;
+  dirLight.shadow.mapSize.width = 1024;
+  dirLight.shadow.mapSize.height = 1024;
   dirLight.shadow.camera.left = -70;
   dirLight.shadow.camera.right = 70;
   dirLight.shadow.camera.top = 70;
@@ -3100,8 +3100,8 @@ function buildRavenswood(scene) {
   const dirLight = new THREE.DirectionalLight(0xccccff, 1.15);
   dirLight.position.set(10, 38, -15);
   dirLight.castShadow = true;
-  dirLight.shadow.mapSize.width = 2048;
-  dirLight.shadow.mapSize.height = 2048;
+  dirLight.shadow.mapSize.width = 1024;
+  dirLight.shadow.mapSize.height = 1024;
   dirLight.shadow.camera.left = -70;
   dirLight.shadow.camera.right = 70;
   dirLight.shadow.camera.top = 70;

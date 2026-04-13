@@ -70,6 +70,11 @@ function _init() {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  // The only shadow casters are static world geometry (buildings, props) and
+  // the only light source moves with the scene, not per frame. Disable the
+  // per-frame shadow map re-render and trigger a single refresh after each
+  // level loads. Huge savings on shadow map generation cost.
+  renderer.shadowMap.autoUpdate = false;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.25;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -520,6 +525,10 @@ function loadLevel(index) {
     const envType = currentLevelIndex === 0 ? 'dust' : (currentLevelIndex === 2 ? 'embers' : 'dust');
     vfx.initEnvironmentParticles(envType);
   }
+
+  // One-shot shadow map refresh — static world just finished building, so
+  // bake shadows once and freeze the shadow cascade until the next level.
+  renderer.shadowMap.needsUpdate = true;
 
   // Show level announcement
   hud.showWaveAnnouncement(waveManager.wave + 1, level.name, true);
