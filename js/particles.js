@@ -3,8 +3,14 @@
 // Additive glow material: transparent + additive blending for bright HDR-feel
 // highlights on lasers, bolts, sparks, muzzle flashes. Depth-write off so they
 // stack correctly.
-function glowMat(color, opacity = 1.0) {
-  return new THREE.MeshBasicMaterial({
+//
+// intensity > 1 multiplies the color beyond [0,1] to produce real HDR output
+// that the UnrealBloomPass picks up above its threshold. EffectComposer runs
+// on HalfFloatType render targets so these super-bright values survive to the
+// bloom pass. toneMapped:false ensures the renderer passes the raw color
+// through without squashing.
+function glowMat(color, opacity = 1.0, intensity = 1.0) {
+  const mat = new THREE.MeshBasicMaterial({
     color,
     transparent: true,
     opacity,
@@ -12,6 +18,10 @@ function glowMat(color, opacity = 1.0) {
     depthWrite: false,
     toneMapped: false,
   });
+  if (intensity !== 1.0) {
+    mat.color.multiplyScalar(intensity);
+  }
+  return mat;
 }
 
 // ---------------------------------------------------------------------------
@@ -379,14 +389,14 @@ export class ParticleSystem {
     const len = dir.length();
 
     // Core beam - bright white center (additive) - shared unit cylinder, scaled
-    const core = new THREE.Mesh(_UNIT_CYL_Z, glowMat(0xffffff, 1.0));
+    const core = new THREE.Mesh(_UNIT_CYL_Z, glowMat(0xffffff, 1.0, 4.0));
     core.scale.set(width, width, len);
     const mid = new THREE.Vector3().addVectors(from, to).multiplyScalar(0.5);
     core.position.copy(mid);
     core.lookAt(to);
 
     // Inner glow layer
-    const inner = new THREE.Mesh(_UNIT_CYL_Z, glowMat(color, 0.7));
+    const inner = new THREE.Mesh(_UNIT_CYL_Z, glowMat(color, 0.7, 2.5));
     inner.scale.set(2.5, 2.5, 1); // relative to parent scale
     core.add(inner);
 
@@ -409,14 +419,14 @@ export class ParticleSystem {
     group.position.copy(position);
 
     // Central flash
-    const flash = new THREE.Mesh(_UNIT_SPHERE_8, glowMat(0xffffff, 1));
+    const flash = new THREE.Mesh(_UNIT_SPHERE_8, glowMat(0xffffff, 1, 3.5));
     flash.scale.setScalar(0.15);
     group.add(flash);
 
     // Spark rays that fly outward
     const sparks = [];
     for (let i = 0; i < 6; i++) {
-      const spark = new THREE.Mesh(_UNIT_BOX, glowMat(color, 0.95));
+      const spark = new THREE.Mesh(_UNIT_BOX, glowMat(color, 0.95, 2.0));
       spark.scale.set(0.02, 0.02, 0.12);
       spark.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
       spark.velocity = new THREE.Vector3(
@@ -439,10 +449,10 @@ export class ParticleSystem {
     // Different bolt styles per alien type
     if (alienType === 'spitter') {
       // Acid glob - larger, dripping, yellow-green
-      const core = new THREE.Mesh(_UNIT_SPHERE_8, glowMat(0xccff33, 1));
+      const core = new THREE.Mesh(_UNIT_SPHERE_8, glowMat(0xccff33, 1, 3.0));
       core.scale.set(0.12 * 0.8, 0.12, 0.12 * 1.5);
       boltGroup.add(core);
-      const innerGlow = new THREE.Mesh(_UNIT_SPHERE_8, glowMat(0x88cc00, 0.6));
+      const innerGlow = new THREE.Mesh(_UNIT_SPHERE_8, glowMat(0x88cc00, 0.6, 2.0));
       innerGlow.scale.setScalar(0.2);
       boltGroup.add(innerGlow);
       const outerGlow = new THREE.Mesh(_UNIT_SPHERE_6, glowMat(0x66aa00, 0.2));
@@ -457,25 +467,25 @@ export class ParticleSystem {
       }
     } else if (alienType === 'drone') {
       // Rapid energy pulse - small, fast, blue-white
-      const core = new THREE.Mesh(_UNIT_SPHERE_6, glowMat(0xddeeff, 1));
+      const core = new THREE.Mesh(_UNIT_SPHERE_6, glowMat(0xddeeff, 1, 3.5));
       core.scale.set(0.06, 0.06, 0.06 * 3);
       boltGroup.add(core);
-      const glow = new THREE.Mesh(_UNIT_SPHERE_6, glowMat(0x4488ff, 0.5));
+      const glow = new THREE.Mesh(_UNIT_SPHERE_6, glowMat(0x4488ff, 0.5, 2.0));
       glow.scale.set(0.12, 0.12, 0.12 * 2);
       boltGroup.add(glow);
       // Electric crackle lines
       for (let i = 0; i < 3; i++) {
-        const crackle = new THREE.Mesh(_UNIT_BOX, glowMat(0x88ccff, 0.8));
+        const crackle = new THREE.Mesh(_UNIT_BOX, glowMat(0x88ccff, 0.8, 2.0));
         crackle.scale.set(0.015, 0.015, 0.25);
         crackle.rotation.set(Math.random() * 0.5, 0, Math.random() * Math.PI);
         boltGroup.add(crackle);
       }
     } else {
       // Standard green energy bolt (grunt)
-      const core = new THREE.Mesh(_UNIT_SPHERE_8, glowMat(0xaaffaa, 1));
+      const core = new THREE.Mesh(_UNIT_SPHERE_8, glowMat(0xaaffaa, 1, 3.0));
       core.scale.set(0.08, 0.08, 0.08 * 2);
       boltGroup.add(core);
-      const innerGlow = new THREE.Mesh(_UNIT_SPHERE_8, glowMat(0x00ff00, 0.6));
+      const innerGlow = new THREE.Mesh(_UNIT_SPHERE_8, glowMat(0x00ff00, 0.6, 2.0));
       innerGlow.scale.set(0.15, 0.15, 0.15 * 1.5);
       boltGroup.add(innerGlow);
       const outerGlow = new THREE.Mesh(_UNIT_SPHERE_6, glowMat(0x00ff00, 0.2));
@@ -504,14 +514,14 @@ export class ParticleSystem {
     const len = dir.length();
 
     // Bright core beam - shared unit cylinder, scaled
-    const core = new THREE.Mesh(_UNIT_CYL_Z, glowMat(0xffffff, 1));
+    const core = new THREE.Mesh(_UNIT_CYL_Z, glowMat(0xffffff, 1, 4.5));
     core.scale.set(0.015, 0.015, len);
     const mid = new THREE.Vector3().addVectors(from, to).multiplyScalar(0.5);
     core.position.copy(mid);
     core.lookAt(to);
 
     // Inner glow (relative scale vs parent 0.015 -> 0.04 = ~2.667x)
-    const inner = new THREE.Mesh(_UNIT_CYL_Z, glowMat(color, 0.8));
+    const inner = new THREE.Mesh(_UNIT_CYL_Z, glowMat(color, 0.8, 3.0));
     inner.scale.set(0.04 / 0.015, 0.04 / 0.015, 1);
     core.add(inner);
 
@@ -521,9 +531,9 @@ export class ParticleSystem {
     core.add(outer);
 
     // Traveling bolt along beam path
-    const bolt = new THREE.Mesh(_UNIT_SPHERE_8, glowMat(0xffffff, 1));
+    const bolt = new THREE.Mesh(_UNIT_SPHERE_8, glowMat(0xffffff, 1, 4.5));
     bolt.scale.set(0.08, 0.08, 0.08 * 4);
-    const boltGlow = new THREE.Mesh(_UNIT_SPHERE_6, glowMat(color, 0.6));
+    const boltGlow = new THREE.Mesh(_UNIT_SPHERE_6, glowMat(color, 0.6, 2.5));
     // boltGlow is a child of bolt which has non-uniform scale — apply inverse
     // so the glow renders spherical rather than being stretched along Z.
     boltGlow.scale.set(0.2 / 0.08, 0.2 / 0.08, 0.2 / (0.08 * 4));
@@ -660,20 +670,23 @@ export class ParticleSystem {
 
     // === Core flash - very bright white icosahedron ===
     const flashGeo = new THREE.IcosahedronGeometry(size * 0.6, 1);
-    const flashMat = new THREE.MeshBasicMaterial({ color: hot, transparent: true, opacity: 1 });
+    const flashMat = new THREE.MeshBasicMaterial({ color: hot, transparent: true, opacity: 1, toneMapped: false });
+    flashMat.color.multiplyScalar(5.0); // HDR for bloom
     const flash = new THREE.Mesh(flashGeo, flashMat);
     group.add(flash);
 
     // Secondary core - cyan plasma fireball
     const coreGeo = new THREE.SphereGeometry(size * 0.5, 16, 16);
-    const coreMat = new THREE.MeshBasicMaterial({ color: accent, transparent: true, opacity: 0.9 });
+    const coreMat = new THREE.MeshBasicMaterial({ color: accent, transparent: true, opacity: 0.9, toneMapped: false });
+    coreMat.color.multiplyScalar(3.5);
     const core = new THREE.Mesh(coreGeo, coreMat);
     core.scale.set(0.2, 0.2, 0.2);
     group.add(core);
 
     // Outer halo - expands wider
     const haloGeo = new THREE.SphereGeometry(size * 0.9, 14, 14);
-    const haloMat = new THREE.MeshBasicMaterial({ color: glow, transparent: true, opacity: 0.5 });
+    const haloMat = new THREE.MeshBasicMaterial({ color: glow, transparent: true, opacity: 0.5, toneMapped: false });
+    haloMat.color.multiplyScalar(2.0);
     const halo = new THREE.Mesh(haloGeo, haloMat);
     halo.scale.set(0.15, 0.15, 0.15);
     group.add(halo);
@@ -832,18 +845,18 @@ export class ParticleSystem {
 
     // Central flash - bright icosahedron
     const flashGeo = new THREE.IcosahedronGeometry(size * 0.5, 1);
-    const flash = new THREE.Mesh(flashGeo, glowMat(0xffffcc, 1));
+    const flash = new THREE.Mesh(flashGeo, glowMat(0xffffcc, 1, 4.0));
     group.add(flash);
 
     // Inner fireball
     const fireGeo = new THREE.SphereGeometry(size * 0.4, 12, 12);
-    const fireball = new THREE.Mesh(fireGeo, glowMat(0xff8800, 1));
+    const fireball = new THREE.Mesh(fireGeo, glowMat(0xff8800, 1, 2.5));
     fireball.scale.set(0.3, 0.3, 0.3);
     group.add(fireball);
 
     // Expanding shockwave ring
     const ringGeo = new THREE.TorusGeometry(size * 0.3, 0.08, 6, 24);
-    const ring = new THREE.Mesh(ringGeo, glowMat(0xffaa44, 0.9));
+    const ring = new THREE.Mesh(ringGeo, glowMat(0xffaa44, 0.9, 2.0));
     ring.rotation.x = Math.PI / 2;
     ring.scale.set(0.1, 0.1, 0.1);
     group.add(ring);
@@ -937,17 +950,17 @@ export class ParticleSystem {
     group.position.copy(position);
 
     // Flash cone (shared geometry, already +Z-oriented with 0.15 z-offset baked in)
-    const cone = new THREE.Mesh(_MUZZLE_CONE, glowMat(0xffffff, 1.0));
+    const cone = new THREE.Mesh(_MUZZLE_CONE, glowMat(0xffffff, 1.0, 4.0));
     group.add(cone);
 
     // Flash sphere (shared unit sphere scaled to 0.08 radius)
-    const sphere = new THREE.Mesh(_UNIT_SPHERE_6, glowMat(color, 0.9));
+    const sphere = new THREE.Mesh(_UNIT_SPHERE_6, glowMat(color, 0.9, 3.0));
     sphere.scale.setScalar(0.08);
     group.add(sphere);
 
     // Star flare planes (cross pattern) — shared plane geometry
     for (let i = 0; i < 3; i++) {
-      const flareMat = glowMat(color, 0.75);
+      const flareMat = glowMat(color, 0.75, 2.0);
       flareMat.side = THREE.DoubleSide;
       const flare = new THREE.Mesh(_MUZZLE_FLARE, flareMat);
       flare.rotation.z = (i / 3) * Math.PI;
@@ -973,23 +986,23 @@ export class ParticleSystem {
     const group = new THREE.Group();
 
     // Main arc - bright edge (shared torus)
-    group.add(new THREE.Mesh(_SWORD_MAIN, glowMat(0xaaddff, 1.0)));
+    group.add(new THREE.Mesh(_SWORD_MAIN, glowMat(0xaaddff, 1.0, 3.0)));
 
     // Inner arc - white core
-    group.add(new THREE.Mesh(_SWORD_INNER, glowMat(0xffffff, 1.0)));
+    group.add(new THREE.Mesh(_SWORD_INNER, glowMat(0xffffff, 1.0, 4.5)));
 
     // Trailing glow arcs
-    const trail1 = new THREE.Mesh(_SWORD_TRAIL_1, glowMat(color, 0.5));
+    const trail1 = new THREE.Mesh(_SWORD_TRAIL_1, glowMat(color, 0.5, 2.0));
     trail1.rotation.z = 0.08;
     group.add(trail1);
-    const trail2 = new THREE.Mesh(_SWORD_TRAIL_2, glowMat(color, 0.25));
+    const trail2 = new THREE.Mesh(_SWORD_TRAIL_2, glowMat(color, 0.25, 1.5));
     trail2.rotation.z = 0.16;
     group.add(trail2);
 
     // Sparkle particles along the arc (shared unit box)
     for (let i = 0; i < 8; i++) {
       const angle = (i / 8) * Math.PI;
-      const sparkle = new THREE.Mesh(_UNIT_BOX, glowMat(0xffffff, 1.0));
+      const sparkle = new THREE.Mesh(_UNIT_BOX, glowMat(0xffffff, 1.0, 3.0));
       sparkle.scale.setScalar(0.03);
       sparkle.position.set(Math.cos(angle) * 1.2, Math.sin(angle) * 1.2, 0);
       group.add(sparkle);

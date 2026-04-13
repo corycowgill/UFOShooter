@@ -100,13 +100,15 @@ function _init() {
     composer.setSize(window.innerWidth, window.innerHeight);
     renderPass = new RenderPass(null, null); // scene/camera set per-frame
     composer.addPass(renderPass);
-    // strength / radius / threshold — threshold 0.35 lets the additive
-    // glow materials bloom while the dark building interiors stay crisp.
+    // strength / radius / threshold — threshold 0.9 gates bloom to the
+    // HDR-boosted glow cores (laser/bolt/muzzle/explosion/sword) while
+    // leaving baseline lit geometry crisp. glowMat's intensity multiplier
+    // pushes core colors to 3-5x so they dominate the bloom pass.
     bloomPass = new UnrealBloomPass(
       new THREE.Vector2(window.innerWidth, window.innerHeight),
-      0.75, // strength
-      0.55, // radius
-      0.35  // threshold
+      0.9,  // strength
+      0.6,  // radius
+      0.9   // threshold
     );
     composer.addPass(bloomPass);
     composer.addPass(new OutputPass());
