@@ -861,12 +861,12 @@ export function createAlienModel(type) {
       antennaTip.rotation.z = side * 0.5;
       group.add(antennaTip);
       // Antenna tip glow
-      const aGlow = new THREE.Mesh(
+      const antennaGlow = new THREE.Mesh(
         cGeom(THREE.SphereGeometry, 0.01, 4, 4),
         aGlow(0xff00ff, 0.8)
       );
-      aGlow.position.set(side * 0.15, 0.9, 0.48);
-      group.add(aGlow);
+      antennaGlow.position.set(side * 0.15, 0.9, 0.48);
+      group.add(antennaGlow);
     }
 
     // Mandibles - more detailed with inner teeth
