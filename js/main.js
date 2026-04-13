@@ -27,6 +27,7 @@ const GameState = {
 
 let state = GameState.MENU;
 let scene, camera, renderer;
+let composer, renderPass, bloomPass;
 let controls, audio, particles, weapons, waveManager, player, hud, helpGuide, vfx;
 let currentLevelIndex = 0;
 let currentLevelData = null;
@@ -86,6 +87,30 @@ function _init() {
   // Camera
   camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 600);
   camera.position.set(0, 1.7, 0);
+
+  // Postprocessing composer — unreal bloom wraps every additive glow
+  // (lasers, eyes, muzzle flash, explosion cores, neon signage) in a
+  // soft haloed glow that makes the sci-fi look pop. OutputPass handles
+  // tonemap + sRGB conversion since the composer's intermediate render
+  // target is linear-space float.
+  if (window.THREE_POST) {
+    const { EffectComposer, RenderPass, UnrealBloomPass, OutputPass } = window.THREE_POST;
+    composer = new EffectComposer(renderer);
+    composer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+    composer.setSize(window.innerWidth, window.innerHeight);
+    renderPass = new RenderPass(null, null); // scene/camera set per-frame
+    composer.addPass(renderPass);
+    // strength / radius / threshold — threshold 0.35 lets the additive
+    // glow materials bloom while the dark building interiors stay crisp.
+    bloomPass = new UnrealBloomPass(
+      new THREE.Vector2(window.innerWidth, window.innerHeight),
+      0.75, // strength
+      0.55, // radius
+      0.35  // threshold
+    );
+    composer.addPass(bloomPass);
+    composer.addPass(new OutputPass());
+  }
 
   // Clock
   clock = new THREE.Clock();
@@ -328,6 +353,10 @@ function setupEventListeners() {
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
     renderer.setSize(w, h);
+    if (composer) {
+      composer.setSize(w, h);
+      if (bloomPass) bloomPass.setSize(w, h);
+    }
     if (menuRenderer) {
       menuRenderer.setSize(w, h);
       menuCamera.aspect = w / h;
@@ -734,8 +763,16 @@ function animate() {
   camera.getWorldDirection(_minimapDir);
   hud.drawMinimap(camera.position, _minimapDir, waveManager.enemies);
 
-  // Render
-  renderer.render(scene, camera);
+  // Render — routed through the postprocessing composer so UnrealBloom
+  // picks up the additive laser/VFX glow. Falls back to direct render if
+  // the postprocessing addons failed to load.
+  if (composer) {
+    renderPass.scene = scene;
+    renderPass.camera = camera;
+    composer.render();
+  } else {
+    renderer.render(scene, camera);
+  }
 }
 
 function updateMenu(delta) {

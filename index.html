@@ -1086,7 +1086,8 @@ canvas#gameCanvas { display: block; width: 100vw; height: 100vh; }
 <script type="importmap">
 {
   "imports": {
-    "three": "https://unpkg.com/three@0.160.0/build/three.module.js"
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
   }
 }
 </script>
@@ -1097,6 +1098,21 @@ canvas#gameCanvas { display: block; width: 100vw; height: 100vh; }
 try {
   const THREE = await import('three');
   window.THREE = THREE;
+  // Postprocessing stack — bloom gives the additive laser/VFX bloom that
+  // sells the sci-fi look. Loaded alongside THREE and stashed on a global
+  // namespace so main.js can grab the classes without its own importmap.
+  const [
+    { EffectComposer },
+    { RenderPass },
+    { UnrealBloomPass },
+    { OutputPass },
+  ] = await Promise.all([
+    import('three/addons/postprocessing/EffectComposer.js'),
+    import('three/addons/postprocessing/RenderPass.js'),
+    import('three/addons/postprocessing/UnrealBloomPass.js'),
+    import('three/addons/postprocessing/OutputPass.js'),
+  ]);
+  window.THREE_POST = { EffectComposer, RenderPass, UnrealBloomPass, OutputPass };
   // Now that THREE is globally available, load the game modules.
   await import('./js/main.js');
 } catch (e) {
