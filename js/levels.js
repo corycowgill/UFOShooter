@@ -104,14 +104,22 @@ function freezeStaticGroup(group) {
 // ---------------------------------------------------------------------------
 // Static geometry merge pass.
 //
-// Walks the level group, buckets opaque meshes that use a shared material
-// (flagged __shared by the cache helpers), and merges each bucket into a
-// single Mesh whose BufferGeometry is the world-space concatenation of all
-// the source geometries. The originals are removed from the tree.
+// Walks the level group, buckets meshes that use a shared material (flagged
+// __shared by the cache helpers), and merges each bucket into a single Mesh
+// whose BufferGeometry is the world-space concatenation of all the source
+// geometries. The originals are removed from the tree.
+//
+// Bucketing strategy:
+//  - Opaque meshes bucket globally by material UUID → maximum draw-call
+//    reduction. No z-sort concerns for opaque.
+//  - Transparent meshes bucket by (material, coarse spatial cell) — windows
+//    etc. merge with their neighbors but distant transparent meshes stay
+//    separate so alpha blending doesn't go wildly wrong when looking across
+//    large distances. The cell size is chosen so a single building's worth
+//    of windows merges into one draw while adjacent buildings merge
+//    separately.
 //
 // Constraints:
-//  - Opaque only — transparent meshes must stay separate so the renderer's
-//    depth sort can order them per camera frame.
 //  - Material must be __shared — otherwise a unique material indicates the
 //    mesh is intentionally distinct (one-off props, animated, etc.).
 //  - Geometry must use only position/normal/uv attributes — anything else
@@ -120,6 +128,8 @@ function freezeStaticGroup(group) {
 // Colliders are unaffected: addCollider() captures a world-space Box3 at
 // add time and the collision loop only reads col.box, never col.mesh.
 // ---------------------------------------------------------------------------
+const MERGE_CELL_SIZE = 16;
+
 function mergeStaticByMaterial(rootGroup) {
   rootGroup.updateMatrixWorld(true);
 
@@ -132,16 +142,26 @@ function mergeStaticByMaterial(rootGroup) {
     const mat = child.material;
     if (!mat || Array.isArray(mat)) return;
     if (!mat.__shared) return;
-    if (mat.transparent) return;
     const geo = child.geometry;
     if (!geo || !geo.attributes || !geo.attributes.position) return;
     for (const k in geo.attributes) {
       if (!allowedAttrs.has(k)) return;
     }
-    let bucket = buckets.get(mat.uuid);
+
+    // Opaque: global bucket by material. Transparent: bucket by material
+    // + coarse spatial cell so alpha sorting stays local.
+    let key = mat.uuid;
+    if (mat.transparent) {
+      const m = child.matrixWorld.elements;
+      const cellX = Math.floor(m[12] / MERGE_CELL_SIZE);
+      const cellZ = Math.floor(m[14] / MERGE_CELL_SIZE);
+      key = `${mat.uuid}|${cellX}|${cellZ}`;
+    }
+
+    let bucket = buckets.get(key);
     if (!bucket) {
       bucket = { material: mat, items: [], castShadow: false, receiveShadow: false };
-      buckets.set(mat.uuid, bucket);
+      buckets.set(key, bucket);
     }
     bucket.items.push({ geo, matrix: child.matrixWorld.clone() });
     if (child.castShadow) bucket.castShadow = true;
@@ -2242,7 +2262,7 @@ function buildDowntownChicago(scene) {
   for (const [ax, ah] of [[-30, 65], [-28, 64]]) {
     const tipLight = new THREE.Mesh(
       new THREE.SphereGeometry(0.2, 6, 6),
-      new THREE.MeshBasicMaterial({ color: 0xff0000 })
+      sharedBasicMat(0xff0000)
     );
     tipLight.position.set(ax, ah, -55);
     group.add(tipLight);
@@ -2251,9 +2271,13 @@ function buildDowntownChicago(scene) {
   for (let y = 2; y < 44; y += 3) {
     for (let side = 0; side < 4; side++) {
       if (Math.random() > 0.35) {
+        // Quantize opacity to 0.1 bins so sharedBasicMat can dedupe all
+        // these windows into at most ~7 materials (pre-merge) or 1 per
+        // spatial cell after the transparent merge pass.
+        const _binOpacity = Math.round((0.4 + Math.random() * 0.6) * 10) / 10;
         const win = new THREE.Mesh(
           new THREE.PlaneGeometry(0.8, 1.2),
-          new THREE.MeshBasicMaterial({ color: 0xffdd66, transparent: true, opacity: 0.4 + Math.random() * 0.6 })
+          sharedBasicMat(0xffdd66, _binOpacity, true)
         );
         const angle = side * Math.PI / 2;
         const offset = 4.01;
@@ -2380,7 +2404,7 @@ function buildDowntownChicago(scene) {
     group.add(doorFrame);
     const doorGlass = new THREE.Mesh(
       new THREE.PlaneGeometry(1.1, 2.0),
-      new THREE.MeshBasicMaterial({ color: 0xffcc66, transparent: true, opacity: 0.65 })
+      sharedBasicMat(0xffcc66, 0.65, true)
     );
     doorGlass.position.set(
       bd.x + facingSide * (bd.w / 2 + 0.015),
@@ -2609,7 +2633,7 @@ function buildDowntownChicago(scene) {
       // Aircraft warning light
       const warnLight = new THREE.Mesh(
         new THREE.SphereGeometry(0.15, 6, 6),
-        new THREE.MeshBasicMaterial({ color: 0xff0000, transparent: true, opacity: 0.9 })
+        sharedBasicMat(0xff0000, 0.9, true)
       );
       warnLight.position.set(bd.x, bd.h + 4, bd.z);
       group.add(warnLight);
@@ -2958,7 +2982,7 @@ function buildLincolnParkZoo(scene) {
   // Museum windows
   for (let mx = -47; mx < -33; mx += 3) {
     const mWin = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 2),
-      new THREE.MeshBasicMaterial({ color: 0xffdd66, transparent: true, opacity: 0.4 }));
+      sharedBasicMat(0xffdd66, 0.4, true));
     mWin.position.set(mx, 4, -33.9);
     group.add(mWin);
   }
@@ -2973,7 +2997,7 @@ function buildLincolnParkZoo(scene) {
     kioskSign.position.y = 1.6;
     kiosk.add(kioskSign);
     const kioskMap = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.7),
-      new THREE.MeshBasicMaterial({ color: 0x88aa66 }));
+      sharedBasicMat(0x88aa66));
     kioskMap.position.set(0, 1.6, 0.025);
     kiosk.add(kioskMap);
     kiosk.position.set(kx, 0, kz);
@@ -3000,7 +3024,7 @@ function buildLincolnParkZoo(scene) {
       const fAngle = (fi / 12) * Math.PI * 2;
       const fr = 0.4 + Math.random() * 0.6;
       const flower = new THREE.Mesh(new THREE.SphereGeometry(0.06, 4, 4),
-        new THREE.MeshBasicMaterial({ color: flowerColors[Math.floor(Math.random() * flowerColors.length)] }));
+        sharedBasicMat(flowerColors[Math.floor(Math.random() * flowerColors.length)]));
       flower.position.set(Math.cos(fAngle) * fr, 0.15, Math.sin(fAngle) * fr);
       bed.add(flower);
       // Stem
@@ -3279,7 +3303,7 @@ function buildRavenswood(scene) {
     group.add(awning);
     // Awning valance
     const valance = new THREE.Mesh(new THREE.PlaneGeometry(5.5, 0.3),
-      new THREE.MeshBasicMaterial({ color: awningColor[si], transparent: true, opacity: 0.8 }));
+      sharedBasicMat(awningColor[si], 0.8, true));
     valance.position.set(-12, 3.3, z - 4.5);
     group.add(valance);
     // Storefront window
@@ -3290,7 +3314,7 @@ function buildRavenswood(scene) {
     group.add(sfWindow);
     // Store sign
     const signBoard = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.5, 3),
-      new THREE.MeshBasicMaterial({ color: storeNames[si % storeNames.length] }));
+      sharedBasicMat(storeNames[si % storeNames.length]));
     signBoard.position.set(-9.4, 3.8, z);
     group.add(signBoard);
     // Store light
@@ -3364,7 +3388,7 @@ function buildRavenswood(scene) {
   // Church windows (arched - approximated)
   for (let cz = -45; cz <= -35; cz += 3) {
     const cWin = new THREE.Mesh(new THREE.PlaneGeometry(1, 2.5),
-      new THREE.MeshBasicMaterial({ color: 0xddaa44, transparent: true, opacity: 0.5 }));
+      sharedBasicMat(0xddaa44, 0.5, true));
     cWin.position.set(-31, 5, cz);
     cWin.rotation.y = -Math.PI / 2;
     group.add(cWin);
