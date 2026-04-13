@@ -14,6 +14,27 @@ import { disposeTree, spawnParticle } from './particles.js';
 // flagged __shared so disposeTree() skips them across level transitions,
 // and the cache persists for the session.
 // ---------------------------------------------------------------------------
+
+// Per-type procedural animation parameters. The animation system reads
+// horizontal speed off frame-to-frame position deltas and synthesizes a
+// walk-cycle bob, forward/lateral lean toward velocity, idle breathing
+// scale pulse, attack recoil, and hit flinch — all without restructuring
+// the static alien meshes (which were authored as one flat group). Each
+// type's silhouette and movement style gets its own parameter set.
+const ANIM_PARAMS = {
+  // walkRate    = walk-cycle speed multiplier (radians per (m/s * sec))
+  // bobAmp      = vertical bob amplitude (world units)
+  // leanFactor  = how strongly the body tilts into velocity (rad per m/s)
+  // breatheAmp  = idle breathing scale amplitude (fraction)
+  // breatheRate = idle breathing oscillation rate (rad/sec)
+  grunt:   { walkRate: 4.0, bobAmp: 0.07, leanFactor: 0.05, breatheAmp: 0.012, breatheRate: 1.6 },
+  swarmer: { walkRate: 5.0, bobAmp: 0.05, leanFactor: 0.06, breatheAmp: 0.008, breatheRate: 4.0 },
+  bloater: { walkRate: 2.5, bobAmp: 0.14, leanFactor: 0.03, breatheAmp: 0.045, breatheRate: 1.2 },
+  stalker: { walkRate: 3.5, bobAmp: 0.04, leanFactor: 0.06, breatheAmp: 0.010, breatheRate: 2.4 },
+  spitter: { walkRate: 3.0, bobAmp: 0.08, leanFactor: 0.04, breatheAmp: 0.020, breatheRate: 1.8 },
+  drone:   { walkRate: 0,   bobAmp: 0,    leanFactor: 0.04, breatheAmp: 0,     breatheRate: 0   },
+};
+
 const _alienGeomCache = new Map();
 function cGeom(Ctor, ...args) {
   // Key on constructor name + stringified args. All geometry constructors we
@@ -2989,6 +3010,21 @@ export class Alien {
     // (damage sparks now flow through the global particle field)
     this._ambientEffects = []; // per-type ambient particle meshes
     this._initAmbientVFX();
+
+    // Procedural animation state. Tracks horizontal speed via frame deltas,
+    // drives a walk-cycle bob + lean, idle breathing, attack recoil, and
+    // damage flinch — all on top of whatever the behavior() function does
+    // to the mesh transform.
+    this._animLastX = position.x;
+    this._animLastZ = position.z;
+    this._walkPhase = Math.random() * Math.PI * 2;
+    this._smoothSpeed = 0;          // low-pass filtered horizontal speed
+    this._appliedBobY = 0;          // last frame's bob offset (subtracted next frame)
+    this._appliedLeanX = 0;         // last frame's lean rot.x (cleared next frame)
+    this._appliedLeanZ = 0;         // last frame's lean rot.z
+    this._attackRecoil = 0;         // seconds of remaining recoil pose
+    this._hitFlinch = 0;            // seconds of remaining damage-flinch pose
+    this._hitPunch = 0;             // seconds of remaining hit scale-punch
   }
 
   _initAmbientVFX() {
@@ -3060,9 +3096,20 @@ export class Alien {
   update(delta, playerPos) {
     if (this.dead) {
       this.deathTimer -= delta;
-      // Sink and fade - use cached materials (no traverse)
-      this.mesh.position.y -= delta * 2;
       const fadeAlpha = Math.max(0, this.deathTimer / 1.0);
+      const fallProgress = 1 - fadeAlpha; // 0 → 1 over death
+      // Dramatic fall-over: rotate forward and roll slightly while sinking.
+      // Drones spin and dive; ground aliens tip onto their face.
+      if (this.type === 'drone') {
+        this.mesh.rotation.x = fallProgress * 1.4;
+        this.mesh.rotation.z = fallProgress * 0.6;
+        this.mesh.position.y -= delta * 4 * fallProgress;
+      } else {
+        this.mesh.rotation.x = fallProgress * (Math.PI / 2);
+        this.mesh.rotation.z = Math.sin(fallProgress * 3) * 0.15;
+        this.mesh.position.y -= delta * 1.5;
+      }
+      // Fade — use cached materials (no traverse)
       for (let i = 0, len = this._allMaterials.length; i < len; i++) {
         const mat = this._allMaterials[i];
         mat.transparent = true;
@@ -3120,6 +3167,99 @@ export class Alien {
     if (dist < 40) {
       this._updateDamageEffects(delta);
     }
+
+    // Procedural skeletal-style animation: walk-bob, lean, breathing, recoil.
+    // Skipped beyond ~60m where individual limb motion isn't perceptible.
+    if (dist < 60) {
+      this._updateAnimation(delta);
+    }
+  }
+
+  _updateAnimation(delta) {
+    const params = ANIM_PARAMS[this.type] || ANIM_PARAMS.grunt;
+    const mesh = this.mesh;
+
+    // Restore the previous frame's bob/lean offsets so we can compute fresh
+    // ones from the behavior() output without drift.
+    mesh.position.y -= this._appliedBobY;
+    mesh.rotation.x -= this._appliedLeanX;
+    mesh.rotation.z -= this._appliedLeanZ;
+
+    // Horizontal speed from frame-to-frame XZ delta (the behavior step
+    // already moved us this frame).
+    const dx = mesh.position.x - this._animLastX;
+    const dz = mesh.position.z - this._animLastZ;
+    const horizSpeed = Math.sqrt(dx * dx + dz * dz) / Math.max(0.001, delta);
+    this._animLastX = mesh.position.x;
+    this._animLastZ = mesh.position.z;
+
+    // Low-pass the speed so attack jitter doesn't make legs stutter.
+    const blend = Math.min(1, delta * 6);
+    this._smoothSpeed += (horizSpeed - this._smoothSpeed) * blend;
+
+    // Walk-cycle phase advances proportionally to speed. Idle aliens still
+    // tick the phase slowly so they don't freeze mid-stride.
+    const phaseRate = this._smoothSpeed * params.walkRate + 0.6;
+    this._walkPhase += phaseRate * delta;
+
+    // |sin| gives a two-step bounce; gated by speed so stationary aliens
+    // only get the small idle component, not full-stride bouncing.
+    const motionFactor = Math.min(1, this._smoothSpeed / Math.max(0.5, this.data.speed * 0.7));
+    let bob;
+    if (this.type === 'drone') {
+      // Aerial hover: smooth continuous sine, independent of movement speed.
+      bob = Math.sin(this.pulseTime * 2.5) * 0.12;
+    } else {
+      bob = (Math.abs(Math.sin(this._walkPhase)) - 0.5) * params.bobAmp * motionFactor;
+    }
+
+    // Project velocity into mesh-local space so lean tilts forward in the
+    // direction the alien is actually moving (not always toward the player).
+    // mesh.rotation.y is the yaw set by the behavior() face-player code.
+    const yaw = mesh.rotation.y;
+    const cy = Math.cos(yaw), sy = Math.sin(yaw);
+    const localFwd = (dx * sy + dz * cy) / Math.max(0.001, delta);
+    const localRight = (dx * cy - dz * sy) / Math.max(0.001, delta);
+    // Forward velocity → tilt top forward (positive rot.x)
+    let leanX = localFwd * params.leanFactor;
+    // Lateral velocity → roll (banking into a strafe)
+    let leanZ = -localRight * params.leanFactor * 0.6;
+    // Clamp so frame spikes don't snap the body into a pretzel.
+    if (leanX > 0.4) leanX = 0.4; else if (leanX < -0.4) leanX = -0.4;
+    if (leanZ > 0.3) leanZ = 0.3; else if (leanZ < -0.3) leanZ = -0.3;
+
+    // Attack recoil: kicks the body backward briefly when firing.
+    if (this._attackRecoil > 0) {
+      this._attackRecoil = Math.max(0, this._attackRecoil - delta);
+      const r = this._attackRecoil / 0.25;
+      leanX -= r * 0.35;
+    }
+    // Damage flinch: snaps backward and sways when hit.
+    if (this._hitFlinch > 0) {
+      this._hitFlinch = Math.max(0, this._hitFlinch - delta);
+      const f = this._hitFlinch / 0.2;
+      leanX -= f * 0.25;
+      leanZ += Math.sin(this._hitFlinch * 80) * f * 0.15;
+    }
+
+    // Idle breathing — subtle whole-mesh scale pulse, plus the brief
+    // hit-punch enlargement that takeDamage() schedules. Combined into a
+    // single setScalar so the existing scale state stays simple.
+    if (this._hitPunch > 0) {
+      this._hitPunch = Math.max(0, this._hitPunch - delta);
+    }
+    const breathe = params.breatheAmp * Math.sin(this.pulseTime * params.breatheRate);
+    const punch = this._hitPunch > 0 ? 0.15 * (this._hitPunch / 0.08) : 0;
+    mesh.scale.setScalar(1 + breathe + punch);
+
+    // Apply the new frame's offsets and remember them for next frame's
+    // restore step.
+    mesh.position.y += bob;
+    mesh.rotation.x += leanX;
+    mesh.rotation.z += leanZ;
+    this._appliedBobY = bob;
+    this._appliedLeanX = leanX;
+    this._appliedLeanZ = leanZ;
   }
 
   _updateAmbientVFX(delta, dist) {
@@ -3340,6 +3480,8 @@ export class Alien {
     const speed = this.type === 'spitter' ? 25 : (this.type === 'drone' ? 40 : 30);
     const bolt = this.particles.createAlienBolt(from, playerPos, speed, this.type);
     this.projectiles.push(bolt);
+    // Kick the body backward briefly so firing reads visually
+    this._attackRecoil = 0.25;
   }
 
   _updateProjectiles(delta, playerPos) {
@@ -3372,11 +3514,10 @@ export class Alien {
     }
     this.hitFlashTimer = 0.1;
 
-    // Hit scale punch - brief enlargement
-    this.mesh.scale.set(1.15, 1.15, 1.15);
-    setTimeout(() => {
-      if (this.mesh) this.mesh.scale.set(1, 1, 1);
-    }, 80);
+    // Hit punch + flinch — handled by _updateAnimation so it composes with
+    // the breathing scale and lean state instead of fighting setTimeout.
+    this._hitPunch = 0.08;
+    this._hitFlinch = 0.2;
 
     if (this.hp <= 0) {
       this.die();
