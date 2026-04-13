@@ -5,14 +5,87 @@ export const LEVELS = [
   { name: 'RAVENSWOOD', builder: buildRavenswood },
 ];
 
-function makeMaterial(color, emissive = 0x000000) {
-  return new THREE.MeshPhongMaterial({
-    color,
-    emissive,
-    shininess: 35,
-    specular: 0x222233,
-  });
+// ---------------------------------------------------------------------------
+// Shared material cache (Phase B perf pass).
+//
+// Level builders previously allocated ~240 materials — most of them duplicates
+// (several hundred cars/buildings/props each creating their own phong material
+// with identical params). Three.js renders opaque meshes sorted by material,
+// so dedup'ing collapses state-change churn at the renderer level and cuts
+// GPU memory. Materials are flagged `__shared` so disposeTree() skips them
+// and they survive level transitions in the cache.
+// ---------------------------------------------------------------------------
+const _matCache = new Map();
+
+function sharedPhongMat(color, emissive = 0x000000, shininess = 35, specular = 0x222233) {
+  const key = `p|${color}|${emissive}|${shininess}|${specular}`;
+  let m = _matCache.get(key);
+  if (!m) {
+    m = new THREE.MeshPhongMaterial({ color, emissive, shininess, specular });
+    m.__shared = true;
+    _matCache.set(key, m);
+  }
+  return m;
 }
+
+// Extended phong cache for materials with non-default params (transparency,
+// high shininess, custom specular). Used by cars, hydrants, statues, etc.
+function sharedPhongMatEx(color, opts = {}) {
+  const emissive = opts.emissive ?? 0x000000;
+  const shininess = opts.shininess ?? 35;
+  const specular = opts.specular ?? 0x222233;
+  const transparent = !!opts.transparent;
+  const opacity = opts.opacity ?? 1;
+  const key = `pE|${color}|${emissive}|${shininess}|${specular}|${transparent ? 1 : 0}|${opacity}`;
+  let m = _matCache.get(key);
+  if (!m) {
+    const mo = { color, emissive, shininess, specular };
+    if (transparent) { mo.transparent = true; mo.opacity = opacity; }
+    m = new THREE.MeshPhongMaterial(mo);
+    m.__shared = true;
+    _matCache.set(key, m);
+  }
+  return m;
+}
+
+// Cached MeshBasicMaterial for the extremely common pattern
+//   { color, transparent, opacity [, side, blending, depthWrite, toneMapped] }
+// Using this everywhere possible dedups hundreds of window/glass/glow mats.
+function sharedBasicMat(color, opacity = 1, transparent = false, opts = {}) {
+  const side = opts.side ?? THREE.FrontSide;
+  const blending = opts.blending ?? THREE.NormalBlending;
+  const depthWrite = opts.depthWrite !== false;
+  const toneMapped = opts.toneMapped !== false;
+  const key = `b|${color}|${opacity}|${transparent ? 1 : 0}|${side}|${blending}|${depthWrite ? 1 : 0}|${toneMapped ? 1 : 0}`;
+  let m = _matCache.get(key);
+  if (!m) {
+    const mo = { color, opacity, transparent, side, blending };
+    if (!depthWrite) mo.depthWrite = false;
+    if (!toneMapped) mo.toneMapped = false;
+    m = new THREE.MeshBasicMaterial(mo);
+    m.__shared = true;
+    _matCache.set(key, m);
+  }
+  return m;
+}
+
+// Back-compat shim — all existing calls to makeMaterial(color, emissive)
+// transparently route through the shared cache.
+function makeMaterial(color, emissive = 0x000000) {
+  return sharedPhongMat(color, emissive, 35, 0x222233);
+}
+
+// ---------------------------------------------------------------------------
+// Shared geometry cache for the handful of primitives spawned by the hundreds.
+// Building window panes alone were allocating ~1000 PlaneGeometry instances
+// per level — all the same size. Each call site now references the shared
+// geometry and relies on mesh.position/rotation/scale for placement.
+// Flagged __shared so disposeTree() preserves them across level transitions.
+// ---------------------------------------------------------------------------
+const _SHARED_WINDOW_GEO = new THREE.PlaneGeometry(0.8, 1.5);
+_SHARED_WINDOW_GEO.__shared = true;
+const _SHARED_WINDOW_FRAME_GEO = new THREE.PlaneGeometry(0.9, 1.6);
+_SHARED_WINDOW_FRAME_GEO.__shared = true;
 
 // Freeze static level geometry: compute world matrices once, then disable
 // per-frame matrix auto-updates. Huge savings on scene.updateMatrixWorld()
@@ -269,13 +342,9 @@ function makeStreetLight(x, z) {
 
 function makeCar(x, z, color, rotation = 0) {
   const group = new THREE.Group();
-  const bodyMat = new THREE.MeshPhongMaterial({
-    color, shininess: 90, specular: 0x666666,
-  });
+  const bodyMat = sharedPhongMatEx(color, { shininess: 90, specular: 0x666666 });
   const trimMat = makeMaterial(0x1a1a1a, 0x050505);
-  const chromeMat = new THREE.MeshPhongMaterial({
-    color: 0xcccccc, shininess: 120, specular: 0xffffff,
-  });
+  const chromeMat = sharedPhongMatEx(0xcccccc, { shininess: 120, specular: 0xffffff });
   // Lower body
   const body = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.7, 4), bodyMat);
   body.position.y = 0.55;
@@ -297,9 +366,8 @@ function makeCar(x, z, color, rotation = 0) {
   roof.position.set(0, 1.47, -0.3);
   group.add(roof);
   // Windshield
-  const glassMat = new THREE.MeshPhongMaterial({
-    color: 0x2a3a55, transparent: true, opacity: 0.72,
-    shininess: 160, specular: 0xaaccff,
+  const glassMat = sharedPhongMatEx(0x2a3a55, {
+    transparent: true, opacity: 0.72, shininess: 160, specular: 0xaaccff,
   });
   const windshield = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 0.6), glassMat);
   windshield.position.set(0, 1.1, 0.65);
@@ -352,7 +420,7 @@ function makeCar(x, z, color, rotation = 0) {
     group.add(mirror);
     const mirrorGlass = new THREE.Mesh(
       new THREE.PlaneGeometry(0.1, 0.08),
-      new THREE.MeshPhongMaterial({ color: 0xaaccee, shininess: 160, specular: 0xffffff })
+      sharedPhongMatEx(0xaaccee, { shininess: 160, specular: 0xffffff })
     );
     mirrorGlass.position.set(sx * 1.08, 1.05, 0.5);
     mirrorGlass.rotation.y = sx > 0 ? -Math.PI / 2 : Math.PI / 2;
@@ -360,7 +428,7 @@ function makeCar(x, z, color, rotation = 0) {
   }
   // Wheels with tire sidewall + chrome rim + spokes
   const tireMat = makeMaterial(0x0a0a0a);
-  const rimMat = new THREE.MeshPhongMaterial({ color: 0xaaaaaa, shininess: 150, specular: 0xffffff });
+  const rimMat = sharedPhongMatEx(0xaaaaaa, { shininess: 150, specular: 0xffffff });
   const wheelPos = [[-0.9,0.32,1.2],[0.9,0.32,1.2],[-0.9,0.32,-1.2],[0.9,0.32,-1.2]];
   for (const [wx,wy,wz] of wheelPos) {
     const tire = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.32, 0.22, 14), tireMat);
@@ -2141,13 +2209,14 @@ function buildDowntownChicago(scene) {
       { color: 0x222244, opacity: 0.3 },  // dark (unlit)
       { color: 0x181830, opacity: 0.2 },  // very dark
     ];
+    const winFrameMat = sharedBasicMat(0x1a1a2a, 0.4, true);
     for (let y = 2; y < bd.h; y += 3) {
       for (let wOff = -bd.d / 3; wOff <= bd.d / 3; wOff += bd.d / 3) {
         if (Math.random() > 0.2) {
           const wc = winColors[Math.floor(Math.random() * winColors.length)];
           const win = new THREE.Mesh(
-            new THREE.PlaneGeometry(0.8, 1.5),
-            new THREE.MeshBasicMaterial({ color: wc.color, transparent: true, opacity: wc.opacity })
+            _SHARED_WINDOW_GEO,
+            sharedBasicMat(wc.color, wc.opacity, true)
           );
           win.position.set(
             bd.x + facingSide * (bd.w / 2 + 0.01),
@@ -2158,8 +2227,8 @@ function buildDowntownChicago(scene) {
           group.add(win);
           // Window frame (subtle darker border)
           const frame = new THREE.Mesh(
-            new THREE.PlaneGeometry(0.9, 1.6),
-            new THREE.MeshBasicMaterial({ color: 0x1a1a2a, transparent: true, opacity: 0.4 })
+            _SHARED_WINDOW_FRAME_GEO,
+            winFrameMat
           );
           frame.position.set(
             bd.x + facingSide * (bd.w / 2 + 0.005),
