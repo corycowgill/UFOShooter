@@ -14,6 +14,89 @@ function glowMat(color, opacity = 1.0) {
   });
 }
 
+// ---------------------------------------------------------------------------
+// Shared PointLight pool.
+//
+// Three.js bakes NUM_POINT_LIGHTS as a #define into every MeshPhongMaterial
+// shader. Adding or removing a PointLight at runtime changes that macro and
+// forces Three to recompile every affected material — hundreds of cars,
+// buildings, props, and alien meshes. Each compile stalls the main thread
+// for 50–200ms, producing the visible "jitter" when firing rockets or
+// triggering explosions.
+//
+// The fix: pre-allocate a fixed pool of PointLights at scene setup and never
+// add/remove more. Effects "borrow" a slot — we reposition it, set color and
+// intensity, and schedule decay. NUM_POINT_LIGHTS is constant → zero runtime
+// recompiles.
+// ---------------------------------------------------------------------------
+const _poolSlots = [];
+const POOL_SIZE = 6;
+
+export function initLightPool(scene) {
+  // Remove any lights from a previous scene/level
+  for (const slot of _poolSlots) {
+    if (slot.light.parent) slot.light.parent.remove(slot.light);
+  }
+  _poolSlots.length = 0;
+  for (let i = 0; i < POOL_SIZE; i++) {
+    const light = new THREE.PointLight(0xffffff, 0, 10);
+    light.visible = false;
+    scene.add(light);
+    _poolSlots.push({
+      light,
+      life: 0,
+      maxLife: 0,
+      baseIntensity: 0,
+      inUse: false,
+    });
+  }
+}
+
+export function borrowLight(position, color, intensity, distance, duration) {
+  if (_poolSlots.length === 0) return null;
+  // Prefer an idle slot; otherwise steal the slot with the least life left.
+  let slot = null;
+  for (let i = 0; i < _poolSlots.length; i++) {
+    if (!_poolSlots[i].inUse) { slot = _poolSlots[i]; break; }
+  }
+  if (!slot) {
+    let minLife = Infinity;
+    for (let i = 0; i < _poolSlots.length; i++) {
+      if (_poolSlots[i].life < minLife) {
+        minLife = _poolSlots[i].life;
+        slot = _poolSlots[i];
+      }
+    }
+  }
+  const light = slot.light;
+  light.color.setHex(color);
+  light.distance = distance;
+  light.intensity = intensity;
+  light.position.copy(position);
+  light.visible = true;
+  slot.life = duration;
+  slot.maxLife = duration;
+  slot.baseIntensity = intensity;
+  slot.inUse = true;
+  return light;
+}
+
+export function updateLightPool(delta) {
+  for (let i = 0; i < _poolSlots.length; i++) {
+    const slot = _poolSlots[i];
+    if (!slot.inUse) continue;
+    slot.life -= delta;
+    if (slot.life <= 0) {
+      slot.light.intensity = 0;
+      slot.light.visible = false;
+      slot.inUse = false;
+    } else {
+      const t = slot.life / slot.maxLife;
+      slot.light.intensity = slot.baseIntensity * t;
+    }
+  }
+}
+
 // Recursively dispose all geometries and materials in a subtree. Essential to
 // prevent GPU buffer leaks: Three.js does NOT auto-free GPU resources when a
 // mesh is removed from the scene — you must dispose() explicitly. Without this
