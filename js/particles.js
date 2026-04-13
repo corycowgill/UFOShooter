@@ -317,6 +317,28 @@ function clearParticleFields() {
   if (_normalField) _normalField.clear();
 }
 
+// ---------------------------------------------------------------------------
+// Shared unit primitives for per-shot visuals.
+//
+// createLaserBeam used to allocate 3 CylinderGeometry instances per fire,
+// _createImpactSparks allocated 6 BoxGeometry + 1 SphereGeometry per hit,
+// and createAlienBolt allocated several sphere+box geometries per projectile.
+// All of these are identical up to a scale factor — the cylinder is always
+// length=1 along +Z, the impact spheres are unit spheres, the sparks are
+// unit cubes. Sharing a single geometry per shape and scaling the mesh on
+// construction eliminates the per-shot geometry alloc without changing the
+// visuals at all.
+// ---------------------------------------------------------------------------
+const _UNIT_CYL_Z = new THREE.CylinderGeometry(1, 1, 1, 8);
+_UNIT_CYL_Z.rotateX(Math.PI / 2);
+_UNIT_CYL_Z.__shared = true;
+const _UNIT_SPHERE_8 = new THREE.SphereGeometry(1, 8, 8);
+_UNIT_SPHERE_8.__shared = true;
+const _UNIT_SPHERE_6 = new THREE.SphereGeometry(1, 6, 6);
+_UNIT_SPHERE_6.__shared = true;
+const _UNIT_BOX = new THREE.BoxGeometry(1, 1, 1);
+_UNIT_BOX.__shared = true;
+
 export class ParticleSystem {
   constructor(scene) {
     this.scene = scene;
@@ -332,23 +354,22 @@ export class ParticleSystem {
     const dir = new THREE.Vector3().subVectors(to, from);
     const len = dir.length();
 
-    // Core beam - bright white center (additive)
-    const coreGeo = new THREE.CylinderGeometry(width, width, len, 8);
-    coreGeo.rotateX(Math.PI / 2);
-    const core = new THREE.Mesh(coreGeo, glowMat(0xffffff, 1.0));
+    // Core beam - bright white center (additive) - shared unit cylinder, scaled
+    const core = new THREE.Mesh(_UNIT_CYL_Z, glowMat(0xffffff, 1.0));
+    core.scale.set(width, width, len);
     const mid = new THREE.Vector3().addVectors(from, to).multiplyScalar(0.5);
     core.position.copy(mid);
     core.lookAt(to);
 
     // Inner glow layer
-    const innerGeo = new THREE.CylinderGeometry(width * 2.5, width * 2.5, len, 8);
-    innerGeo.rotateX(Math.PI / 2);
-    core.add(new THREE.Mesh(innerGeo, glowMat(color, 0.7)));
+    const inner = new THREE.Mesh(_UNIT_CYL_Z, glowMat(color, 0.7));
+    inner.scale.set(2.5, 2.5, 1); // relative to parent scale
+    core.add(inner);
 
     // Outer glow layer
-    const outerGeo = new THREE.CylinderGeometry(width * 5, width * 5, len, 8);
-    outerGeo.rotateX(Math.PI / 2);
-    core.add(new THREE.Mesh(outerGeo, glowMat(color, 0.22)));
+    const outer = new THREE.Mesh(_UNIT_CYL_Z, glowMat(color, 0.22));
+    outer.scale.set(5, 5, 1);
+    core.add(outer);
 
     this.scene.add(core);
     this.beams.push({ mesh: core, life: duration, maxLife: duration });
@@ -364,19 +385,15 @@ export class ParticleSystem {
     group.position.copy(position);
 
     // Central flash
-    const flash = new THREE.Mesh(
-      new THREE.SphereGeometry(0.15, 8, 8),
-      glowMat(0xffffff, 1)
-    );
+    const flash = new THREE.Mesh(_UNIT_SPHERE_8, glowMat(0xffffff, 1));
+    flash.scale.setScalar(0.15);
     group.add(flash);
 
     // Spark rays that fly outward
     const sparks = [];
     for (let i = 0; i < 6; i++) {
-      const spark = new THREE.Mesh(
-        new THREE.BoxGeometry(0.02, 0.02, 0.12),
-        glowMat(color, 0.95)
-      );
+      const spark = new THREE.Mesh(_UNIT_BOX, glowMat(color, 0.95));
+      spark.scale.set(0.02, 0.02, 0.12);
       spark.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
       spark.velocity = new THREE.Vector3(
         (Math.random() - 0.5) * 8,
@@ -398,79 +415,52 @@ export class ParticleSystem {
     // Different bolt styles per alien type
     if (alienType === 'spitter') {
       // Acid glob - larger, dripping, yellow-green
-      const core = new THREE.Mesh(
-        new THREE.SphereGeometry(0.12, 8, 8),
-        glowMat(0xccff33, 1)
-      );
-      core.scale.set(0.8, 1, 1.5);
+      const core = new THREE.Mesh(_UNIT_SPHERE_8, glowMat(0xccff33, 1));
+      core.scale.set(0.12 * 0.8, 0.12, 0.12 * 1.5);
       boltGroup.add(core);
-      const innerGlow = new THREE.Mesh(
-        new THREE.SphereGeometry(0.2, 8, 8),
-        glowMat(0x88cc00, 0.6)
-      );
+      const innerGlow = new THREE.Mesh(_UNIT_SPHERE_8, glowMat(0x88cc00, 0.6));
+      innerGlow.scale.setScalar(0.2);
       boltGroup.add(innerGlow);
-      const outerGlow = new THREE.Mesh(
-        new THREE.SphereGeometry(0.35, 6, 6),
-        glowMat(0x66aa00, 0.2)
-      );
+      const outerGlow = new THREE.Mesh(_UNIT_SPHERE_6, glowMat(0x66aa00, 0.2));
+      outerGlow.scale.setScalar(0.35);
       boltGroup.add(outerGlow);
       // Dripping acid trail
       for (let i = 1; i <= 5; i++) {
-        const drip = new THREE.Mesh(
-          new THREE.SphereGeometry(0.04 + (0.08 / i), 4, 4),
-          glowMat(0xaaff00, 0.7 / i)
-        );
+        const drip = new THREE.Mesh(_UNIT_SPHERE_6, glowMat(0xaaff00, 0.7 / i));
+        drip.scale.setScalar(0.04 + (0.08 / i));
         drip.position.set((Math.random() - 0.5) * 0.1, (Math.random() - 0.5) * 0.1, -i * 0.2);
         boltGroup.add(drip);
       }
     } else if (alienType === 'drone') {
       // Rapid energy pulse - small, fast, blue-white
-      const core = new THREE.Mesh(
-        new THREE.SphereGeometry(0.06, 6, 6),
-        glowMat(0xddeeff, 1)
-      );
-      core.scale.set(1, 1, 3);
+      const core = new THREE.Mesh(_UNIT_SPHERE_6, glowMat(0xddeeff, 1));
+      core.scale.set(0.06, 0.06, 0.06 * 3);
       boltGroup.add(core);
-      const glow = new THREE.Mesh(
-        new THREE.SphereGeometry(0.12, 6, 6),
-        glowMat(0x4488ff, 0.5)
-      );
-      glow.scale.set(1, 1, 2);
+      const glow = new THREE.Mesh(_UNIT_SPHERE_6, glowMat(0x4488ff, 0.5));
+      glow.scale.set(0.12, 0.12, 0.12 * 2);
       boltGroup.add(glow);
       // Electric crackle lines
       for (let i = 0; i < 3; i++) {
-        const crackle = new THREE.Mesh(
-          new THREE.BoxGeometry(0.015, 0.015, 0.25),
-          glowMat(0x88ccff, 0.8)
-        );
+        const crackle = new THREE.Mesh(_UNIT_BOX, glowMat(0x88ccff, 0.8));
+        crackle.scale.set(0.015, 0.015, 0.25);
         crackle.rotation.set(Math.random() * 0.5, 0, Math.random() * Math.PI);
         boltGroup.add(crackle);
       }
     } else {
       // Standard green energy bolt (grunt)
-      const core = new THREE.Mesh(
-        new THREE.SphereGeometry(0.08, 8, 8),
-        glowMat(0xaaffaa, 1)
-      );
-      core.scale.set(1, 1, 2);
+      const core = new THREE.Mesh(_UNIT_SPHERE_8, glowMat(0xaaffaa, 1));
+      core.scale.set(0.08, 0.08, 0.08 * 2);
       boltGroup.add(core);
-      const innerGlow = new THREE.Mesh(
-        new THREE.SphereGeometry(0.15, 8, 8),
-        glowMat(0x00ff00, 0.6)
-      );
-      innerGlow.scale.set(1, 1, 1.5);
+      const innerGlow = new THREE.Mesh(_UNIT_SPHERE_8, glowMat(0x00ff00, 0.6));
+      innerGlow.scale.set(0.15, 0.15, 0.15 * 1.5);
       boltGroup.add(innerGlow);
-      const outerGlow = new THREE.Mesh(
-        new THREE.SphereGeometry(0.3, 6, 6),
-        glowMat(0x00ff00, 0.2)
-      );
+      const outerGlow = new THREE.Mesh(_UNIT_SPHERE_6, glowMat(0x00ff00, 0.2));
+      outerGlow.scale.setScalar(0.3);
       boltGroup.add(outerGlow);
       // Trail particles
       for (let i = 1; i <= 3; i++) {
-        const trail = new THREE.Mesh(
-          new THREE.SphereGeometry(0.05 / i, 4, 4),
-          glowMat(0x00ff00, 0.5 / i)
-        );
+        const trail = new THREE.Mesh(_UNIT_SPHERE_6, glowMat(0x00ff00, 0.5 / i));
+        trail.scale.setScalar(0.05 / i);
         trail.position.z = -i * 0.15;
         boltGroup.add(trail);
       }
@@ -489,34 +479,30 @@ export class ParticleSystem {
     const dir = new THREE.Vector3().subVectors(to, from);
     const len = dir.length();
 
-    // Bright core beam
-    const coreGeo = new THREE.CylinderGeometry(0.015, 0.015, len, 8);
-    coreGeo.rotateX(Math.PI / 2);
-    const core = new THREE.Mesh(coreGeo, glowMat(0xffffff, 1));
+    // Bright core beam - shared unit cylinder, scaled
+    const core = new THREE.Mesh(_UNIT_CYL_Z, glowMat(0xffffff, 1));
+    core.scale.set(0.015, 0.015, len);
     const mid = new THREE.Vector3().addVectors(from, to).multiplyScalar(0.5);
     core.position.copy(mid);
     core.lookAt(to);
 
-    // Inner glow
-    const innerGeo = new THREE.CylinderGeometry(0.04, 0.04, len, 8);
-    innerGeo.rotateX(Math.PI / 2);
-    core.add(new THREE.Mesh(innerGeo, glowMat(color, 0.8)));
+    // Inner glow (relative scale vs parent 0.015 -> 0.04 = ~2.667x)
+    const inner = new THREE.Mesh(_UNIT_CYL_Z, glowMat(color, 0.8));
+    inner.scale.set(0.04 / 0.015, 0.04 / 0.015, 1);
+    core.add(inner);
 
     // Wide outer glow
-    const outerGeo = new THREE.CylinderGeometry(0.1, 0.1, len, 8);
-    outerGeo.rotateX(Math.PI / 2);
-    core.add(new THREE.Mesh(outerGeo, glowMat(color, 0.18)));
+    const outer = new THREE.Mesh(_UNIT_CYL_Z, glowMat(color, 0.18));
+    outer.scale.set(0.1 / 0.015, 0.1 / 0.015, 1);
+    core.add(outer);
 
     // Traveling bolt along beam path
-    const bolt = new THREE.Mesh(
-      new THREE.SphereGeometry(0.08, 8, 8),
-      glowMat(0xffffff, 1)
-    );
-    bolt.scale.set(1, 1, 4);
-    const boltGlow = new THREE.Mesh(
-      new THREE.SphereGeometry(0.2, 6, 6),
-      glowMat(color, 0.6)
-    );
+    const bolt = new THREE.Mesh(_UNIT_SPHERE_8, glowMat(0xffffff, 1));
+    bolt.scale.set(0.08, 0.08, 0.08 * 4);
+    const boltGlow = new THREE.Mesh(_UNIT_SPHERE_6, glowMat(color, 0.6));
+    // boltGlow is a child of bolt which has non-uniform scale — apply inverse
+    // so the glow renders spherical rather than being stretched along Z.
+    boltGlow.scale.set(0.2 / 0.08, 0.2 / 0.08, 0.2 / (0.08 * 4));
     bolt.add(boltGlow);
     bolt.position.copy(from);
     bolt.lookAt(to);
@@ -552,18 +538,20 @@ export class ParticleSystem {
 
     // Large purple flash
     const flash = new THREE.Mesh(
-      new THREE.SphereGeometry(0.4, 8, 8),
+      _UNIT_SPHERE_8,
       new THREE.MeshBasicMaterial({ color: 0xddaaff, transparent: true, opacity: 1 })
     );
+    flash.scale.setScalar(0.4);
     group.add(flash);
 
     // Electric arcs radiating outward
     const sparks = [];
     for (let i = 0; i < 8; i++) {
       const arc = new THREE.Mesh(
-        new THREE.BoxGeometry(0.02, 0.02, 0.3 + Math.random() * 0.3),
+        _UNIT_BOX,
         new THREE.MeshBasicMaterial({ color: 0xaa66ff, transparent: true, opacity: 0.9 })
       );
+      arc.scale.set(0.02, 0.02, 0.3 + Math.random() * 0.3);
       arc.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
       arc.velocity = new THREE.Vector3(
         (Math.random() - 0.5) * 6,
@@ -594,18 +582,20 @@ export class ParticleSystem {
 
     // Blue energy burst
     const flash = new THREE.Mesh(
-      new THREE.SphereGeometry(0.3, 8, 8),
+      _UNIT_SPHERE_8,
       new THREE.MeshBasicMaterial({ color: 0xaaddff, transparent: true, opacity: 1 })
     );
+    flash.scale.setScalar(0.3);
     group.add(flash);
 
     // Energy slash lines
     const sparks = [];
     for (let i = 0; i < 5; i++) {
       const slash = new THREE.Mesh(
-        new THREE.BoxGeometry(0.01, 0.5 + Math.random() * 0.3, 0.01),
+        _UNIT_BOX,
         new THREE.MeshBasicMaterial({ color: 0x44aaff, transparent: true, opacity: 0.8 })
       );
+      slash.scale.set(0.01, 0.5 + Math.random() * 0.3, 0.01);
       slash.rotation.z = (Math.random() - 0.5) * 1.5;
       slash.velocity = new THREE.Vector3(0, 0, 0);
       group.add(slash);
@@ -615,9 +605,10 @@ export class ParticleSystem {
     // Blue sparkle particles
     for (let i = 0; i < 6; i++) {
       const spark = new THREE.Mesh(
-        new THREE.BoxGeometry(0.03, 0.03, 0.03),
+        _UNIT_BOX,
         new THREE.MeshBasicMaterial({ color: 0x88ccff, transparent: true, opacity: 0.9 })
       );
+      spark.scale.setScalar(0.03);
       spark.velocity = new THREE.Vector3(
         (Math.random() - 0.5) * 5,
         Math.random() * 3,
