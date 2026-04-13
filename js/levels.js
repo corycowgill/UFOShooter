@@ -91,10 +91,135 @@ _SHARED_WINDOW_FRAME_GEO.__shared = true;
 // per-frame matrix auto-updates. Huge savings on scene.updateMatrixWorld()
 // since static buildings, ground, roads, etc. never move.
 function freezeStaticGroup(group) {
+  // Phase B+: collapse opaque shared-material meshes into per-material
+  // merged BufferGeometries before freezing. Cuts hundreds of draw calls
+  // per level (e.g. 40 building boxes in 7 colors → 7 merged meshes).
+  mergeStaticByMaterial(group);
   group.updateMatrixWorld(true);
   group.traverse(child => {
     child.matrixAutoUpdate = false;
   });
+}
+
+// ---------------------------------------------------------------------------
+// Static geometry merge pass.
+//
+// Walks the level group, buckets opaque meshes that use a shared material
+// (flagged __shared by the cache helpers), and merges each bucket into a
+// single Mesh whose BufferGeometry is the world-space concatenation of all
+// the source geometries. The originals are removed from the tree.
+//
+// Constraints:
+//  - Opaque only — transparent meshes must stay separate so the renderer's
+//    depth sort can order them per camera frame.
+//  - Material must be __shared — otherwise a unique material indicates the
+//    mesh is intentionally distinct (one-off props, animated, etc.).
+//  - Geometry must use only position/normal/uv attributes — anything else
+//    (vertex colors, custom attribs) is left alone for safety.
+//
+// Colliders are unaffected: addCollider() captures a world-space Box3 at
+// add time and the collision loop only reads col.box, never col.mesh.
+// ---------------------------------------------------------------------------
+function mergeStaticByMaterial(rootGroup) {
+  rootGroup.updateMatrixWorld(true);
+
+  const buckets = new Map();
+  const toRemove = [];
+  const allowedAttrs = new Set(['position', 'normal', 'uv']);
+
+  rootGroup.traverse((child) => {
+    if (!child.isMesh) return;
+    const mat = child.material;
+    if (!mat || Array.isArray(mat)) return;
+    if (!mat.__shared) return;
+    if (mat.transparent) return;
+    const geo = child.geometry;
+    if (!geo || !geo.attributes || !geo.attributes.position) return;
+    for (const k in geo.attributes) {
+      if (!allowedAttrs.has(k)) return;
+    }
+    let bucket = buckets.get(mat.uuid);
+    if (!bucket) {
+      bucket = { material: mat, items: [], castShadow: false, receiveShadow: false };
+      buckets.set(mat.uuid, bucket);
+    }
+    bucket.items.push({ geo, matrix: child.matrixWorld.clone() });
+    if (child.castShadow) bucket.castShadow = true;
+    if (child.receiveShadow) bucket.receiveShadow = true;
+    toRemove.push(child);
+  });
+
+  const tmpV = new THREE.Vector3();
+  const tmpN = new THREE.Vector3();
+  const tmpNormalMat = new THREE.Matrix3();
+
+  for (const bucket of buckets.values()) {
+    if (bucket.items.length < 2) continue;
+
+    // Pre-compute total vertex count for typed array allocation
+    let total = 0;
+    let hasUV = true;
+    for (const it of bucket.items) {
+      let g = it.geo;
+      if (g.index) g = g.toNonIndexed();
+      total += g.getAttribute('position').count;
+      if (!g.getAttribute('uv')) hasUV = false;
+    }
+
+    const positions = new Float32Array(total * 3);
+    const normals = new Float32Array(total * 3);
+    const uvs = hasUV ? new Float32Array(total * 2) : null;
+    let pIdx = 0;
+    let uvIdx = 0;
+    let hasNormals = true;
+
+    for (const it of bucket.items) {
+      let g = it.geo;
+      if (g.index) g = g.toNonIndexed();
+      const pos = g.getAttribute('position');
+      const nrm = g.getAttribute('normal');
+      const uv = g.getAttribute('uv');
+      if (!nrm) hasNormals = false;
+      tmpNormalMat.getNormalMatrix(it.matrix);
+      const count = pos.count;
+      for (let i = 0; i < count; i++) {
+        tmpV.fromBufferAttribute(pos, i).applyMatrix4(it.matrix);
+        positions[pIdx] = tmpV.x;
+        positions[pIdx + 1] = tmpV.y;
+        positions[pIdx + 2] = tmpV.z;
+        if (nrm) {
+          tmpN.fromBufferAttribute(nrm, i).applyMatrix3(tmpNormalMat).normalize();
+          normals[pIdx] = tmpN.x;
+          normals[pIdx + 1] = tmpN.y;
+          normals[pIdx + 2] = tmpN.z;
+        }
+        pIdx += 3;
+        if (uvs) {
+          uvs[uvIdx] = uv.getX(i);
+          uvs[uvIdx + 1] = uv.getY(i);
+          uvIdx += 2;
+        }
+      }
+    }
+
+    const merged = new THREE.BufferGeometry();
+    merged.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    if (hasNormals) {
+      merged.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
+    }
+    if (uvs) {
+      merged.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+    }
+
+    const mergedMesh = new THREE.Mesh(merged, bucket.material);
+    mergedMesh.castShadow = bucket.castShadow;
+    mergedMesh.receiveShadow = bucket.receiveShadow;
+    rootGroup.add(mergedMesh);
+  }
+
+  for (const m of toRemove) {
+    if (m.parent) m.parent.remove(m);
+  }
 }
 
 function makeBox(w, h, d, color, x, y, z) {
