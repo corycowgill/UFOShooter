@@ -1778,10 +1778,9 @@ export class WeaponManager {
     exhaust.position.z = -0.55;
     rocket.add(exhaust);
 
-    // Point light traveling with rocket
-    const rocketLight = new THREE.PointLight(0x00ffee, 3, 12);
-    rocket.add(rocketLight);
-
+    // Rocket no longer carries a dedicated PointLight — it's redundant with
+    // the emissive nose/exhaust glow and adding/removing a light on spawn
+    // forces every MeshPhongMaterial in the scene to recompile.
     rocket.position.copy(spawn);
     // Orient rocket to face direction of travel
     rocket.lookAt(spawn.clone().add(dir));

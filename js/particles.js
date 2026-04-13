@@ -127,6 +127,7 @@ export class ParticleSystem {
     this.explosions = [];
     this.muzzleFlashes = [];
     this.impacts = [];
+    initLightPool(scene);
   }
 
   createLaserBeam(from, to, color = 0xff0000, duration = 0.1, width = 0.03) {
@@ -322,12 +323,11 @@ export class ParticleSystem {
     bolt.position.copy(from);
     bolt.lookAt(to);
 
-    // Point light on bolt
-    const boltLight = new THREE.PointLight(color, 3, 8);
-    bolt.add(boltLight);
-
     this.scene.add(core);
     this.scene.add(bolt);
+
+    // Borrow a pooled light that travels with the bolt (updated per frame)
+    const boltLight = borrowLight(from, color, 3, 8, 0.4);
 
     this.beams.push({
       mesh: core, life: 0.4, maxLife: 0.4,
@@ -384,11 +384,10 @@ export class ParticleSystem {
     ring.rotation.x = Math.PI / 2;
     group.add(ring);
 
-    const light = new THREE.PointLight(0x8800ff, 4, 6);
-    group.add(light);
+    borrowLight(position, 0x8800ff, 4, 6, 0.4);
 
     this.scene.add(group);
-    this.impacts.push({ group, flash, sparks, ring, light, life: 0.4, maxLife: 0.4, type: 'sniper' });
+    this.impacts.push({ group, flash, sparks, ring, life: 0.4, maxLife: 0.4, type: 'sniper' });
   }
 
   _createSwordImpact(position) {
@@ -430,11 +429,10 @@ export class ParticleSystem {
       sparks.push(spark);
     }
 
-    const light = new THREE.PointLight(0x0088ff, 5, 6);
-    group.add(light);
+    borrowLight(position, 0x0088ff, 5, 6, 0.3);
 
     this.scene.add(group);
-    this.impacts.push({ group, flash, sparks, light, life: 0.3, maxLife: 0.3, type: 'sword' });
+    this.impacts.push({ group, flash, sparks, life: 0.3, maxLife: 0.3, type: 'sword' });
   }
 
   createMegaExplosion(position, size = 7) {
@@ -511,7 +509,7 @@ export class ParticleSystem {
 
     // === Plasma fire particles (cyan-white, many) ===
     const fireParticles = [];
-    for (let i = 0; i < 30; i++) {
+    for (let i = 0; i < 18; i++) {
       const pGeo = new THREE.SphereGeometry(0.2 + Math.random() * 0.25, 6, 6);
       const pMat = new THREE.MeshBasicMaterial({
         color: Math.random() > 0.4 ? accent : hot,
@@ -531,7 +529,7 @@ export class ParticleSystem {
 
     // === Spark streaks (fast, bright, falling) ===
     const sparks = [];
-    for (let i = 0; i < 40; i++) {
+    for (let i = 0; i < 24; i++) {
       const sparkGeo = new THREE.BoxGeometry(0.04, 0.04, 0.25);
       const sparkMat = new THREE.MeshBasicMaterial({
         color: Math.random() > 0.5 ? hot : accent,
@@ -554,7 +552,7 @@ export class ParticleSystem {
 
     // === Thick dark smoke (rises) ===
     const smokeParticles = [];
-    for (let i = 0; i < 18; i++) {
+    for (let i = 0; i < 10; i++) {
       const sGeo = new THREE.SphereGeometry(0.3, 8, 8);
       const sMat = new THREE.MeshBasicMaterial({
         color: 0x1a1a1a, transparent: true, opacity: 0.75,
@@ -578,7 +576,7 @@ export class ParticleSystem {
       () => new THREE.BoxGeometry(0.25, 0.08, 0.08),
       () => new THREE.OctahedronGeometry(0.12),
     ];
-    for (let i = 0; i < 25; i++) {
+    for (let i = 0; i < 14; i++) {
       const pGeo = debrisShapes[Math.floor(Math.random() * debrisShapes.length)]();
       const pMat = new THREE.MeshBasicMaterial({
         color: Math.random() > 0.5 ? accent : 0xffaa00,
@@ -616,19 +614,15 @@ export class ParticleSystem {
     scorchGlow.position.y = -position.y + 0.035;
     group.add(scorchGlow);
 
-    // === Bright point light ===
-    const light = new THREE.PointLight(accent, 18, size * 10);
-    group.add(light);
-    // Secondary hot core light
-    const hotLight = new THREE.PointLight(hot, 12, size * 6);
-    group.add(hotLight);
+    // Bright pooled point lights (decay handled by pool)
+    borrowLight(position, accent, 18, size * 10, 1.4);
+    borrowLight(position, hot, 12, size * 6, 0.7);
 
     this.scene.add(group);
     this.explosions.push({
       group, flash, fireball: core, halo, ring: rings[0], rings, vRing,
       sphere: shell, outerShell,
       fireParticles, smokeParticles, particles, sparks, scorch, scorchGlow,
-      light, hotLight,
       life: 1.4, maxLife: 1.4, size,
       isMega: true,
     });
@@ -732,13 +726,12 @@ export class ParticleSystem {
     scorch.position.y = -position.y + 0.02;
     group.add(scorch);
 
-    // Bright light
-    const light = new THREE.PointLight(color, 8, size * 8);
-    group.add(light);
+    // Bright pooled light (decay handled by pool)
+    borrowLight(position, color, 8, size * 8, duration);
 
     this.scene.add(group);
     this.explosions.push({
-      group, flash, fireball, ring, sphere, fireParticles, smokeParticles, particles, scorch, light,
+      group, flash, fireball, ring, sphere, fireParticles, smokeParticles, particles, scorch,
       life: duration, maxLife: duration, size
     });
   }
@@ -778,9 +771,8 @@ export class ParticleSystem {
     const target = position.clone().add(direction);
     group.lookAt(target);
 
-    // Point light
-    const light = new THREE.PointLight(color, 5, 8);
-    group.add(light);
+    // Pooled point light (decay handled by pool)
+    borrowLight(position, color, 5, 8, 0.1);
 
     this.scene.add(group);
     this.muzzleFlashes.push({ group, life: 0.06 });
@@ -828,6 +820,9 @@ export class ParticleSystem {
   }
 
   update(delta) {
+    // Decay all pooled point lights in one pass
+    updateLightPool(delta);
+
     // Update beams
     for (let i = this.beams.length - 1; i >= 0; i--) {
       const b = this.beams[i];
@@ -849,7 +844,8 @@ export class ParticleSystem {
       if (b.bolt) {
         b.boltProgress = Math.min(1, b.boltProgress + delta * 8);
         b.bolt.position.lerpVectors(b.boltFrom, b.boltTo, b.boltProgress);
-        if (b.boltLight) b.boltLight.intensity = Math.max(0, 3 * (1 - b.boltProgress));
+        // Pool light follows the bolt; pool handles intensity decay on its own
+        if (b.boltLight) b.boltLight.position.copy(b.bolt.position);
         const boltAlpha = Math.max(0, 1 - b.boltProgress);
         const boltChildren = b.bolt.children;
         for (let bi = 0, blen = boltChildren.length; bi < blen; bi++) {
@@ -906,11 +902,6 @@ export class ParticleSystem {
         imp.ring.scale.set(rs, rs, rs);
         imp.ring.material.opacity = Math.max(0, 0.8 * (1 - progress));
       }
-      // Impact light fade
-      if (imp.light) {
-        imp.light.intensity = Math.max(0, (imp.light.intensity || 4) * (1 - progress));
-      }
-
       if (imp.life <= 0) {
         this.scene.remove(imp.group);
         disposeTree(imp.group);
@@ -980,11 +971,6 @@ export class ParticleSystem {
           sp.material.opacity = Math.max(0, 1 - progress * 1.5);
         }
       }
-      // Hot core light
-      if (e.hotLight) {
-        e.hotLight.intensity = Math.max(0, 12 * (1 - progress * 2));
-      }
-
       // Fireball expands then fades
       if (e.fireball) {
         const fbS = 0.3 + progress * 2;
@@ -1003,9 +989,6 @@ export class ParticleSystem {
       const s = progress * 2;
       e.sphere.scale.set(s, s, s);
       e.sphere.material.opacity = Math.max(0, 0.4 * (1 - progress));
-
-      // Light fades
-      e.light.intensity = Math.max(0, 8 * (1 - progress));
 
       // Fire particles rise and shrink
       if (e.fireParticles) {

@@ -10,7 +10,7 @@ import { HelpGuide } from './help.js';
 import { VFXManager } from './vfx.js';
 import { LEVELS } from './levels.js';
 import { ALIEN_TYPES } from './aliens.js';
-import { disposeTree } from './particles.js';
+import { disposeTree, initLightPool } from './particles.js';
 
 // Dispose a rocket projectile mesh + its GPU buffers.
 function _disposeProjectile(mesh) {
@@ -490,6 +490,8 @@ function loadLevel(index) {
     scene = new THREE.Scene();
     controls.camera = camera;
     particles.scene = scene;
+    // Re-seed the shared PointLight pool into the new scene
+    initLightPool(scene);
     particles.cleanup();
     if (vfx) { vfx.scene = scene; vfx.cleanup(); }
     waveManager.scene = scene;

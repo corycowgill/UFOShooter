@@ -1,7 +1,7 @@
 // vfx.js - Screen-space visual effects: shake, hit markers, damage numbers,
 //          kill feed, low-health vignette, alien death/spawn VFX, environment particles
 
-import { disposeTree } from './particles.js';
+import { disposeTree, borrowLight } from './particles.js';
 
 export class VFXManager {
   constructor(camera, scene) {
@@ -286,13 +286,12 @@ export class VFXManager {
       orbs.push(orb);
     }
 
-    // Point light
-    const light = new THREE.PointLight(color, 4, 8);
-    group.add(light);
+    // Pooled point light (decay handled centrally — no shader recompile)
+    borrowLight(position, color, 4, 8, 0.8);
 
     this.scene.add(group);
     this.deathEffects.push({
-      group, pieces, flash, ring, orbs, light,
+      group, pieces, flash, ring, orbs,
       life: 0.8, maxLife: 0.8
     });
   }
@@ -336,9 +335,6 @@ export class VFXManager {
         o.position.z += o.velocity.z * delta;
         o.material.opacity = Math.max(0, 0.8 * (1 - progress));
       }
-
-      // Light fades
-      d.light.intensity = Math.max(0, 4 * (1 - progress));
 
       if (d.life <= 0) {
         this.scene.remove(d.group);
@@ -409,14 +405,15 @@ export class VFXManager {
       sparkles.push(sparkle);
     }
 
-    // Point light
-    const light = new THREE.PointLight(0x00ff88, 3, 10);
-    light.position.y = 1;
-    group.add(light);
+    // Pooled point light 1 unit above the spawn position
+    borrowLight(
+      { x: position.x, y: position.y + 1, z: position.z },
+      0x00ff88, 3, 10, 0.6
+    );
 
     this.scene.add(group);
     this.spawnEffects.push({
-      group, beam, innerBeam, groundRing, sparkles, light,
+      group, beam, innerBeam, groundRing, sparkles,
       life: 0.6, maxLife: 0.6
     });
   }
@@ -450,9 +447,6 @@ export class VFXManager {
         );
         sp.material.opacity = Math.max(0, 0.9 * (1 - progress));
       }
-
-      // Light fades
-      s.light.intensity = Math.max(0, 3 * (1 - progress));
 
       if (s.life <= 0) {
         this.scene.remove(s.group);
