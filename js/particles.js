@@ -120,6 +120,203 @@ export function disposeTree(obj) {
   });
 }
 
+// ---------------------------------------------------------------------------
+// GPU-resident point field.
+//
+// Previously every explosion allocated 40–75 THREE.Mesh instances with unique
+// geometries/materials for fire, sparks, smoke, and debris, then ran them
+// through the full per-object transform pipeline for ~1s before GCing them.
+// Mega-explosions caused visible hitches even after trimming counts.
+//
+// This replaces the per-particle mesh soup with a single THREE.Points object
+// per blending mode (additive / normal). Each field owns pre-allocated flat
+// Float32Array state (position, velocity, life, size curve, color, alpha) and
+// a ring-buffer spawn index. One draw call per field regardless of how many
+// explosions are active. Zero allocations on spawn. The custom ShaderMaterial
+// handles per-particle size and alpha via vertex attributes.
+// ---------------------------------------------------------------------------
+class PointField {
+  constructor(scene, { capacity, blending }) {
+    this.capacity = capacity;
+    this.head = 0;
+
+    // CPU-side per-particle state.
+    this.px = new Float32Array(capacity);
+    this.py = new Float32Array(capacity);
+    this.pz = new Float32Array(capacity);
+    this.vx = new Float32Array(capacity);
+    this.vy = new Float32Array(capacity);
+    this.vz = new Float32Array(capacity);
+    this.gravity = new Float32Array(capacity);
+    this.drag = new Float32Array(capacity);
+    this.life = new Float32Array(capacity);
+    this.maxLife = new Float32Array(capacity);
+    this.sizeA = new Float32Array(capacity);
+    this.sizeB = new Float32Array(capacity);
+    this.r = new Float32Array(capacity);
+    this.g = new Float32Array(capacity);
+    this.b = new Float32Array(capacity);
+    this.alpha0 = new Float32Array(capacity);
+
+    // GPU attribute buffers — written each frame, compacted to active count.
+    this.positions = new Float32Array(capacity * 3);
+    this.colors = new Float32Array(capacity * 3);
+    this.sizes = new Float32Array(capacity);
+    this.alphas = new Float32Array(capacity);
+
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(this.positions, 3).setUsage(THREE.DynamicDrawUsage));
+    geo.setAttribute('aColor', new THREE.BufferAttribute(this.colors, 3).setUsage(THREE.DynamicDrawUsage));
+    geo.setAttribute('aSize', new THREE.BufferAttribute(this.sizes, 1).setUsage(THREE.DynamicDrawUsage));
+    geo.setAttribute('aAlpha', new THREE.BufferAttribute(this.alphas, 1).setUsage(THREE.DynamicDrawUsage));
+    geo.setDrawRange(0, 0);
+    // Positions are updated per frame from world-space CPU state; skip Three's
+    // own bounds computation entirely.
+    geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(), Infinity);
+
+    const mat = new THREE.ShaderMaterial({
+      transparent: true,
+      depthWrite: false,
+      blending,
+      toneMapped: false,
+      vertexShader: /* glsl */`
+        attribute vec3 aColor;
+        attribute float aSize;
+        attribute float aAlpha;
+        varying vec3 vColor;
+        varying float vAlpha;
+        void main() {
+          vColor = aColor;
+          vAlpha = aAlpha;
+          vec4 mv = modelViewMatrix * vec4(position, 1.0);
+          gl_Position = projectionMatrix * mv;
+          gl_PointSize = aSize * (300.0 / max(0.1, -mv.z));
+        }
+      `,
+      fragmentShader: /* glsl */`
+        varying vec3 vColor;
+        varying float vAlpha;
+        void main() {
+          vec2 c = gl_PointCoord - 0.5;
+          float d = length(c);
+          if (d > 0.5) discard;
+          float soft = 1.0 - smoothstep(0.25, 0.5, d);
+          gl_FragColor = vec4(vColor, vAlpha * soft);
+        }
+      `,
+    });
+    mat.__shared = true; // prevent disposeTree from wiping the shared shader
+
+    this.points = new THREE.Points(geo, mat);
+    this.points.frustumCulled = false;
+    this.points.matrixAutoUpdate = false;
+    scene.add(this.points);
+    this.scene = scene;
+    this.geo = geo;
+    this.mat = mat;
+  }
+
+  spawn(opts) {
+    const i = this.head;
+    this.head = (this.head + 1) % this.capacity;
+    const p = opts.position, v = opts.velocity;
+    this.px[i] = p.x; this.py[i] = p.y; this.pz[i] = p.z;
+    this.vx[i] = v.x; this.vy[i] = v.y; this.vz[i] = v.z;
+    this.gravity[i] = opts.gravity || 0;
+    this.drag[i] = opts.drag || 0;
+    this.life[i] = opts.life;
+    this.maxLife[i] = opts.life;
+    this.sizeA[i] = opts.sizeStart;
+    this.sizeB[i] = opts.sizeEnd !== undefined ? opts.sizeEnd : opts.sizeStart;
+    const c = opts.color;
+    this.r[i] = ((c >> 16) & 0xff) / 255;
+    this.g[i] = ((c >> 8) & 0xff) / 255;
+    this.b[i] = (c & 0xff) / 255;
+    this.alpha0[i] = opts.alpha !== undefined ? opts.alpha : 1;
+  }
+
+  update(delta) {
+    const cap = this.capacity;
+    const positions = this.positions, colors = this.colors;
+    const sizes = this.sizes, alphas = this.alphas;
+    let write = 0;
+    for (let i = 0; i < cap; i++) {
+      let life = this.life[i];
+      if (life <= 0) continue;
+      life -= delta;
+      if (life <= 0) { this.life[i] = 0; continue; }
+      this.life[i] = life;
+      const d = this.drag[i];
+      if (d > 0) {
+        const decay = Math.max(0, 1 - d * delta);
+        this.vx[i] *= decay; this.vy[i] *= decay; this.vz[i] *= decay;
+      }
+      this.vy[i] -= this.gravity[i] * delta;
+      this.px[i] += this.vx[i] * delta;
+      this.py[i] += this.vy[i] * delta;
+      this.pz[i] += this.vz[i] * delta;
+      const t = life / this.maxLife[i]; // 1 → 0 over lifetime
+      const sz = this.sizeB[i] + (this.sizeA[i] - this.sizeB[i]) * t;
+      const al = this.alpha0[i] * t;
+      const p3 = write * 3;
+      positions[p3] = this.px[i];
+      positions[p3 + 1] = this.py[i];
+      positions[p3 + 2] = this.pz[i];
+      colors[p3] = this.r[i];
+      colors[p3 + 1] = this.g[i];
+      colors[p3 + 2] = this.b[i];
+      sizes[write] = sz;
+      alphas[write] = al;
+      write++;
+    }
+    this.geo.setDrawRange(0, write);
+    if (write > 0) {
+      this.geo.attributes.position.needsUpdate = true;
+      this.geo.attributes.aColor.needsUpdate = true;
+      this.geo.attributes.aSize.needsUpdate = true;
+      this.geo.attributes.aAlpha.needsUpdate = true;
+    }
+  }
+
+  clear() {
+    this.life.fill(0);
+    this.geo.setDrawRange(0, 0);
+    this.head = 0;
+  }
+
+  dispose() {
+    if (this.points.parent) this.points.parent.remove(this.points);
+    this.geo.dispose();
+    this.mat.dispose();
+  }
+}
+
+// Module-level field pool so level transitions can rebuild it.
+let _additiveField = null;
+let _normalField = null;
+
+export function initParticleFields(scene) {
+  if (_additiveField) _additiveField.dispose();
+  if (_normalField) _normalField.dispose();
+  _additiveField = new PointField(scene, { capacity: 512, blending: THREE.AdditiveBlending });
+  _normalField = new PointField(scene, { capacity: 512, blending: THREE.NormalBlending });
+}
+
+export function spawnParticle(type, opts) {
+  const field = type === 'additive' ? _additiveField : _normalField;
+  if (field) field.spawn(opts);
+}
+
+function updateParticleFields(delta) {
+  if (_additiveField) _additiveField.update(delta);
+  if (_normalField) _normalField.update(delta);
+}
+
+function clearParticleFields() {
+  if (_additiveField) _additiveField.clear();
+  if (_normalField) _normalField.clear();
+}
+
 export class ParticleSystem {
   constructor(scene) {
     this.scene = scene;
@@ -128,6 +325,7 @@ export class ParticleSystem {
     this.muzzleFlashes = [];
     this.impacts = [];
     initLightPool(scene);
+    initParticleFields(scene);
   }
 
   createLaserBeam(from, to, color = 0xff0000, duration = 0.1, width = 0.03) {
@@ -507,94 +705,79 @@ export class ParticleSystem {
     outerShell.scale.set(0.1, 0.1, 0.1);
     group.add(outerShell);
 
-    // === Plasma fire particles (cyan-white, many) ===
-    const fireParticles = [];
+    // === Plasma fire particles — pushed to additive point field ===
+    // sizeStart is in world units; shader converts to screen pixels via 1/z.
     for (let i = 0; i < 18; i++) {
-      const pGeo = new THREE.SphereGeometry(0.2 + Math.random() * 0.25, 6, 6);
-      const pMat = new THREE.MeshBasicMaterial({
-        color: Math.random() > 0.4 ? accent : hot,
-        transparent: true, opacity: 1,
-      });
-      const p = new THREE.Mesh(pGeo, pMat);
       const ang = Math.random() * Math.PI * 2;
       const speed = size * (2 + Math.random() * 3);
-      p.velocity = new THREE.Vector3(
-        Math.cos(ang) * speed,
-        Math.random() * size * 4 + 1,
-        Math.sin(ang) * speed,
-      );
-      group.add(p);
-      fireParticles.push(p);
+      spawnParticle('additive', {
+        position: position,
+        velocity: { x: Math.cos(ang) * speed, y: Math.random() * size * 4 + 1, z: Math.sin(ang) * speed },
+        gravity: 3,
+        life: 0.9 + Math.random() * 0.4,
+        sizeStart: 1.4 + Math.random() * 0.8,
+        sizeEnd: 0.15,
+        color: Math.random() > 0.4 ? accent : hot,
+        alpha: 1,
+      });
     }
 
-    // === Spark streaks (fast, bright, falling) ===
-    const sparks = [];
+    // === Spark streaks — fast, bright, falling ===
     for (let i = 0; i < 24; i++) {
-      const sparkGeo = new THREE.BoxGeometry(0.04, 0.04, 0.25);
-      const sparkMat = new THREE.MeshBasicMaterial({
-        color: Math.random() > 0.5 ? hot : accent,
-        transparent: true, opacity: 1,
-      });
-      const spark = new THREE.Mesh(sparkGeo, sparkMat);
       const theta = Math.random() * Math.PI * 2;
       const phi = Math.acos(2 * Math.random() - 1);
       const spd = size * (4 + Math.random() * 4);
-      spark.velocity = new THREE.Vector3(
-        Math.sin(phi) * Math.cos(theta) * spd,
-        Math.cos(phi) * spd + 2,
-        Math.sin(phi) * Math.sin(theta) * spd,
-      );
-      // Orient spark along its velocity
-      spark.lookAt(spark.velocity);
-      group.add(spark);
-      sparks.push(spark);
+      spawnParticle('additive', {
+        position: position,
+        velocity: {
+          x: Math.sin(phi) * Math.cos(theta) * spd,
+          y: Math.cos(phi) * spd + 2,
+          z: Math.sin(phi) * Math.sin(theta) * spd,
+        },
+        gravity: 20,
+        life: 0.5 + Math.random() * 0.4,
+        sizeStart: 0.35,
+        sizeEnd: 0.05,
+        color: Math.random() > 0.5 ? hot : accent,
+        alpha: 1,
+      });
     }
 
     // === Thick dark smoke (rises) ===
-    const smokeParticles = [];
     for (let i = 0; i < 10; i++) {
-      const sGeo = new THREE.SphereGeometry(0.3, 8, 8);
-      const sMat = new THREE.MeshBasicMaterial({
-        color: 0x1a1a1a, transparent: true, opacity: 0.75,
+      spawnParticle('normal', {
+        position: position,
+        velocity: {
+          x: (Math.random() - 0.5) * size * 2,
+          y: Math.random() * size * 3 + 2,
+          z: (Math.random() - 0.5) * size * 2,
+        },
+        gravity: 1,
+        drag: 0.4,
+        life: 1.2,
+        sizeStart: 1.5,
+        sizeEnd: 5.5,
+        color: 0x1a1a1a,
+        alpha: 0.75,
       });
-      const s = new THREE.Mesh(sGeo, sMat);
-      s.velocity = new THREE.Vector3(
-        (Math.random() - 0.5) * size * 2,
-        Math.random() * size * 3 + 2,
-        (Math.random() - 0.5) * size * 2,
-      );
-      s.growRate = 2 + Math.random() * 3;
-      group.add(s);
-      smokeParticles.push(s);
     }
 
     // === Debris chunks ===
-    const particles = [];
-    const debrisShapes = [
-      () => new THREE.BoxGeometry(0.18, 0.18, 0.18),
-      () => new THREE.TetrahedronGeometry(0.15),
-      () => new THREE.BoxGeometry(0.25, 0.08, 0.08),
-      () => new THREE.OctahedronGeometry(0.12),
-    ];
     for (let i = 0; i < 14; i++) {
-      const pGeo = debrisShapes[Math.floor(Math.random() * debrisShapes.length)]();
-      const pMat = new THREE.MeshBasicMaterial({
+      spawnParticle('normal', {
+        position: position,
+        velocity: {
+          x: (Math.random() - 0.5) * size * 6,
+          y: Math.random() * size * 5,
+          z: (Math.random() - 0.5) * size * 6,
+        },
+        gravity: 12,
+        life: 1.1,
+        sizeStart: 0.55,
+        sizeEnd: 0.25,
         color: Math.random() > 0.5 ? accent : 0xffaa00,
-        transparent: true, opacity: 1,
+        alpha: 1,
       });
-      const p = new THREE.Mesh(pGeo, pMat);
-      p.velocity = new THREE.Vector3(
-        (Math.random() - 0.5) * size * 6,
-        Math.random() * size * 5,
-        (Math.random() - 0.5) * size * 6,
-      );
-      p.rotSpeed = new THREE.Vector3(
-        (Math.random() - 0.5) * 15,
-        (Math.random() - 0.5) * 15,
-        (Math.random() - 0.5) * 15,
-      );
-      group.add(p);
-      particles.push(p);
     }
 
     // === Ground scorch decal (larger) ===
@@ -622,7 +805,7 @@ export class ParticleSystem {
     this.explosions.push({
       group, flash, fireball: core, halo, ring: rings[0], rings, vRing,
       sphere: shell, outerShell,
-      fireParticles, smokeParticles, particles, sparks, scorch, scorchGlow,
+      scorch, scorchGlow,
       life: 1.4, maxLife: 1.4, size,
       isMega: true,
     });
@@ -660,61 +843,59 @@ export class ParticleSystem {
     sphere.scale.set(0.1, 0.1, 0.1);
     group.add(sphere);
 
-    // Fire particles (rise up and shrink)
-    const fireParticles = [];
+    // Fire particles — additive point field
     for (let i = 0; i < 12; i++) {
-      const pGeo = new THREE.SphereGeometry(0.15 + Math.random() * 0.15, 6, 6);
-      const pMat = glowMat(Math.random() > 0.5 ? 0xff6600 : 0xff2200, 1);
-      const p = new THREE.Mesh(pGeo, pMat);
-      p.velocity = new THREE.Vector3(
-        (Math.random() - 0.5) * size * 3,
-        Math.random() * size * 4 + 2,
-        (Math.random() - 0.5) * size * 3
-      );
-      group.add(p);
-      fireParticles.push(p);
+      spawnParticle('additive', {
+        position: position,
+        velocity: {
+          x: (Math.random() - 0.5) * size * 3,
+          y: Math.random() * size * 4 + 2,
+          z: (Math.random() - 0.5) * size * 3,
+        },
+        gravity: 4,
+        life: 0.5 + Math.random() * 0.3,
+        sizeStart: 0.8 + Math.random() * 0.5,
+        sizeEnd: 0.1,
+        color: Math.random() > 0.5 ? 0xff6600 : 0xff2200,
+        alpha: 1,
+      });
     }
 
-    // Smoke particles (dark, expand slowly, rise)
-    const smokeParticles = [];
+    // Smoke particles — normal blended point field
     for (let i = 0; i < 8; i++) {
-      const sGeo = new THREE.SphereGeometry(0.2, 6, 6);
-      const sMat = new THREE.MeshBasicMaterial({
-        color: 0x222222, transparent: true, opacity: 0.6
+      spawnParticle('normal', {
+        position: position,
+        velocity: {
+          x: (Math.random() - 0.5) * size * 1.5,
+          y: Math.random() * size * 2 + 1,
+          z: (Math.random() - 0.5) * size * 1.5,
+        },
+        gravity: 0.5,
+        drag: 0.5,
+        life: 0.9,
+        sizeStart: 1.0,
+        sizeEnd: 3.5,
+        color: 0x222222,
+        alpha: 0.6,
       });
-      const s = new THREE.Mesh(sGeo, sMat);
-      s.velocity = new THREE.Vector3(
-        (Math.random() - 0.5) * size * 1.5,
-        Math.random() * size * 2 + 1,
-        (Math.random() - 0.5) * size * 1.5
-      );
-      s.growRate = 1 + Math.random() * 2;
-      group.add(s);
-      smokeParticles.push(s);
     }
 
-    // Debris particles (angular chunks with spin)
-    const particles = [];
-    const debrisShapes = [
-      () => new THREE.BoxGeometry(0.1, 0.1, 0.1),
-      () => new THREE.TetrahedronGeometry(0.08),
-      () => new THREE.BoxGeometry(0.15, 0.05, 0.05),
-    ];
+    // Debris chunks — normal blended point field
     for (let i = 0; i < 15; i++) {
-      const pGeo = debrisShapes[Math.floor(Math.random() * debrisShapes.length)]();
-      const pMat = new THREE.MeshBasicMaterial({
+      spawnParticle('normal', {
+        position: position,
+        velocity: {
+          x: (Math.random() - 0.5) * size * 5,
+          y: Math.random() * size * 4,
+          z: (Math.random() - 0.5) * size * 5,
+        },
+        gravity: 12,
+        life: 0.7,
+        sizeStart: 0.45,
+        sizeEnd: 0.2,
         color: Math.random() > 0.5 ? color : 0xffff00,
-        transparent: true, opacity: 1
+        alpha: 1,
       });
-      const p = new THREE.Mesh(pGeo, pMat);
-      p.velocity = new THREE.Vector3(
-        (Math.random() - 0.5) * size * 5,
-        Math.random() * size * 4,
-        (Math.random() - 0.5) * size * 5
-      );
-      p.rotSpeed = new THREE.Vector3(Math.random() * 10, Math.random() * 10, Math.random() * 10);
-      group.add(p);
-      particles.push(p);
     }
 
     // Ground scorch decal
@@ -731,7 +912,7 @@ export class ParticleSystem {
 
     this.scene.add(group);
     this.explosions.push({
-      group, flash, fireball, ring, sphere, fireParticles, smokeParticles, particles, scorch,
+      group, flash, fireball, ring, sphere, scorch,
       life: duration, maxLife: duration, size
     });
   }
@@ -822,6 +1003,8 @@ export class ParticleSystem {
   update(delta) {
     // Decay all pooled point lights in one pass
     updateLightPool(delta);
+    // Advance GPU particle fields (fire/sparks/smoke/debris)
+    updateParticleFields(delta);
 
     // Update beams
     for (let i = this.beams.length - 1; i >= 0; i--) {
@@ -955,22 +1138,6 @@ export class ParticleSystem {
       if (e.scorchGlow) {
         e.scorchGlow.material.opacity = Math.min(0.35, progress * 1.5) * (1 - Math.max(0, progress - 0.7) * 3);
       }
-      // Sparks
-      if (e.sparks) {
-        for (let si = 0; si < e.sparks.length; si++) {
-          const sp = e.sparks[si];
-          sp.position.x += sp.velocity.x * delta;
-          sp.position.y += sp.velocity.y * delta;
-          sp.position.z += sp.velocity.z * delta;
-          sp.velocity.y -= 20 * delta;
-          sp.lookAt(
-            sp.position.x + sp.velocity.x,
-            sp.position.y + sp.velocity.y,
-            sp.position.z + sp.velocity.z
-          );
-          sp.material.opacity = Math.max(0, 1 - progress * 1.5);
-        }
-      }
       // Fireball expands then fades
       if (e.fireball) {
         const fbS = 0.3 + progress * 2;
@@ -990,49 +1157,8 @@ export class ParticleSystem {
       e.sphere.scale.set(s, s, s);
       e.sphere.material.opacity = Math.max(0, 0.4 * (1 - progress));
 
-      // Fire particles rise and shrink
-      if (e.fireParticles) {
-        for (let fi = 0, flen = e.fireParticles.length; fi < flen; fi++) {
-          const p = e.fireParticles[fi];
-          p.position.x += p.velocity.x * delta;
-          p.position.y += p.velocity.y * delta;
-          p.position.z += p.velocity.z * delta;
-          p.velocity.y -= 3 * delta;
-          p.material.opacity = Math.max(0, 1 - progress * 1.5);
-          const ps = Math.max(0.1, 1 - progress);
-          p.scale.set(ps, ps, ps);
-        }
-      }
-
-      // Smoke particles rise slowly and expand
-      if (e.smokeParticles) {
-        const halfDelta = delta * 0.5;
-        for (let si = 0, slen = e.smokeParticles.length; si < slen; si++) {
-          const sm = e.smokeParticles[si];
-          sm.position.x += sm.velocity.x * halfDelta;
-          sm.position.y += sm.velocity.y * halfDelta;
-          sm.position.z += sm.velocity.z * halfDelta;
-          sm.velocity.y -= 1 * delta;
-          sm.material.opacity = Math.max(0, 0.6 * (1 - progress * 0.8));
-          const grow = 1 + progress * sm.growRate;
-          sm.scale.set(grow, grow, grow);
-        }
-      }
-
-      // Debris particles fall with gravity and spin
-      for (let di = 0, dlen = e.particles.length; di < dlen; di++) {
-        const p = e.particles[di];
-        p.position.x += p.velocity.x * delta;
-        p.position.y += p.velocity.y * delta;
-        p.position.z += p.velocity.z * delta;
-        p.velocity.y -= 12 * delta;
-        p.material.opacity = Math.max(0, 1 - progress);
-        if (p.rotSpeed) {
-          p.rotation.x += p.rotSpeed.x * delta;
-          p.rotation.y += p.rotSpeed.y * delta;
-          p.rotation.z += p.rotSpeed.z * delta;
-        }
-      }
+      // Fire / smoke / spark / debris particles now live in the GPU point
+      // fields — no per-particle mesh updates here.
 
       // Scorch fades in then out
       if (e.scorch) {
@@ -1091,5 +1217,6 @@ export class ParticleSystem {
     this.explosions = [];
     this.muzzleFlashes = [];
     this.impacts = [];
+    clearParticleFields();
   }
 }
