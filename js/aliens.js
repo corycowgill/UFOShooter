@@ -1,5 +1,5 @@
 // aliens.js - Three alien types with procedural models and AI
-import { disposeTree } from './particles.js';
+import { disposeTree, spawnParticle } from './particles.js';
 
 export const ALIEN_TYPES = {
   grunt: {
@@ -2959,7 +2959,7 @@ export class Alien {
 
     // Ambient VFX state
     this.hitFlashTimer = 0;
-    this._damageSmoke = [];    // smoke particles for damaged enemies
+    // (damage sparks now flow through the global particle field)
     this._ambientEffects = []; // per-type ambient particle meshes
     this._initAmbientVFX();
   }
@@ -3152,51 +3152,30 @@ export class Alien {
   _updateDamageEffects(delta) {
     const hpPct = this.hp / this.maxHp;
 
-    // Spawn damage smoke/sparks when below 40% HP
-    if (hpPct < 0.4 && !this.dead) {
-      // Intermittent sparking - use shared geometry
-      if (Math.random() < delta * 3) {
-        if (!Alien._sparkGeo) {
-          Alien._sparkGeo = new THREE.BoxGeometry(0.02, 0.02, 0.06);
-          Alien._sparkGeo.__shared = true;
-        }
-        const sparkMesh = new THREE.Mesh(
-          Alien._sparkGeo,
-          new THREE.MeshBasicMaterial({
-            color: hpPct < 0.2 ? 0xff4400 : 0xffaa00,
-            transparent: true, opacity: 0.9
-          })
-        );
-        sparkMesh.position.set(
-          (Math.random() - 0.5) * 0.6,
-          0.5 + Math.random() * 1.0,
-          (Math.random() - 0.5) * 0.6
-        );
-        sparkMesh.velocity = new THREE.Vector3(
-          (Math.random() - 0.5) * 2,
-          Math.random() * 3 + 1,
-          (Math.random() - 0.5) * 2
-        );
-        sparkMesh.life = 0.3 + Math.random() * 0.2;
-        this.mesh.add(sparkMesh);
-        this._damageSmoke.push(sparkMesh);
-      }
-    }
-
-    // Update existing damage particles - inline velocity math (no clone)
-    for (let i = this._damageSmoke.length - 1; i >= 0; i--) {
-      const s = this._damageSmoke[i];
-      s.life -= delta;
-      s.position.x += s.velocity.x * delta;
-      s.position.y += s.velocity.y * delta;
-      s.position.z += s.velocity.z * delta;
-      s.velocity.y -= 5 * delta;
-      s.material.opacity = Math.max(0, s.life * 3);
-      if (s.life <= 0) {
-        this.mesh.remove(s);
-        s.material.dispose();
-        this._damageSmoke.splice(i, 1);
-      }
+    // Spawn damage sparks when below 40% HP. Routed to the additive GPU
+    // point field — previously allocated a unique mesh + material per
+    // spark (~3 per damaged alien per second), which was a steady
+    // background alloc rate during heavy combat.
+    if (hpPct < 0.4 && !this.dead && Math.random() < delta * 3) {
+      const basePos = this.mesh.position;
+      spawnParticle('additive', {
+        position: {
+          x: basePos.x + (Math.random() - 0.5) * 0.6,
+          y: basePos.y + 0.5 + Math.random() * 1.0,
+          z: basePos.z + (Math.random() - 0.5) * 0.6,
+        },
+        velocity: {
+          x: (Math.random() - 0.5) * 2,
+          y: Math.random() * 3 + 1,
+          z: (Math.random() - 0.5) * 2,
+        },
+        gravity: 5,
+        life: 0.3 + Math.random() * 0.2,
+        sizeStart: 0.18,
+        sizeEnd: 0.04,
+        color: hpPct < 0.2 ? 0xff4400 : 0xffaa00,
+        alpha: 0.9,
+      });
     }
   }
 
@@ -3443,11 +3422,7 @@ export class Alien {
       disposeTree(p.mesh);
     });
     this.projectiles = [];
-    this._damageSmoke.forEach(s => {
-      this.mesh.remove(s);
-      if (s.material) s.material.dispose();
-    });
-    this._damageSmoke = [];
+    // Damage sparks live in the global particle field — nothing to dispose.
     this.scene.remove(this.mesh);
     disposeTree(this.mesh);
   }

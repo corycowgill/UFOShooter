@@ -18,36 +18,72 @@ export class HUD {
     this.minimapCanvas = document.getElementById('minimap');
     this.minimapCtx = this.minimapCanvas ? this.minimapCanvas.getContext('2d') : null;
     this.announceTimer = 0;
+    // Dirty-tracking cache — DOM writes are expensive relative to a property
+    // compare and most HUD values only change every few frames (or never).
+    this._last = {
+      wave: -1, enemyCount: -1, score: -1, levelName: '',
+      hpBucket: -2, hpText: '', hpBarColor: '',
+      weaponName: '', cooldownBucket: -1, ammoText: '',
+    };
   }
 
   update(player, waveManager, weaponData, levelName) {
     const els = this.elements;
+    const last = this._last;
 
-    // Wave info
-    els.waveNum.textContent = waveManager.wave;
-    els.enemyCount.textContent = waveManager.getAliveCount();
-    els.score.textContent = player.score;
-    els.levelName.textContent = levelName;
+    // Wave info — only write when the underlying value changes.
+    const wave = waveManager.wave;
+    if (wave !== last.wave) { els.waveNum.textContent = wave; last.wave = wave; }
+    const enemyCount = waveManager.getAliveCount();
+    if (enemyCount !== last.enemyCount) {
+      els.enemyCount.textContent = enemyCount;
+      last.enemyCount = enemyCount;
+    }
+    const score = player.score;
+    if (score !== last.score) { els.score.textContent = score; last.score = score; }
+    if (levelName !== last.levelName) {
+      els.levelName.textContent = levelName;
+      last.levelName = levelName;
+    }
 
-    // Health
+    // Health — bucket the percentage to 1% so sub-pixel jitter doesn't
+    // churn the style attribute, and the bar color only flips at boundaries.
     const hpPct = Math.max(0, player.hp / player.maxHp * 100);
-    els.healthBar.style.width = hpPct + '%';
-    els.healthText.textContent = `HP: ${Math.ceil(player.hp)}/${player.maxHp}`;
-    if (hpPct < 25) {
-      els.healthBar.style.background = '#f00';
-    } else if (hpPct < 50) {
-      els.healthBar.style.background = 'linear-gradient(90deg, #f00, #ff0)';
-    } else {
-      els.healthBar.style.background = 'linear-gradient(90deg, #f00, #0f0)';
+    const hpBucket = Math.round(hpPct);
+    if (hpBucket !== last.hpBucket) {
+      els.healthBar.style.width = hpBucket + '%';
+      last.hpBucket = hpBucket;
+    }
+    const hpText = `HP: ${Math.ceil(player.hp)}/${player.maxHp}`;
+    if (hpText !== last.hpText) {
+      els.healthText.textContent = hpText;
+      last.hpText = hpText;
+    }
+    const hpBarColor = hpPct < 25 ? '#f00'
+      : hpPct < 50 ? 'linear-gradient(90deg, #f00, #ff0)'
+      : 'linear-gradient(90deg, #f00, #0f0)';
+    if (hpBarColor !== last.hpBarColor) {
+      els.healthBar.style.background = hpBarColor;
+      last.hpBarColor = hpBarColor;
     }
 
     // Weapon
-    els.weaponName.textContent = weaponData.name;
-    els.cooldownFill.style.width = ((1 - weaponData.cooldownPct) * 100) + '%';
-    if (weaponData.currentKey === 'laserSword') {
-      els.ammoDisplay.textContent = 'MELEE';
-    } else {
-      els.ammoDisplay.textContent = weaponData.cooldownPct > 0 ? 'CHARGING...' : 'READY';
+    if (weaponData.name !== last.weaponName) {
+      els.weaponName.textContent = weaponData.name;
+      last.weaponName = weaponData.name;
+    }
+    // Cooldown fill — bucket to integer percent
+    const cdBucket = Math.round((1 - weaponData.cooldownPct) * 100);
+    if (cdBucket !== last.cooldownBucket) {
+      els.cooldownFill.style.width = cdBucket + '%';
+      last.cooldownBucket = cdBucket;
+    }
+    const ammoText = weaponData.currentKey === 'laserSword'
+      ? 'MELEE'
+      : (weaponData.cooldownPct > 0 ? 'CHARGING...' : 'READY');
+    if (ammoText !== last.ammoText) {
+      els.ammoDisplay.textContent = ammoText;
+      last.ammoText = ammoText;
     }
   }
 
