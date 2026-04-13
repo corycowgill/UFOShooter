@@ -67,7 +67,10 @@ function _init() {
     logarithmicDepthBuffer: false,
   });
   renderer.setSize(window.innerWidth, window.innerHeight);
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  // Cap at 1.5 instead of 2 — retina displays render 4× the fragments at
+  // dpr=2 and MSAA mostly hides the downsampling. 44% fewer fragments for
+  // nearly identical visual quality.
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   // The only shadow casters are static world geometry (buildings, props) and

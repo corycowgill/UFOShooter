@@ -110,14 +110,14 @@ function freezeStaticGroup(group) {
 // geometries. The originals are removed from the tree.
 //
 // Bucketing strategy:
-//  - Opaque meshes bucket globally by material UUID → maximum draw-call
-//    reduction. No z-sort concerns for opaque.
-//  - Transparent meshes bucket by (material, coarse spatial cell) — windows
-//    etc. merge with their neighbors but distant transparent meshes stay
-//    separate so alpha blending doesn't go wildly wrong when looking across
-//    large distances. The cell size is chosen so a single building's worth
-//    of windows merges into one draw while adjacent buildings merge
-//    separately.
+//  - Every mesh buckets by (material, spatial cell). Opaque cells are large
+//    (48 units — just enough that looking in one direction culls the meshes
+//    behind you) while transparent cells are small (16 units — one building
+//    footprint) so alpha blending stays locally correct.
+//  - A globally-merged mesh defeats frustum culling entirely: its bounding
+//    sphere covers the whole level, so the GPU runs the vertex shader on
+//    every vertex even when most are behind the camera. Splitting into
+//    cells restores culling at the cost of a few more draw calls.
 //
 // Constraints:
 //  - Material must be __shared — otherwise a unique material indicates the
@@ -128,7 +128,11 @@ function freezeStaticGroup(group) {
 // Colliders are unaffected: addCollider() captures a world-space Box3 at
 // add time and the collision loop only reads col.box, never col.mesh.
 // ---------------------------------------------------------------------------
-const MERGE_CELL_SIZE = 16;
+// Cell sizes for spatial bucketing. Transparent uses a tighter grid so alpha
+// sort stays local; opaque uses a larger grid just to restore frustum culling
+// without exploding the draw-call count.
+const TRANSPARENT_MERGE_CELL = 16;
+const OPAQUE_MERGE_CELL = 48;
 
 function mergeStaticByMaterial(rootGroup) {
   rootGroup.updateMatrixWorld(true);
@@ -148,15 +152,14 @@ function mergeStaticByMaterial(rootGroup) {
       if (!allowedAttrs.has(k)) return;
     }
 
-    // Opaque: global bucket by material. Transparent: bucket by material
-    // + coarse spatial cell so alpha sorting stays local.
-    let key = mat.uuid;
-    if (mat.transparent) {
-      const m = child.matrixWorld.elements;
-      const cellX = Math.floor(m[12] / MERGE_CELL_SIZE);
-      const cellZ = Math.floor(m[14] / MERGE_CELL_SIZE);
-      key = `${mat.uuid}|${cellX}|${cellZ}`;
-    }
+    // Bucket by (material, spatial cell). Opaque cells are large (just
+    // enough to restore frustum culling); transparent cells are small so
+    // alpha sorting stays local.
+    const cell = mat.transparent ? TRANSPARENT_MERGE_CELL : OPAQUE_MERGE_CELL;
+    const m = child.matrixWorld.elements;
+    const cellX = Math.floor(m[12] / cell);
+    const cellZ = Math.floor(m[14] / cell);
+    const key = `${mat.uuid}|${cellX}|${cellZ}`;
 
     let bucket = buckets.get(key);
     if (!bucket) {
@@ -230,6 +233,12 @@ function mergeStaticByMaterial(rootGroup) {
     if (uvs) {
       merged.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
     }
+
+    // Compute a tight bounding sphere so the merged cell participates in
+    // frustum culling. Without this the merged mesh would keep Three's
+    // default bounding behavior and stay visible when off-screen.
+    merged.computeBoundingSphere();
+    merged.computeBoundingBox();
 
     const mergedMesh = new THREE.Mesh(merged, bucket.material);
     mergedMesh.castShadow = bucket.castShadow;
