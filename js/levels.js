@@ -69,6 +69,29 @@ function sharedBasicMat(color, opacity = 1, transparent = false, opts = {}) {
   return m;
 }
 
+// HDR light material — bright light sources (streetlight bulbs, headlights,
+// taillights, reverse lights, traffic signals, neon signs) that should punch
+// through the UnrealBloomPass threshold with a visible halo. toneMapped:false
+// + color.multiplyScalar(intensity) pushes the output past [0,1] into real
+// HDR range. Cached because these are static geometry (no runtime opacity
+// mutation) and are duplicated across hundreds of cars / lamp posts.
+function sharedLightMat(color, intensity = 3.0, opacity = 1, transparent = false) {
+  const key = `L|${color}|${intensity}|${opacity}|${transparent ? 1 : 0}`;
+  let m = _matCache.get(key);
+  if (!m) {
+    m = new THREE.MeshBasicMaterial({
+      color,
+      transparent,
+      opacity,
+      toneMapped: false,
+    });
+    if (intensity !== 1.0) m.color.multiplyScalar(intensity);
+    m.__shared = true;
+    _matCache.set(key, m);
+  }
+  return m;
+}
+
 // Back-compat shim — all existing calls to makeMaterial(color, emissive)
 // transparently route through the shared cache.
 function makeMaterial(color, emissive = 0x000000) {
@@ -469,10 +492,10 @@ function makeStreetLight(x, z) {
   );
   glass.position.set(1.2, 4.52, 0);
   group.add(glass);
-  // Bulb
+  // Bulb — HDR boost for bloom halo
   const bulb = new THREE.Mesh(
     new THREE.SphereGeometry(0.08, 8, 8),
-    new THREE.MeshBasicMaterial({ color: 0xffe6a0 })
+    sharedLightMat(0xffe6a0, 4.0)
   );
   bulb.position.set(1.2, 4.55, 0);
   group.add(bulb);
@@ -611,7 +634,7 @@ function makeCar(x, z, color, rotation = 0) {
     group.add(housing);
     const hl = new THREE.Mesh(
       new THREE.CircleGeometry(0.12, 10),
-      new THREE.MeshBasicMaterial({ color: 0xfff4c0 })
+      sharedLightMat(0xfff4c0, 4.5)
     );
     hl.position.set(side, 0.65, 2.02);
     group.add(hl);
@@ -632,7 +655,7 @@ function makeCar(x, z, color, rotation = 0) {
     group.add(tlHousing);
     const tl = new THREE.Mesh(
       new THREE.CircleGeometry(0.1, 8),
-      new THREE.MeshBasicMaterial({ color: 0xff2200 })
+      sharedLightMat(0xff2200, 3.5)
     );
     tl.position.set(side, 0.65, -2.02);
     tl.rotation.y = Math.PI;
@@ -641,7 +664,7 @@ function makeCar(x, z, color, rotation = 0) {
   // Reverse light (center)
   const reverseLight = new THREE.Mesh(
     new THREE.BoxGeometry(0.25, 0.06, 0.02),
-    new THREE.MeshBasicMaterial({ color: 0xffffee })
+    sharedLightMat(0xffffee, 3.5)
   );
   reverseLight.position.set(0, 0.58, -2.02);
   group.add(reverseLight);
@@ -799,32 +822,20 @@ function makeTrafficLight(x, z) {
   );
   topCap.position.set(2.5, 5.78, 0);
   group.add(topCap);
-  // Lights (red, yellow, green) with glow
+  // Lights (red, yellow, green) with glow — active red bulb is HDR-boosted
+  // so it blooms hard through the UnrealBloomPass threshold; inactive lenses
+  // stay dim (low opacity, no HDR) to read as unlit.
   const lightColors = [0xff2222, 0xffbb00, 0x22ff55];
   for (let i = 0; i < 3; i++) {
     // Lens
     const bulb = new THREE.Mesh(
       new THREE.CircleGeometry(0.09, 12),
-      new THREE.MeshBasicMaterial({
-        color: lightColors[i], transparent: true,
-        opacity: i === 0 ? 1.0 : 0.28,
-      })
+      i === 0
+        ? sharedLightMat(lightColors[i], 4.0, 1.0, false)
+        : sharedBasicMat(lightColors[i], 0.28, true)
     );
     bulb.position.set(2.5, 5.55 - i * 0.25, 0.13);
     group.add(bulb);
-    // Additive glow halo on active (red)
-    if (i === 0) {
-      const glow = new THREE.Mesh(
-        new THREE.CircleGeometry(0.2, 12),
-        new THREE.MeshBasicMaterial({
-          color: lightColors[i], transparent: true, opacity: 0.5,
-          blending: THREE.AdditiveBlending, depthWrite: false,
-          toneMapped: false,
-        })
-      );
-      glow.position.set(2.5, 5.55 - i * 0.25, 0.14);
-      group.add(glow);
-    }
   }
   // Walk signal on pole
   const walkBox = new THREE.Mesh(
@@ -2358,23 +2369,29 @@ function buildDowntownChicago(scene) {
       group.add(band);
     }
 
-    // Window grid with varied colors and glow
+    // Window grid with varied colors and glow.
+    // Lit windows are HDR-boosted so a dense facade blooms into a convincing
+    // glowing-skyscraper silhouette through the bloom pass. Unlit windows
+    // stay as plain basic materials (no bloom, reads as dark glass).
     const winColors = [
-      { color: 0xffdd44, opacity: 0.7 },  // warm yellow (occupied)
-      { color: 0xffc833, opacity: 0.6 },  // golden
-      { color: 0xeebb55, opacity: 0.5 },  // amber
-      { color: 0x88aacc, opacity: 0.4 },  // cool blue (TV glow)
-      { color: 0x222244, opacity: 0.3 },  // dark (unlit)
-      { color: 0x181830, opacity: 0.2 },  // very dark
+      { color: 0xffdd44, opacity: 0.9, lit: true,  intensity: 2.8 }, // warm yellow
+      { color: 0xffc833, opacity: 0.85, lit: true, intensity: 2.5 }, // golden
+      { color: 0xeebb55, opacity: 0.8, lit: true,  intensity: 2.2 }, // amber
+      { color: 0x88aacc, opacity: 0.7, lit: true,  intensity: 2.0 }, // cool blue TV glow
+      { color: 0x222244, opacity: 0.3, lit: false, intensity: 1.0 }, // dark unlit
+      { color: 0x181830, opacity: 0.2, lit: false, intensity: 1.0 }, // very dark
     ];
     const winFrameMat = sharedBasicMat(0x1a1a2a, 0.4, true);
     for (let y = 2; y < bd.h; y += 3) {
       for (let wOff = -bd.d / 3; wOff <= bd.d / 3; wOff += bd.d / 3) {
         if (Math.random() > 0.2) {
           const wc = winColors[Math.floor(Math.random() * winColors.length)];
+          const winMat = wc.lit
+            ? sharedLightMat(wc.color, wc.intensity, wc.opacity, true)
+            : sharedBasicMat(wc.color, wc.opacity, true);
           const win = new THREE.Mesh(
             _SHARED_WINDOW_GEO,
-            sharedBasicMat(wc.color, wc.opacity, true)
+            winMat
           );
           win.position.set(
             bd.x + facingSide * (bd.w / 2 + 0.01),
@@ -2856,10 +2873,10 @@ function buildLincolnParkZoo(scene) {
   group.add(gateLeft, gateRight, gateTop);
   addCollider(colliders, gateLeft);
   addCollider(colliders, gateRight);
-  // Gate sign
+  // Gate sign — HDR neon
   const sign = new THREE.Mesh(
     new THREE.PlaneGeometry(8, 1.2),
-    new THREE.MeshBasicMaterial({ color: 0x228833 })
+    sharedLightMat(0x228833, 2.5)
   );
   sign.position.set(0, 7.5, 50);
   group.add(sign);
@@ -3194,7 +3211,7 @@ function buildRavenswood(scene) {
   ctaSign.position.set(0, 9, 0);
   group.add(ctaSign);
   const ctaDot = new THREE.Mesh(new THREE.CircleGeometry(0.25, 12),
-    new THREE.MeshBasicMaterial({ color: 0x884400 }));
+    sharedLightMat(0xff8822, 3.5));
   ctaDot.position.set(0, 9, 0.05);
   group.add(ctaDot);
   // Station stairs
@@ -3321,9 +3338,9 @@ function buildRavenswood(scene) {
     sfWindow.position.set(-9.49, 2, z);
     sfWindow.rotation.y = Math.PI / 2;
     group.add(sfWindow);
-    // Store sign
+    // Store sign — HDR neon, blooms through the bloom pass
     const signBoard = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.5, 3),
-      sharedBasicMat(storeNames[si % storeNames.length]));
+      sharedLightMat(storeNames[si % storeNames.length], 2.5));
     signBoard.position.set(-9.4, 3.8, z);
     group.add(signBoard);
     // Store light
