@@ -1,7 +1,7 @@
 // vfx.js - Screen-space visual effects: shake, hit markers, damage numbers,
 //          kill feed, low-health vignette, alien death/spawn VFX, environment particles
 
-import { disposeTree, borrowLight } from './particles.js';
+import { disposeTree, borrowLight, spawnParticle } from './particles.js';
 
 export class VFXManager {
   constructor(camera, scene) {
@@ -228,41 +228,35 @@ export class VFXManager {
     const group = new THREE.Group();
     group.position.copy(position);
 
-    // Dissolution particles - pieces flying outward
-    const pieces = [];
+    // Dissolution particles — routed to the GPU point field (additive).
+    // Previously allocated 16-24 mesh instances per death, each with its
+    // own material. That was a real allocation spike on multi-kills.
     const pieceCount = 16 + Math.floor(Math.random() * 8);
     for (let i = 0; i < pieceCount; i++) {
-      const geo = Math.random() > 0.5
-        ? new THREE.TetrahedronGeometry(0.08 * size)
-        : new THREE.BoxGeometry(0.1 * size, 0.06 * size, 0.06 * size);
-      const mat = new THREE.MeshBasicMaterial({
+      spawnParticle('additive', {
+        position,
+        velocity: {
+          x: (Math.random() - 0.5) * 6,
+          y: Math.random() * 5 + 1,
+          z: (Math.random() - 0.5) * 6,
+        },
+        gravity: 8,
+        life: 0.75,
+        sizeStart: 0.28 * size,
+        sizeEnd: 0.05 * size,
         color: Math.random() > 0.3 ? color : 0x00ff00,
-        transparent: true,
-        opacity: 1,
+        alpha: 1,
       });
-      const piece = new THREE.Mesh(geo, mat);
-      piece.velocity = new THREE.Vector3(
-        (Math.random() - 0.5) * 6,
-        Math.random() * 5 + 1,
-        (Math.random() - 0.5) * 6
-      );
-      piece.rotSpeed = new THREE.Vector3(
-        Math.random() * 15,
-        Math.random() * 15,
-        Math.random() * 15
-      );
-      group.add(piece);
-      pieces.push(piece);
     }
 
-    // Energy release flash
+    // Energy release flash — structural, stays as a mesh.
     const flash = new THREE.Mesh(
       new THREE.SphereGeometry(0.5 * size, 8, 8),
       new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 1 })
     );
     group.add(flash);
 
-    // Expanding energy ring
+    // Expanding energy ring — structural.
     const ring = new THREE.Mesh(
       new THREE.TorusGeometry(0.3 * size, 0.04, 6, 16),
       new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.8 })
@@ -270,20 +264,23 @@ export class VFXManager {
     ring.rotation.x = Math.PI / 2;
     group.add(ring);
 
-    // Glowing orbs that float up
-    const orbs = [];
+    // Glowing orbs that float up — also routed to the additive point field.
     for (let i = 0; i < 5; i++) {
-      const orb = new THREE.Mesh(
-        new THREE.SphereGeometry(0.06, 6, 6),
-        new THREE.MeshBasicMaterial({ color: 0x88ffaa, transparent: true, opacity: 0.8 })
-      );
-      orb.velocity = new THREE.Vector3(
-        (Math.random() - 0.5) * 1.5,
-        2 + Math.random() * 3,
-        (Math.random() - 0.5) * 1.5
-      );
-      group.add(orb);
-      orbs.push(orb);
+      spawnParticle('additive', {
+        position,
+        velocity: {
+          x: (Math.random() - 0.5) * 1.5,
+          y: 2 + Math.random() * 3,
+          z: (Math.random() - 0.5) * 1.5,
+        },
+        gravity: 0,
+        drag: 0.5,
+        life: 0.8,
+        sizeStart: 0.18,
+        sizeEnd: 0.08,
+        color: 0x88ffaa,
+        alpha: 0.8,
+      });
     }
 
     // Pooled point light (decay handled centrally — no shader recompile)
@@ -291,7 +288,7 @@ export class VFXManager {
 
     this.scene.add(group);
     this.deathEffects.push({
-      group, pieces, flash, ring, orbs,
+      group, flash, ring,
       life: 0.8, maxLife: 0.8
     });
   }
@@ -312,29 +309,8 @@ export class VFXManager {
       d.ring.scale.set(rScale, rScale, rScale * 0.3);
       d.ring.material.opacity = Math.max(0, 0.8 * (1 - progress));
 
-      // Pieces fly outward and fade
-      for (let pi = 0, plen = d.pieces.length; pi < plen; pi++) {
-        const p = d.pieces[pi];
-        p.position.x += p.velocity.x * delta;
-        p.position.y += p.velocity.y * delta;
-        p.position.z += p.velocity.z * delta;
-        p.velocity.y -= 8 * delta;
-        p.rotation.x += p.rotSpeed.x * delta;
-        p.rotation.y += p.rotSpeed.y * delta;
-        p.rotation.z += p.rotSpeed.z * delta;
-        p.material.opacity = Math.max(0, 1 - progress * 1.2);
-        const shrink = Math.max(0.1, 1 - progress);
-        p.scale.set(shrink, shrink, shrink);
-      }
-
-      // Orbs float up and fade
-      for (let oi = 0, olen = d.orbs.length; oi < olen; oi++) {
-        const o = d.orbs[oi];
-        o.position.x += o.velocity.x * delta;
-        o.position.y += o.velocity.y * delta;
-        o.position.z += o.velocity.z * delta;
-        o.material.opacity = Math.max(0, 0.8 * (1 - progress));
-      }
+      // Pieces + orbs are driven by the GPU particle fields — no per-mesh
+      // update here.
 
       if (d.life <= 0) {
         this.scene.remove(d.group);
@@ -385,24 +361,29 @@ export class VFXManager {
     groundRing.position.y = 0.05;
     group.add(groundRing);
 
-    // Sparkle particles spiraling up
-    const sparkles = [];
+    // Sparkles routed to the additive point field. They lose the spiral
+    // motion but gain zero-allocation spawn — 12 mesh allocs per enemy
+    // spawn was a real hitch on wave starts.
     for (let i = 0; i < 12; i++) {
-      const sparkle = new THREE.Mesh(
-        new THREE.BoxGeometry(0.04, 0.04, 0.04),
-        new THREE.MeshBasicMaterial({ color: 0x88ffcc, transparent: true, opacity: 0.9 })
-      );
       const angle = (i / 12) * Math.PI * 2;
-      sparkle.position.set(
-        Math.cos(angle) * 0.6,
-        i * 0.3,
-        Math.sin(angle) * 0.6
-      );
-      sparkle.userData.angle = angle;
-      sparkle.userData.baseY = i * 0.3;
-      sparkle.userData.radius = 0.6;
-      group.add(sparkle);
-      sparkles.push(sparkle);
+      spawnParticle('additive', {
+        position: {
+          x: position.x + Math.cos(angle) * 0.6,
+          y: position.y + i * 0.3,
+          z: position.z + Math.sin(angle) * 0.6,
+        },
+        velocity: {
+          x: Math.cos(angle) * 0.3,
+          y: 2 + Math.random() * 1.5,
+          z: Math.sin(angle) * 0.3,
+        },
+        gravity: 0,
+        life: 0.55,
+        sizeStart: 0.15,
+        sizeEnd: 0.02,
+        color: 0x88ffcc,
+        alpha: 0.9,
+      });
     }
 
     // Pooled point light 1 unit above the spawn position
@@ -413,7 +394,7 @@ export class VFXManager {
 
     this.scene.add(group);
     this.spawnEffects.push({
-      group, beam, innerBeam, groundRing, sparkles,
+      group, beam, innerBeam, groundRing,
       life: 0.6, maxLife: 0.6
     });
   }
@@ -435,18 +416,7 @@ export class VFXManager {
       s.groundRing.scale.set(rs, rs, rs);
       s.groundRing.material.opacity = Math.max(0, 0.8 * (1 - progress));
 
-      // Sparkles spiral upward
-      for (const sp of s.sparkles) {
-        sp.userData.angle += delta * 8;
-        sp.userData.baseY += delta * 3;
-        const r = sp.userData.radius * (1 - progress * 0.5);
-        sp.position.set(
-          Math.cos(sp.userData.angle) * r,
-          sp.userData.baseY,
-          Math.sin(sp.userData.angle) * r
-        );
-        sp.material.opacity = Math.max(0, 0.9 * (1 - progress));
-      }
+      // Sparkles now live in the GPU point field — no per-mesh update.
 
       if (s.life <= 0) {
         this.scene.remove(s.group);
