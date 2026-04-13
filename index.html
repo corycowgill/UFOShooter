@@ -1083,34 +1083,32 @@ canvas#gameCanvas { display: block; width: 100vw; height: 100vh; }
   <div id="weapon-cards"></div>
 </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/three.min.js"></script>
-<script>
-// Fallback CDN if first fails
-function loadGame() {
-  if (typeof THREE === 'undefined') {
-    // Try alternate CDN
-    const alt = document.createElement('script');
-    alt.src = 'https://unpkg.com/three@0.160.0/build/three.min.js';
-    alt.onload = startGameModule;
-    alt.onerror = () => {
-      document.getElementById('loading').textContent =
-        'ERROR: Failed to load Three.js. Check your internet connection and refresh.';
-    };
-    document.head.appendChild(alt);
-  } else {
-    startGameModule();
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js"
   }
 }
-function startGameModule() {
-  const s = document.createElement('script');
-  s.type = 'module';
-  s.src = 'js/main.js';
-  s.onerror = () => {
-    document.getElementById('loading').textContent = 'ERROR: Failed to load game modules. Ensure you are running a local HTTP server.';
-  };
-  document.body.appendChild(s);
+</script>
+<script type="module">
+// Load Three.js as an ES module (the build/three.min.js script-tag path is
+// deprecated in r150+ and removed in r160+). Expose it on the global so the
+// existing non-module code in js/*.js that references `THREE.X` keeps working.
+try {
+  const THREE = await import('three');
+  window.THREE = THREE;
+  // Now that THREE is globally available, load the game modules.
+  await import('./js/main.js');
+} catch (e) {
+  console.error('Failed to bootstrap:', e);
+  const loading = document.getElementById('loading');
+  if (loading) {
+    loading.textContent =
+      'ERROR: Failed to load Three.js or game modules. '
+      + 'Check your internet connection and refresh. '
+      + (e && e.message ? '(' + e.message + ')' : '');
+  }
 }
-loadGame();
 </script>
 </body>
 </html>
