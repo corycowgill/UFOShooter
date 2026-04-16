@@ -3,7 +3,7 @@
 A browser-based first-person shooter built on [Three.js](https://threejs.org/) r160. Fight off waves of procedural aliens across three hand-crafted Chicago levels with a laser rifle, laser sword, sniper rifle, and plasma rocket launcher.
 
 **Play now:** [ufoshooter.onrender.com](https://ufoshooter.onrender.com)
-**Demo Video:** https://www.youtube.com/watch?v=Y6dMKn9i2tE&t=80s
+**Demo Video:** https://www.youtube.com/watch?v=Y6dMKn9i2tE
 
 No build step, no assets pipeline, no framework. Just a single `index.html` and a handful of ES modules. Everything — meshes, materials, audio, VFX — is procedural.
 
