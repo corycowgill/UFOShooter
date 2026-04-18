@@ -4,47 +4,48 @@ import { disposeTree } from './particles.js';
 export const WEAPONS = {
   laserRifle: {
     name: 'LASER RIFLE',
-    damage: 10,
-    fireRate: 0.15,       // seconds between shots
-    range: 100,
+    damage: 8,
+    fireRate: 0.12,
+    range: 80,
     type: 'hitscan',
     color: 0xff0000,
     beamWidth: 0.02,
-    description: 'Standard issue laser rifle. Fast fire rate, reliable damage.',
+    spread: 0.015,
+    description: 'Fast and forgiving. Low per-shot damage but high fire rate. Slight spread at range.',
     key: '1',
   },
   laserSword: {
     name: 'LASER SWORD',
-    damage: 40,
-    fireRate: 0.4,
-    range: 3.5,
+    damage: 55,
+    fireRate: 0.35,
+    range: 4.0,
     type: 'melee',
     color: 0x0088ff,
-    description: 'High-energy plasma blade. Devastating at close range.',
+    description: 'Extreme close-range DPS. Hits all enemies in a wide arc — the ultimate combo builder.',
     key: '2',
   },
   sniperRifle: {
     name: 'SNIPER LASER RIFLE',
-    damage: 75,
-    fireRate: 1.0,
+    damage: 95,
+    fireRate: 1.2,
     range: 200,
     type: 'hitscan',
     color: 0x8800ff,
     beamWidth: 0.015,
     zoom: 3,
-    description: 'Precision long-range laser. One shot, one kill.',
+    description: 'Pinpoint burst damage. One-shots most enemies. Slow fire rate demands accuracy.',
     key: '3',
   },
   rocketLauncher: {
     name: 'PLASMA ROCKET',
-    damage: 120,
-    fireRate: 1.4,
+    damage: 150,
+    fireRate: 1.8,
     range: 150,
     type: 'projectile',
     color: 0x00ffee,
     projectileSpeed: 55,
-    explosionRadius: 7,
-    description: 'Homing plasma warhead. Massive area damage with spectacular detonations.',
+    explosionRadius: 8,
+    description: 'Devastating AoE. Slow and self-damaging but obliterates clusters.',
     key: '4',
   },
 };
@@ -1897,6 +1898,17 @@ export class WeaponManager {
     const origin = this.camera.position;
     const dir = this._tmpDir;
     this.camera.getWorldDirection(dir);
+
+    // Weapon spread — adds slight random deviation to the aim direction.
+    // Sniper has zero spread; rifle has a small cone that makes it less
+    // precise at long range, reinforcing the sniper's niche.
+    const spread = weapon.spread || 0;
+    if (spread > 0) {
+      dir.x += (Math.random() - 0.5) * spread;
+      dir.y += (Math.random() - 0.5) * spread;
+      dir.z += (Math.random() - 0.5) * spread;
+      dir.normalize();
+    }
 
     // Muzzle flash
     const muzzlePos = this._tmpMuzzle.set(
