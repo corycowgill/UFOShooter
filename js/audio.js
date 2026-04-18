@@ -365,6 +365,22 @@ export class AudioManager {
     osc.stop(t + 0.3);
   }
 
+  playPickup() {
+    const t = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(600, t);
+    osc.frequency.exponentialRampToValueAtTime(1200, t + 0.08);
+    osc.frequency.exponentialRampToValueAtTime(1600, t + 0.15);
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0.15, t);
+    g.gain.linearRampToValueAtTime(0, t + 0.2);
+    osc.connect(g);
+    g.connect(this.sfxGain);
+    osc.start(t);
+    osc.stop(t + 0.2);
+  }
+
   _noiseBurst(volume, duration) {
     const t = this.ctx.currentTime;
     const bufferSize = this.ctx.sampleRate * duration;

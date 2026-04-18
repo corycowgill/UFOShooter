@@ -78,6 +78,18 @@ export class VFXManager {
     this.lowHealthVignetteEl = lhv;
   }
 
+  showHealFlash() {
+    const flash = document.getElementById('damage-flash');
+    if (flash) {
+      flash.style.background = 'rgba(0, 255, 100, 0.25)';
+      flash.style.opacity = '1';
+      setTimeout(() => {
+        flash.style.opacity = '0';
+        setTimeout(() => { flash.style.background = ''; }, 200);
+      }, 150);
+    }
+  }
+
   // ========================
   // SCREEN SHAKE
   // ========================

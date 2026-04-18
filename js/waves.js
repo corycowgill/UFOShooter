@@ -68,8 +68,11 @@ export class WaveManager {
       for (let i = 0; i < Math.max(0, drones); i++) queue.push('drone');
     }
 
-    // Scale HP with wave
+    // Scale stats with wave — HP, speed, and damage all increase so
+    // late waves present genuine pressure, not just HP sponges.
     this.hpMultiplier = 1 + (w - 1) * 0.1;
+    this.speedMultiplier = 1 + (w - 1) * 0.04;
+    this.damageMultiplier = 1 + (w - 1) * 0.06;
 
     // Shuffle
     for (let i = queue.length - 1; i > 0; i--) {
@@ -138,9 +141,12 @@ export class WaveManager {
     ));
 
     const enemy = new Alien(type, spawnPos, this.scene, this.particles, this.audio);
-    // Scale HP
     enemy.hp = Math.floor(enemy.hp * this.hpMultiplier);
     enemy.maxHp = enemy.hp;
+    enemy.data = Object.assign({}, enemy.data, {
+      speed: enemy.data.speed * this.speedMultiplier,
+      damage: Math.floor(enemy.data.damage * this.damageMultiplier),
+    });
     this.enemies.push(enemy);
 
     // Spawn teleport effect

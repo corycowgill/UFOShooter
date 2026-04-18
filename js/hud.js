@@ -18,12 +18,12 @@ export class HUD {
     this.minimapCanvas = document.getElementById('minimap');
     this.minimapCtx = this.minimapCanvas ? this.minimapCanvas.getContext('2d') : null;
     this.announceTimer = 0;
-    // Dirty-tracking cache — DOM writes are expensive relative to a property
-    // compare and most HUD values only change every few frames (or never).
+    this.comboEl = document.getElementById('combo-display');
     this._last = {
       wave: -1, enemyCount: -1, score: -1, levelName: '',
       hpBucket: -2, hpText: '', hpBarColor: '',
       weaponName: '', cooldownBucket: -1, ammoText: '',
+      combo: 0,
     };
   }
 
@@ -84,6 +84,32 @@ export class HUD {
     if (ammoText !== last.ammoText) {
       els.ammoDisplay.textContent = ammoText;
       last.ammoText = ammoText;
+    }
+
+    // Combo display
+    const combo = player.combo;
+    if (combo !== last.combo) {
+      if (this.comboEl) {
+        if (combo >= 2) {
+          this.comboEl.textContent = `${combo}x COMBO`;
+          this.comboEl.style.opacity = '1';
+          this.comboEl.style.transform = 'scale(1.2)';
+          setTimeout(() => { if (this.comboEl) this.comboEl.style.transform = 'scale(1)'; }, 100);
+          if (combo >= 10) {
+            this.comboEl.style.color = '#ff00aa';
+            this.comboEl.style.textShadow = '0 0 12px #ff00aa, 0 0 24px rgba(255,0,170,0.4)';
+          } else if (combo >= 5) {
+            this.comboEl.style.color = '#ff6600';
+            this.comboEl.style.textShadow = '0 0 12px #ff6600, 0 0 24px rgba(255,102,0,0.4)';
+          } else {
+            this.comboEl.style.color = '#ffcc00';
+            this.comboEl.style.textShadow = '0 0 12px #ffcc00, 0 0 24px rgba(255,200,0,0.4)';
+          }
+        } else {
+          this.comboEl.style.opacity = '0';
+        }
+      }
+      last.combo = combo;
     }
   }
 

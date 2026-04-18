@@ -8,8 +8,17 @@ export class Player {
     this.dead = false;
     this.damageFlashTimer = 0;
     this.regenTimer = 0;
-    this.regenDelay = 5; // seconds before regen starts
-    this.regenRate = 5;  // HP per second
+    this.regenDelay = 5;
+    this.regenRate = 5;
+
+    // Combo system — rapid kills within a time window increase the
+    // multiplier. Score from each kill is multiplied by the current
+    // combo count. The timer resets on each kill; if it expires the
+    // combo drops back to 0.
+    this.combo = 0;
+    this.comboTimer = 0;
+    this.comboWindow = 3.0; // seconds to maintain combo
+    this.bestCombo = 0;
   }
 
   takeDamage(amount, audio) {
@@ -19,7 +28,6 @@ export class Player {
     this.regenTimer = this.regenDelay;
     audio.playPlayerHit();
 
-    // Flash red
     const flash = document.getElementById('damage-flash');
     if (flash) {
       flash.style.opacity = '1';
@@ -32,16 +40,24 @@ export class Player {
     }
   }
 
+  heal(amount) {
+    if (this.dead) return;
+    this.hp = Math.min(this.maxHp, this.hp + amount);
+  }
+
   addScore(points) {
-    this.score += points;
+    const multiplier = Math.max(1, this.combo);
+    this.score += points * multiplier;
   }
 
   addKill() {
     this.kills++;
+    this.combo++;
+    this.comboTimer = this.comboWindow;
+    if (this.combo > this.bestCombo) this.bestCombo = this.combo;
   }
 
   update(delta) {
-    // Health regen after not taking damage for a while
     if (this.regenTimer > 0) {
       this.regenTimer -= delta;
     } else if (this.hp < this.maxHp && !this.dead) {
@@ -50,6 +66,14 @@ export class Player {
 
     if (this.damageFlashTimer > 0) {
       this.damageFlashTimer -= delta;
+    }
+
+    // Combo decay
+    if (this.comboTimer > 0) {
+      this.comboTimer -= delta;
+      if (this.comboTimer <= 0) {
+        this.combo = 0;
+      }
     }
   }
 
@@ -60,5 +84,8 @@ export class Player {
     this.dead = false;
     this.damageFlashTimer = 0;
     this.regenTimer = 0;
+    this.combo = 0;
+    this.comboTimer = 0;
+    this.bestCombo = 0;
   }
 }

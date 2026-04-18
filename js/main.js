@@ -29,6 +29,80 @@ let state = GameState.MENU;
 let scene, camera, renderer;
 let composer, renderPass, bloomPass;
 let controls, audio, particles, weapons, waveManager, player, hud, helpGuide, vfx;
+
+// ---------------------------------------------------------------------------
+// Health pickups — dropped by enemies on death. A glowing green orb floats
+// at the kill site, pulses, and is collected when the player walks near it.
+// Shared geometry/material keep the per-pickup cost near zero.
+// ---------------------------------------------------------------------------
+const _pickups = [];
+let _pickupGeo = null;
+let _pickupMat = null;
+const PICKUP_HEAL = 20;
+const PICKUP_LIFETIME = 15;
+const PICKUP_COLLECT_DIST_SQ = 4; // 2 meters squared
+const PICKUP_DROP_CHANCE = 0.3;
+
+function _initPickupPrimitives() {
+  if (_pickupGeo) return;
+  _pickupGeo = new THREE.SphereGeometry(0.2, 8, 8);
+  _pickupGeo.__shared = true;
+  _pickupMat = new THREE.MeshBasicMaterial({
+    color: 0x00ff66,
+    transparent: true,
+    opacity: 0.85,
+    toneMapped: false,
+  });
+  _pickupMat.color.multiplyScalar(3.0);
+  _pickupMat.__shared = true;
+}
+
+function _spawnPickup(position) {
+  _initPickupPrimitives();
+  const mesh = new THREE.Mesh(_pickupGeo, _pickupMat);
+  mesh.position.set(position.x, 0.5, position.z);
+  scene.add(mesh);
+  _pickups.push({ mesh, life: PICKUP_LIFETIME });
+}
+
+function _updatePickups(delta, playerPos) {
+  for (let i = _pickups.length - 1; i >= 0; i--) {
+    const p = _pickups[i];
+    p.life -= delta;
+    // Pulse + hover
+    p.mesh.position.y = 0.5 + Math.sin(performance.now() * 0.004 + i) * 0.15;
+    p.mesh.rotation.y += delta * 2;
+    // Fade out in last 3 seconds
+    if (p.life < 3) {
+      p.mesh.material = p.mesh.material === _pickupMat ? _pickupMat : p.mesh.material;
+      p.mesh.visible = Math.sin(p.life * 10) > 0;
+    }
+    // Collect?
+    const dx = p.mesh.position.x - playerPos.x;
+    const dz = p.mesh.position.z - playerPos.z;
+    if (dx * dx + dz * dz < PICKUP_COLLECT_DIST_SQ && !player.dead) {
+      player.heal(PICKUP_HEAL);
+      audio.playPickup();
+      if (vfx) vfx.showHealFlash();
+      _removePickup(i);
+      continue;
+    }
+    if (p.life <= 0) {
+      _removePickup(i);
+    }
+  }
+}
+
+function _removePickup(index) {
+  const p = _pickups[index];
+  scene.remove(p.mesh);
+  _pickups.splice(index, 1);
+}
+
+function _clearPickups() {
+  for (const p of _pickups) scene.remove(p.mesh);
+  _pickups.length = 0;
+}
 let currentLevelIndex = 0;
 let currentLevelData = null;
 let selectedStartLevel = 0;
@@ -536,6 +610,7 @@ function loadLevel(index) {
     if (vfx) { vfx.scene = scene; vfx.cleanup(); }
     waveManager.scene = scene;
     waveManager.cleanup();
+    _clearPickups();
     // Clear any in-flight rocket projectiles (they reference the old scene)
     if (weapons && weapons.projectiles) {
       for (const p of weapons.projectiles) {
@@ -629,11 +704,16 @@ function processHit(hit) {
     player.addKill();
     player.addScore(alienData.scoreValue);
 
+    // Health pickup drop — tougher enemies have higher drop chance
+    const dropChance = PICKUP_DROP_CHANCE + (alienData.hp > 50 ? 0.15 : 0);
+    if (Math.random() < dropChance) {
+      _spawnPickup(enemyPos);
+    }
+
     // Kill feed entry
     if (vfx) {
       const weaponData = weapons.getWeaponData();
       vfx.addKillFeedEntry(alienData.name, weaponData.name);
-      // Death dissolve effect
       vfx.createDeathEffect(enemyPos, alienData.color || 0x00ff00, 1);
     }
 
@@ -656,6 +736,7 @@ function processHit(hit) {
           if (chainKill) {
             player.addKill();
             player.addScore(ALIEN_TYPES[other.type].scoreValue);
+            if (Math.random() < PICKUP_DROP_CHANCE) _spawnPickup(other.mesh.position);
             if (vfx) {
               vfx.addKillFeedEntry(ALIEN_TYPES[other.type].name, 'EXPLOSION');
               vfx.createDeathEffect(other.mesh.position, ALIEN_TYPES[other.type].color || 0x00ff00, 1);
@@ -734,6 +815,9 @@ function animate() {
     hud.showWaveAnnouncement(waveManager.wave, LEVELS[currentLevelIndex].name, false);
   }
 
+  // Update health pickups
+  _updatePickups(delta, camera.position);
+
   // Check enemy collisions with player
   for (const enemy of waveManager.enemies) {
     const result = enemy.checkPlayerCollision(camera.position, delta);
@@ -806,6 +890,9 @@ function gameOver() {
   document.getElementById('go-waves').textContent = waveManager.wave;
   document.getElementById('go-kills').textContent = player.kills;
   document.getElementById('go-score').textContent = player.score;
+  const bestComboEl = document.getElementById('go-combo');
+  if (bestComboEl) bestComboEl.textContent = player.bestCombo;
+  _clearPickups();
 }
 
 // ===== START =====

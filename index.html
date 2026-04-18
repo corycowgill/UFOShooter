@@ -975,6 +975,13 @@ canvas#gameCanvas { display: block; width: 100vw; height: 100vh; }
     <div class="enemies">Enemies: <span id="enemy-count">0</span></div>
     <span class="score">Score: <span id="score">0</span></span>
   </div>
+  <div id="combo-display" style="
+    position:absolute; right:20px; top:80px;
+    font-size:28px; font-weight:bold; color:var(--c-warn);
+    text-shadow:0 0 12px var(--c-warn), 0 0 24px rgba(255,200,0,0.4);
+    opacity:0; transition:opacity 0.15s, transform 0.15s;
+    transform:scale(1); pointer-events:none;
+  "></div>
   <div id="hud-bottom">
     <div>
       <div id="health-text">HP: 100/100</div>
@@ -1034,6 +1041,7 @@ canvas#gameCanvas { display: block; width: 100vw; height: 100vh; }
   <div class="fail-sub">OPERATOR SIGNAL LOST · DEFENSE COLLAPSED</div>
   <div class="stats">Waves Survived: <span class="val" id="go-waves">0</span></div>
   <div class="stats">Aliens Killed: <span class="val" id="go-kills">0</span></div>
+  <div class="stats">Best Combo: <span class="val" id="go-combo">0</span>x</div>
   <div class="stats">Final Score: <span class="val" id="go-score">0</span></div>
   <button class="menu-btn" id="btn-restart">PLAY AGAIN</button>
   <button class="menu-btn" id="btn-menu">MAIN MENU</button>
