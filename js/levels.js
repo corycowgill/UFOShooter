@@ -1976,14 +1976,19 @@ function buildDowntownChicago(scene) {
   // =============================================
   // === MICHIGAN AVENUE (north-south, z-axis) ===
   // =============================================
-  // Road: 14 wide centered at x=0
-  const michiganAve = new THREE.Mesh(new THREE.PlaneGeometry(14, 200), roadMat);
-  michiganAve.rotation.x = -Math.PI / 2;
-  michiganAve.position.set(0, 0.02, 0);
-  group.add(michiganAve);
+  // Road split into south / north segments around the river gap (z ≈ ±8)
+  const roadHalfLen = 92;
+  const roadGapEdge = 8;
+  for (const zSign of [-1, 1]) {
+    const seg = new THREE.Mesh(new THREE.PlaneGeometry(14, roadHalfLen), roadMat);
+    seg.rotation.x = -Math.PI / 2;
+    seg.position.set(0, 0.02, zSign * (roadGapEdge + roadHalfLen / 2));
+    group.add(seg);
+  }
 
-  // Center line (dashed yellow)
+  // Center line (dashed yellow) — skip the river zone
   for (let z = -95; z < 95; z += 6) {
+    if (z > -9 && z < 9) continue;
     const line = new THREE.Mesh(
       new THREE.PlaneGeometry(0.2, 3),
       new THREE.MeshBasicMaterial({ color: 0xffff00 })
@@ -1992,9 +1997,10 @@ function buildDowntownChicago(scene) {
     line.position.set(0, 0.03, z);
     group.add(line);
   }
-  // Lane markings (white dashed)
+  // Lane markings (white dashed) — skip the river zone
   for (const lx of [-3.5, 3.5]) {
     for (let z = -95; z < 95; z += 8) {
+      if (z > -9 && z < 9) continue;
       const dash = new THREE.Mesh(
         new THREE.PlaneGeometry(0.12, 4),
         new THREE.MeshBasicMaterial({ color: 0xaaaaaa })
@@ -2005,21 +2011,20 @@ function buildDowntownChicago(scene) {
     }
   }
 
-  // === SIDEWALKS along Michigan Ave ===
+  // === SIDEWALKS along Michigan Ave (split around river) ===
   for (const side of [-1, 1]) {
-    // Sidewalk (4 wide, just outside road edge at ±7)
-    const sw = new THREE.Mesh(new THREE.PlaneGeometry(4, 200), sidewalkMat);
-    sw.rotation.x = -Math.PI / 2;
-    sw.position.set(side * 9, 0.04, 0);
-    group.add(sw);
-    // Inner curb (road edge)
-    const innerCurb = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.15, 200), curbMat);
-    innerCurb.position.set(side * 7, 0.075, 0);
-    group.add(innerCurb);
-    // Outer curb (building edge)
-    const outerCurb = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.15, 200), curbMat);
-    outerCurb.position.set(side * 11, 0.075, 0);
-    group.add(outerCurb);
+    for (const zSign of [-1, 1]) {
+      const sw = new THREE.Mesh(new THREE.PlaneGeometry(4, roadHalfLen), sidewalkMat);
+      sw.rotation.x = -Math.PI / 2;
+      sw.position.set(side * 9, 0.04, zSign * (roadGapEdge + roadHalfLen / 2));
+      group.add(sw);
+      const innerCurb = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.15, roadHalfLen), curbMat);
+      innerCurb.position.set(side * 7, 0.075, zSign * (roadGapEdge + roadHalfLen / 2));
+      group.add(innerCurb);
+      const outerCurb = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.15, roadHalfLen), curbMat);
+      outerCurb.position.set(side * 11, 0.075, zSign * (roadGapEdge + roadHalfLen / 2));
+      group.add(outerCurb);
+    }
   }
 
   // === CROSS STREET at z = -35 ===
@@ -2093,24 +2098,36 @@ function buildDowntownChicago(scene) {
   group.add(river);
 
   // Riverwalk (stone embankment along both banks)
+  // Split into west / east segments so they don't pass through the bridge
+  const rwSegLen = 90;
+  const rwGapEdge = 10;
   for (const zSide of [-1, 1]) {
     const bankZ = zSide * 6.5;
-    // Stone wall
-    const wall = new THREE.Mesh(
-      new THREE.BoxGeometry(200, 1.5, 0.6),
-      makeMaterial(0x555555)
-    );
-    wall.position.set(0, 0.75, bankZ);
-    group.add(wall);
-    // Railing on top
-    const railing = new THREE.Mesh(
-      new THREE.BoxGeometry(200, 0.1, 0.08),
-      makeMaterial(0x333333)
-    );
-    railing.position.set(0, 1.55, bankZ);
-    group.add(railing);
-    // Railing posts
+    for (const xSign of [-1, 1]) {
+      const cx = xSign * (rwGapEdge + rwSegLen / 2);
+      const wall = new THREE.Mesh(
+        new THREE.BoxGeometry(rwSegLen, 1.5, 0.6),
+        makeMaterial(0x555555)
+      );
+      wall.position.set(cx, 0.75, bankZ);
+      group.add(wall);
+      const railing = new THREE.Mesh(
+        new THREE.BoxGeometry(rwSegLen, 0.1, 0.08),
+        makeMaterial(0x333333)
+      );
+      railing.position.set(cx, 1.55, bankZ);
+      group.add(railing);
+      const walkway = new THREE.Mesh(
+        new THREE.PlaneGeometry(rwSegLen, 2),
+        makeMaterial(0x776655)
+      );
+      walkway.rotation.x = -Math.PI / 2;
+      walkway.position.set(cx, 0.05, bankZ + zSide * 1.3);
+      group.add(walkway);
+    }
+    // Railing posts — skip bridge zone
     for (let x = -90; x < 90; x += 4) {
+      if (x > -rwGapEdge && x < rwGapEdge) continue;
       const post = new THREE.Mesh(
         new THREE.BoxGeometry(0.06, 0.5, 0.06),
         makeMaterial(0x333333)
@@ -2118,52 +2135,54 @@ function buildDowntownChicago(scene) {
       post.position.set(x, 1.3, bankZ);
       group.add(post);
     }
-    // Walkway along the river
-    const walkway = new THREE.Mesh(
-      new THREE.PlaneGeometry(200, 2),
-      makeMaterial(0x776655)
-    );
-    walkway.rotation.x = -Math.PI / 2;
-    walkway.position.set(0, 0.05, bankZ + zSide * 1.3);
-    group.add(walkway);
   }
 
   // === MICHIGAN AVE BRIDGE over the river ===
-  // Bridge deck (raises the road over the river)
+  // Bridge deck — thin slab so it doesn't block player movement (player
+  // checkY is 0.85, so deck max y + playerRadius must stay below that).
   const bridgeDeck = new THREE.Mesh(
-    new THREE.BoxGeometry(16, 0.8, 14),
+    new THREE.BoxGeometry(16, 0.25, 16),
     makeMaterial(0x555555)
   );
-  bridgeDeck.position.set(0, 0.4, 0);
+  bridgeDeck.position.set(0, 0.1, 0);
   group.add(bridgeDeck);
-  addCollider(colliders, bridgeDeck);
   // Bridge road surface
   const bridgeRoad = new THREE.Mesh(
-    new THREE.PlaneGeometry(14, 12),
+    new THREE.PlaneGeometry(14, 14),
     roadMat
   );
   bridgeRoad.rotation.x = -Math.PI / 2;
-  bridgeRoad.position.set(0, 0.81, 0);
+  bridgeRoad.position.set(0, 0.23, 0);
   group.add(bridgeRoad);
-  // Bridge railings
+  // Bridge lane markings
+  for (let z = -6; z <= 6; z += 6) {
+    const bl = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.2, 3),
+      new THREE.MeshBasicMaterial({ color: 0xffff00 })
+    );
+    bl.rotation.x = -Math.PI / 2;
+    bl.position.set(0, 0.24, z);
+    group.add(bl);
+  }
+  // Bridge railings (these ARE colliders so the player can't walk off the sides)
   for (const xSide of [-8, 8]) {
     const bridgeRail = new THREE.Mesh(
-      new THREE.BoxGeometry(0.15, 1.2, 14),
+      new THREE.BoxGeometry(0.15, 1.2, 16),
       makeMaterial(0x444444)
     );
-    bridgeRail.position.set(xSide, 1.4, 0);
+    bridgeRail.position.set(xSide, 0.85, 0);
     group.add(bridgeRail);
-    // Decorative posts
-    for (let z = -6; z <= 6; z += 3) {
+    addCollider(colliders, bridgeRail);
+    for (let z = -7; z <= 7; z += 3.5) {
       const bPost = new THREE.Mesh(
         new THREE.BoxGeometry(0.2, 1.5, 0.2),
         makeMaterial(0x555555)
       );
-      bPost.position.set(xSide, 1.5, z);
+      bPost.position.set(xSide, 1.0, z);
       group.add(bPost);
     }
   }
-  // Bridge support arches
+  // Bridge support arches (visible below the deck)
   for (const zOff of [-3, 3]) {
     const arch = new THREE.Mesh(
       new THREE.TorusGeometry(2.5, 0.3, 6, 12, Math.PI),
