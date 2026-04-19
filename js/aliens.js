@@ -33,6 +33,7 @@ const ANIM_PARAMS = {
   stalker: { walkRate: 3.5, bobAmp: 0.04, leanFactor: 0.06, breatheAmp: 0.010, breatheRate: 2.4 },
   spitter: { walkRate: 3.0, bobAmp: 0.08, leanFactor: 0.04, breatheAmp: 0.020, breatheRate: 1.8 },
   drone:   { walkRate: 0,   bobAmp: 0,    leanFactor: 0.04, breatheAmp: 0,     breatheRate: 0   },
+  boss:    { walkRate: 2.0, bobAmp: 0.12, leanFactor: 0.02, breatheAmp: 0.03,  breatheRate: 1.0 },
 };
 
 const _alienGeomCache = new Map();
@@ -152,6 +153,18 @@ export const ALIEN_TYPES = {
     flyHeight: 6,
     description: 'Floating alien drone that attacks from above. Fast and evasive, raining energy bolts from the sky.',
     behavior: 'aerial',
+  },
+  boss: {
+    name: 'OVERLORD',
+    hp: 800,
+    speed: 3,
+    damage: 30,
+    attackRange: 40,
+    attackRate: 2.0,
+    scoreValue: 1000,
+    color: 0xff4400,
+    description: 'Massive alien commander. Multi-phase attacks: energy barrage, ground slam, and summons.',
+    behavior: 'boss',
   },
 };
 
@@ -2979,6 +2992,88 @@ export function createAlienModel(type) {
     group.add(bottomVortex2);
   }
 
+  } else if (type === 'boss') {
+    // === BOSS: Massive alien overlord — towering armored commander ===
+    const coreMat = new THREE.MeshPhongMaterial({ color: 0x882200, emissive: 0x330800, shininess: 60 });
+    const armorMat = new THREE.MeshPhongMaterial({ color: 0x442211, emissive: 0x110500, shininess: 80 });
+    const glowCoreMat = aGlow(0xff4400, 0.9, 3.0);
+    // Massive torso
+    const torso = new THREE.Mesh(cGeom(THREE.CylinderGeometry, 0.8, 0.6, 2.0, 10), coreMat);
+    torso.position.y = 2.2;
+    group.add(torso);
+    // Shoulder armor plates
+    for (const side of [-1, 1]) {
+      const shoulder = new THREE.Mesh(cGeom(THREE.BoxGeometry, 0.7, 0.3, 0.6), armorMat);
+      shoulder.position.set(side * 0.9, 3.0, 0);
+      shoulder.rotation.z = side * 0.3;
+      group.add(shoulder);
+      const spike = new THREE.Mesh(cGeom(THREE.ConeGeometry, 0.12, 0.5, 6), armorMat);
+      spike.position.set(side * 1.2, 3.3, 0);
+      spike.rotation.z = side * 0.5;
+      group.add(spike);
+    }
+    // Head — large with glowing visor
+    const head = new THREE.Mesh(cGeom(THREE.SphereGeometry, 0.45, 8, 8), coreMat);
+    head.position.y = 3.5;
+    head.scale.set(1, 0.85, 0.9);
+    group.add(head);
+    const visor = new THREE.Mesh(cGeom(THREE.BoxGeometry, 0.6, 0.15, 0.3), aGlow(0xff2200, 0.9, 4.0));
+    visor.position.set(0, 3.5, 0.3);
+    group.add(visor);
+    // Crown horns
+    for (const side of [-1, 1]) {
+      const horn = new THREE.Mesh(cGeom(THREE.ConeGeometry, 0.06, 0.6, 6), armorMat);
+      horn.position.set(side * 0.25, 3.9, -0.1);
+      horn.rotation.z = side * -0.3;
+      group.add(horn);
+    }
+    // Arms
+    for (const side of [-1, 1]) {
+      const upperArm = new THREE.Mesh(cGeom(THREE.CylinderGeometry, 0.18, 0.14, 0.8, 8), coreMat);
+      upperArm.position.set(side * 0.85, 2.6, 0);
+      upperArm.rotation.z = side * 0.4;
+      group.add(upperArm);
+      const forearm = new THREE.Mesh(cGeom(THREE.CylinderGeometry, 0.16, 0.12, 0.7, 8), armorMat);
+      forearm.position.set(side * 1.1, 2.0, 0.1);
+      forearm.rotation.z = side * 0.2;
+      group.add(forearm);
+      const fist = new THREE.Mesh(cGeom(THREE.SphereGeometry, 0.16, 6, 6), coreMat);
+      fist.position.set(side * 1.2, 1.6, 0.15);
+      group.add(fist);
+      const fistGlow = new THREE.Mesh(cGeom(THREE.SphereGeometry, 0.1, 6, 6), aGlow(0xff6600, 0.6, 2.5));
+      fistGlow.position.set(side * 1.2, 1.6, 0.15);
+      group.add(fistGlow);
+    }
+    // Legs
+    for (const side of [-1, 1]) {
+      const thigh = new THREE.Mesh(cGeom(THREE.CylinderGeometry, 0.2, 0.16, 0.9, 8), coreMat);
+      thigh.position.set(side * 0.35, 0.85, 0);
+      group.add(thigh);
+      const shin = new THREE.Mesh(cGeom(THREE.CylinderGeometry, 0.15, 0.12, 0.8, 8), armorMat);
+      shin.position.set(side * 0.35, 0.2, 0.05);
+      group.add(shin);
+    }
+    // Central power core — glowing chest orb
+    const powerCore = new THREE.Mesh(cGeom(THREE.SphereGeometry, 0.2, 8, 8), aGlow(0xff8800, 0.9, 5.0));
+    powerCore.position.set(0, 2.5, 0.5);
+    group.add(powerCore);
+    const coreHalo = new THREE.Mesh(cGeom(THREE.SphereGeometry, 0.35, 8, 8), aGlow(0xff4400, 0.2, 2.0));
+    coreHalo.position.set(0, 2.5, 0.5);
+    group.add(coreHalo);
+    // Back exhaust vents
+    for (let i = 0; i < 3; i++) {
+      const vent = new THREE.Mesh(cGeom(THREE.CylinderGeometry, 0.08, 0.06, 0.3, 6), armorMat);
+      vent.position.set((i - 1) * 0.3, 2.8 + i * 0.15, -0.55);
+      vent.rotation.x = 0.3;
+      group.add(vent);
+      const ventGlow = new THREE.Mesh(cGeom(THREE.SphereGeometry, 0.05, 4, 4), aGlow(0xff2200, 0.5, 2.0));
+      ventGlow.position.set((i - 1) * 0.3, 2.8 + i * 0.15, -0.45);
+      group.add(ventGlow);
+    }
+    // Scale up — boss is massive
+    group.scale.set(2.0, 2.0, 2.0);
+  }
+
   // Per-type rim light color: pulls from the alien's signature color, but
   // boosted toward saturated hues so silhouettes pop against dark levels.
   const rimColorMap = {
@@ -2988,6 +3083,7 @@ export function createAlienModel(type) {
     stalker: 0x00ffff,
     spitter: 0xaaff00,
     drone:   0x66bbff,
+    boss:    0xff6600,
   };
   rimLightGroup(group, rimColorMap[type] || data.color, 1.0, 2.0);
 
@@ -3196,6 +3292,8 @@ export class Alien {
       this._spitterBehavior(delta, dist, toPlayer, playerPos);
     } else if (this.data.behavior === 'aerial') {
       this._droneBehavior(delta, dist, toPlayer, playerPos);
+    } else if (this.data.behavior === 'boss') {
+      this._bossBehavior(delta, dist, toPlayer, playerPos);
     }
 
     // Knockback — push away from player, decays exponentially
@@ -3234,6 +3332,24 @@ export class Alien {
       if (this._eliteCrown) {
         this._eliteCrown.rotation.y += delta * 3;
         this._eliteCrown.position.y += Math.sin(this.pulseTime * 3) * 0.002;
+      }
+    }
+
+    // Boss aura animation
+    if (this.isBoss && dist < 80) {
+      if (this._bossAuraRing) {
+        this._bossAuraRing.rotation.z += delta * 1.5;
+        this._bossAuraRing.material.opacity = 0.4 + Math.sin(this.pulseTime * 3) * 0.3;
+      }
+      if (this._bossCrown) {
+        this._bossCrown.rotation.y += delta * 2;
+        this._bossCrown.position.y = 8.5 + Math.sin(this.pulseTime * 2) * 0.15;
+      }
+      if (this._bossOrbs) {
+        for (const orb of this._bossOrbs) {
+          const a = orb.userData._phase + this.pulseTime * 2;
+          orb.position.set(Math.cos(a) * 3, 3 + Math.sin(this.pulseTime * 3 + orb.userData._phase) * 0.5, Math.sin(a) * 3);
+        }
       }
     }
 
@@ -3546,6 +3662,126 @@ export class Alien {
     }
   }
 
+  _bossBehavior(delta, dist, toPlayer, playerPos) {
+    // Phase-based attack pattern based on HP percentage
+    const hpPct = this.hp / this.maxHp;
+    const speed = this.data.speed * (hpPct < 0.3 ? 1.5 : 1) * delta;
+
+    // Move toward player, maintaining medium range
+    const preferredDist = 20;
+    if (dist > preferredDist + 8) {
+      this.mesh.position.x += toPlayer.x * speed;
+      this.mesh.position.z += toPlayer.z * speed;
+    } else if (dist < preferredDist - 5) {
+      this.mesh.position.x -= toPlayer.x * speed * 0.5;
+      this.mesh.position.z -= toPlayer.z * speed * 0.5;
+    }
+
+    // Strafe
+    const strafeMag = Math.sin(this.pulseTime * 1.2) * 2.5 * delta;
+    this.mesh.position.x += -toPlayer.z * strafeMag;
+    this.mesh.position.z += toPlayer.x * strafeMag;
+
+    // Attack patterns
+    this.attackCooldown -= delta;
+    if (this.attackCooldown <= 0 && dist < this.data.attackRange) {
+      if (!this._bossPhase) this._bossPhase = 0;
+      this._bossPhase = (this._bossPhase + 1) % 3;
+
+      if (this._bossPhase === 0) {
+        // Barrage — 5 rapid shots spread in a fan
+        for (let i = 0; i < 5; i++) {
+          setTimeout(() => {
+            if (this.dead) return;
+            this._shootAtPlayer(playerPos);
+          }, i * 120);
+        }
+        this.attackCooldown = this.data.attackRate * 1.5;
+      } else if (this._bossPhase === 1) {
+        // Ground slam — fast rush + AoE damage at destination
+        this._bossSlam = { timer: 0.6, targetX: playerPos.x, targetZ: playerPos.z };
+        this.attackCooldown = this.data.attackRate * 2;
+      } else {
+        // Summon — spawn extra bolts in all directions
+        for (let a = 0; a < 8; a++) {
+          const angle = (a / 8) * Math.PI * 2;
+          const from = new THREE.Vector3().copy(this.mesh.position);
+          from.y += 2;
+          const target = new THREE.Vector3(
+            this.mesh.position.x + Math.sin(angle) * 20,
+            1,
+            this.mesh.position.z + Math.cos(angle) * 20
+          );
+          const bolt = this.particles.createAlienBolt(from, target, 25, 'boss');
+          this.projectiles.push(bolt);
+        }
+        this.audio.playAlienShoot();
+        this._attackRecoil = 0.4;
+        this.attackCooldown = this.data.attackRate;
+      }
+    }
+
+    // Ground slam movement
+    if (this._bossSlam) {
+      this._bossSlam.timer -= delta;
+      const t = 1 - this._bossSlam.timer / 0.6;
+      if (t < 0.7) {
+        const dx = this._bossSlam.targetX - this.mesh.position.x;
+        const dz = this._bossSlam.targetZ - this.mesh.position.z;
+        this.mesh.position.x += dx * delta * 5;
+        this.mesh.position.z += dz * delta * 5;
+      }
+      if (this._bossSlam.timer <= 0) {
+        this._bossSlam = null;
+      }
+    }
+
+    // Enrage below 30% HP — speed up attacks
+    if (hpPct < 0.3 && this._bossAuraRing) {
+      this._bossAuraRing.material.color.setHex(0xff0000);
+    }
+  }
+
+  _addBossAura() {
+    const ring = new THREE.Mesh(
+      cGeom(THREE.TorusGeometry, 2.5, 0.06, 8, 24),
+      new THREE.MeshBasicMaterial({
+        color: 0xff6600, transparent: true, opacity: 0.6, toneMapped: false,
+      })
+    );
+    ring.material.color.multiplyScalar(3.0);
+    ring.rotation.x = Math.PI / 2;
+    ring.position.y = 0.1;
+    this.mesh.add(ring);
+    this._bossAuraRing = ring;
+
+    const crown = new THREE.Mesh(
+      cGeom(THREE.OctahedronGeometry, 0.4, 0),
+      new THREE.MeshBasicMaterial({
+        color: 0xffaa00, transparent: true, opacity: 0.9, toneMapped: false,
+      })
+    );
+    crown.material.color.multiplyScalar(5.0);
+    crown.position.y = 8.5;
+    this.mesh.add(crown);
+    this._bossCrown = crown;
+
+    // Orbiting fire orbs
+    this._bossOrbs = [];
+    for (let i = 0; i < 4; i++) {
+      const orb = new THREE.Mesh(
+        cGeom(THREE.SphereGeometry, 0.15, 6, 6),
+        new THREE.MeshBasicMaterial({
+          color: 0xff4400, transparent: true, opacity: 0.8, toneMapped: false,
+        })
+      );
+      orb.material.color.multiplyScalar(3.0);
+      orb.userData._phase = (i / 4) * Math.PI * 2;
+      this.mesh.add(orb);
+      this._bossOrbs.push(orb);
+    }
+  }
+
   _burstFire(playerPos, count, interval) {
     for (let i = 0; i < count; i++) {
       setTimeout(() => {
@@ -3589,6 +3825,14 @@ export class Alien {
       );
       bolt.life -= delta;
 
+      // Spitter acid hits the ground → acid pool
+      if (bolt.gravity && bolt.mesh.position.y <= 0.1) {
+        if (this._vfx) this._vfx.createAcidPool(bolt.mesh.position, 2.5);
+        this.scene.remove(bolt.mesh);
+        disposeTree(bolt.mesh);
+        this.projectiles.splice(i, 1);
+        continue;
+      }
       if (bolt.life <= 0) {
         this.scene.remove(bolt.mesh);
         disposeTree(bolt.mesh);

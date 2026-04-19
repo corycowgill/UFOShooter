@@ -103,6 +103,14 @@ function _clearPickups() {
   for (const p of _pickups) scene.remove(p.mesh);
   _pickups.length = 0;
 }
+// Kill feedback — brief time slowdown on rapid kills
+let _killTimeScale = 1;
+let _killTimeScaleTimer = 0;
+let _recentKills = 0;
+let _recentKillTimer = 0;
+const MULTI_KILL_WINDOW = 1.0;
+const MULTI_KILL_THRESHOLD = 3;
+
 let currentLevelIndex = 0;
 let currentLevelData = null;
 let selectedStartLevel = 0;
@@ -414,8 +422,14 @@ function setupEventListeners() {
       // Left click - fire
       fireWeapon();
     } else if (e.button === 2) {
-      // Right click - zoom (sniper)
-      weapons.toggleZoom();
+      // Right click - alt fire or zoom
+      if (weapons.current === 'sniperRifle' && !weapons.zoomed) {
+        weapons.toggleZoom();
+      } else if (weapons.current === 'sniperRifle' && weapons.zoomed) {
+        fireWeaponAlt();
+      } else {
+        fireWeaponAlt();
+      }
     }
   });
 
@@ -669,6 +683,28 @@ function returnToMenu() {
   if (vfx) vfx.cleanup();
 }
 
+function fireWeaponAlt() {
+  // Sword dash strike triggers a player dash
+  weapons._onDashStrike = () => {
+    if (controls && controls.dashCooldown <= 0) {
+      controls.dashTimer = 0.12;
+    }
+  };
+  // Burst fire delivers delayed hits
+  weapons._onAltHit = (hit) => {
+    if (hit && hit.hit) processHit(hit);
+  };
+  const result = weapons.fireAlt(waveManager.enemies);
+  if (!result) return;
+  if (Array.isArray(result)) {
+    for (const hit of result) {
+      if (hit.hit) processHit(hit);
+    }
+  } else if (result.hit) {
+    processHit(result);
+  }
+}
+
 function fireWeapon() {
   const result = weapons.fire(waveManager.enemies);
   if (!result) return;
@@ -710,6 +746,15 @@ function processHit(hit) {
   if (killed) {
     player.addKill();
     player.addScore(alienData.scoreValue);
+
+    // Kill feedback — track rapid kills and trigger time slowdown
+    _recentKills++;
+    _recentKillTimer = MULTI_KILL_WINDOW;
+    if (_recentKills >= MULTI_KILL_THRESHOLD) {
+      _killTimeScale = 0.35;
+      _killTimeScaleTimer = 0.4;
+      _recentKills = 0;
+    }
 
     // Vampire perk
     if (player.vampireHeal > 0) player.heal(player.vampireHeal);
@@ -815,7 +860,7 @@ const _dmgNumPos = new THREE.Vector3();
 
 function animate() {
   requestAnimationFrame(animate);
-  const delta = Math.min(clock.getDelta(), 0.05); // Cap delta
+  let delta = Math.min(clock.getDelta(), 0.05); // Cap delta
 
   if (state === GameState.MENU) {
     updateMenu(delta);
@@ -827,13 +872,31 @@ function animate() {
   if (helpGuide.isOpen) return;
   if (_perkPending) return;
 
+  // Kill feedback time scale
+  if (_killTimeScaleTimer > 0) {
+    _killTimeScaleTimer -= delta;
+    if (_killTimeScaleTimer <= 0) {
+      _killTimeScale = 1;
+    }
+  }
+  if (_recentKillTimer > 0) {
+    _recentKillTimer -= delta;
+    if (_recentKillTimer <= 0) _recentKills = 0;
+  }
+  delta *= _killTimeScale;
+
   // Update systems
   controls.update(delta, currentLevelData ? currentLevelData.colliders : []);
   player.update(delta);
   particles.update(delta);
   weapons.update(delta, waveManager ? waveManager.enemies : null);
   hud.updateAnnouncement(delta);
-  if (vfx) vfx.update(delta, player.hp / player.maxHp);
+  if (vfx) {
+    vfx.update(delta, player.hp / player.maxHp, camera.position);
+    if (vfx.lastAcidDamage && !player.dead) {
+      player.takeDamage(vfx.lastAcidDamage, audio);
+    }
+  }
 
   // Wave management
   const prevState = waveManager.state;

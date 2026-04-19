@@ -104,10 +104,15 @@ export class WaveManager {
       }
     }
 
-    // Scale stats with wave
-    this.hpMultiplier = 1 + (w - 1) * 0.1;
+    // Boss wave — every 5th wave starting at wave 5
+    if (w >= 5 && w % 5 === 0) {
+      queue.push({ type: 'boss', elite: false, isBoss: true });
+    }
+
+    // Scale stats with wave — non-linear curve for late-game challenge
+    this.hpMultiplier = 1 + Math.pow(w - 1, 1.15) * 0.08;
     this.speedMultiplier = 1 + (w - 1) * 0.04;
-    this.damageMultiplier = 1 + (w - 1) * 0.06;
+    this.damageMultiplier = 1 + Math.pow(w - 1, 1.1) * 0.05;
 
     // Shuffle
     for (let i = queue.length - 1; i > 0; i--) {
@@ -177,7 +182,9 @@ export class WaveManager {
       (Math.random() - 0.5) * 10
     ));
 
+    const isBoss = typeof entry === 'object' && entry.isBoss;
     const enemy = new Alien(type, spawnPos, this.scene, this.particles, this.audio);
+    if (this.vfx) enemy._vfx = this.vfx;
     enemy.hp = Math.floor(enemy.hp * this.hpMultiplier);
     enemy.maxHp = enemy.hp;
     enemy.data = Object.assign({}, enemy.data, {
@@ -185,7 +192,10 @@ export class WaveManager {
       damage: Math.floor(enemy.data.damage * this.damageMultiplier),
     });
 
-    if (isElite) {
+    if (isBoss) {
+      enemy.isBoss = true;
+      enemy._addBossAura();
+    } else if (isElite) {
       enemy.hp = Math.floor(enemy.hp * 2.5);
       enemy.maxHp = enemy.hp;
       enemy.data.damage = Math.floor(enemy.data.damage * 1.5);

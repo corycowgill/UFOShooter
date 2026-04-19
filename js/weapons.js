@@ -125,7 +125,7 @@ export class WeaponManager {
     this._tmpRaycaster = new THREE.Raycaster();
     this._tmpSphere = new THREE.Sphere();
     // Rough bounding radius by alien type (for ray prefilter)
-    this._alienRadius = { bloater: 1.5, grunt: 0.9, spitter: 1.0, drone: 0.7, stalker: 0.9, swarmer: 0.6 };
+    this._alienRadius = { bloater: 1.5, grunt: 0.9, spitter: 1.0, drone: 0.7, stalker: 0.9, swarmer: 0.6, boss: 2.5 };
 
     // Active rocket projectiles in the world
     this.projectiles = [];
@@ -1722,6 +1722,92 @@ export class WeaponManager {
       this.recoilRotX = this.current === 'sniperRifle' ? 1.2 : 0.6;
       return this._hitscanAttack(enemies, weapon);
     }
+  }
+
+  fireAlt(enemies) {
+    if (this.cooldown > 0) return null;
+    const frMul = this.player ? this.player.fireRateMultiplier : 1;
+    const dmgMul = this.player ? this.player.damageMultiplier : 1;
+
+    if (this.current === 'laserRifle') {
+      // Burst mode — 3 rapid shots with tighter grouping
+      this.cooldown = 0.5 * frMul;
+      this.recoilOffset = 1.2;
+      this.recoilRotX = 0.9;
+      const weapon = WEAPONS.laserRifle;
+      const results = [];
+      for (let i = 0; i < 3; i++) {
+        setTimeout(() => {
+          if (this.cooldown > 0.4) return;
+          this.audio.playLaserRifle();
+          this.recoilOffset = 0.6;
+          this.recoilRotX = 0.4;
+          const r = this._hitscanAttack(enemies, {
+            ...weapon,
+            damage: Math.floor(7 * dmgMul),
+            spread: 0.01,
+          });
+          if (r && r.hit && this._onAltHit) this._onAltHit(r);
+        }, i * 80);
+      }
+      this.audio.playLaserRifle();
+      return this._hitscanAttack(enemies, { ...weapon, damage: Math.floor(7 * dmgMul), spread: 0.01 });
+    } else if (this.current === 'sniperRifle') {
+      // Explosive round — hitscan that detonates at impact point
+      this.cooldown = 2.5 * frMul;
+      this.recoilOffset = 2.0;
+      this.recoilRotX = 1.8;
+      this.audio.playSniperShot();
+      const weapon = WEAPONS.sniperRifle;
+      const result = this._hitscanAttack(enemies, { ...weapon, damage: Math.floor(70 * dmgMul) });
+      if (result && result.hit && result.point) {
+        const pos = result.point;
+        this.particles.createExplosion(pos, 0x8800ff, 4, 0.6);
+        if (this.audio.playExplosion) this.audio.playExplosion();
+        const hits = [];
+        const radius = 4 * (this.player ? this.player.explosionRadiusMultiplier : 1);
+        const radiusSq = radius * radius;
+        for (const enemy of enemies) {
+          if (enemy.dead || enemy === result.enemy) continue;
+          const dx = enemy.mesh.position.x - pos.x;
+          const dz = enemy.mesh.position.z - pos.z;
+          if (dx * dx + dz * dz < radiusSq) {
+            hits.push({
+              hit: true, enemy,
+              damage: Math.floor(40 * dmgMul * (1 - Math.sqrt(dx * dx + dz * dz) / radius)),
+              point: enemy.mesh.position,
+              weaponKey: 'sniperRifle',
+            });
+          }
+        }
+        if (hits.length > 0 && this.onRocketHit) this.onRocketHit(hits, pos);
+      }
+      return result;
+    } else if (this.current === 'laserSword') {
+      // Dash strike — lunge forward while slashing
+      this.cooldown = 0.6 * frMul;
+      this.swingAngle = 1.5;
+      this.recoilOffset = 0.5;
+      this.audio.playLaserSword();
+      this.particles.createSwordSlash(this.camera, WEAPONS.laserSword.color);
+      if (this._onDashStrike) this._onDashStrike();
+      return this._meleeAttack(enemies, { ...WEAPONS.laserSword, range: 6, damage: Math.floor(40 * dmgMul) });
+    } else if (this.current === 'rocketLauncher') {
+      // Cluster rocket — splits into 3 mini-rockets
+      this.cooldown = 2.2 * frMul;
+      this.recoilOffset = 2.5;
+      this.recoilRotX = 2.0;
+      if (this.audio.playRocketLaunch) this.audio.playRocketLaunch();
+      const weapon = WEAPONS.rocketLauncher;
+      this._launchRocket({
+        ...weapon,
+        damage: Math.floor(50 * dmgMul),
+        explosionRadius: 4,
+        projectileSpeed: 40,
+      });
+      return null;
+    }
+    return null;
   }
 
   _launchRocket(weapon) {

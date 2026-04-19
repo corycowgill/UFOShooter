@@ -41,6 +41,10 @@ export class FPSControls {
 
     this.sensitivity = 0.002;
 
+    // Head bob
+    this.headBobPhase = 0;
+    this.headBobAmount = 0;
+
     // Touch state (mobile / iOS)
     this.touchEnabled = false;
     this.touchMoveX = 0; // -1..1 virtual stick
@@ -463,6 +467,21 @@ export class FPSControls {
       this.camera.position.y = this.playerHeight;
       this.verticalVelocity = 0;
       this.onGround = true;
+    }
+
+    // Head bob — sine wave on Y driven by horizontal movement speed
+    const hSpeed = this.direction.length() * speed;
+    if (hSpeed > 0.5 && this.onGround && this.dashTimer <= 0) {
+      const rate = this.sprint ? 14 : 10;
+      const amp = this.sprint ? 0.06 : 0.035;
+      this.headBobPhase += delta * rate;
+      this.headBobAmount += (amp - this.headBobAmount) * 8 * delta;
+      this.camera.position.y += Math.sin(this.headBobPhase) * this.headBobAmount;
+    } else {
+      this.headBobAmount *= Math.max(0, 1 - 8 * delta);
+      if (this.headBobAmount > 0.001) {
+        this.camera.position.y += Math.sin(this.headBobPhase) * this.headBobAmount;
+      }
     }
   }
 

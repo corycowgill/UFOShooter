@@ -783,6 +783,71 @@ export class VFXManager {
   }
 
   // ========================
+  // ACID POOLS (Spitter ground hazards)
+  // ========================
+  createAcidPool(position, radius = 2.5) {
+    if (!this._acidPools) this._acidPools = [];
+    if (this._acidPools.length > 10) {
+      const old = this._acidPools.shift();
+      this.scene.remove(old.group);
+      disposeTree(old.group);
+    }
+    const group = new THREE.Group();
+    const poolMat = new THREE.MeshBasicMaterial({
+      color: 0x88cc00, transparent: true, opacity: 0.45,
+      depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false,
+    });
+    poolMat.color.multiplyScalar(1.5);
+    const pool = new THREE.Mesh(new THREE.CircleGeometry(radius, 16), poolMat);
+    pool.rotation.x = -Math.PI / 2;
+    pool.position.y = 0.02;
+    group.add(pool);
+    const rimMat = new THREE.MeshBasicMaterial({
+      color: 0xaaff00, transparent: true, opacity: 0.25,
+      depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false,
+    });
+    const rim = new THREE.Mesh(new THREE.RingGeometry(radius * 0.85, radius * 1.05, 16), rimMat);
+    rim.rotation.x = -Math.PI / 2;
+    rim.position.y = 0.025;
+    group.add(rim);
+    group.position.set(position.x, 0, position.z);
+    this.scene.add(group);
+    this._acidPools.push({
+      group, poolMat, rimMat, pool,
+      life: 6, maxLife: 6, radius,
+      position: new THREE.Vector3(position.x, 0, position.z),
+    });
+  }
+
+  _updateAcidPools(delta, playerPos) {
+    if (!this._acidPools) return null;
+    let totalDamage = 0;
+    for (let i = this._acidPools.length - 1; i >= 0; i--) {
+      const ap = this._acidPools[i];
+      ap.life -= delta;
+      const t = performance.now() * 0.003;
+      const pulse = 0.35 + 0.1 * Math.sin(t + i * 2);
+      const fadeOut = ap.life < 2 ? ap.life / 2 : 1;
+      ap.poolMat.opacity = pulse * fadeOut;
+      ap.rimMat.opacity = 0.25 * fadeOut;
+      ap.pool.scale.setScalar(1 + 0.03 * Math.sin(t * 1.5 + i));
+      if (playerPos) {
+        const dx = ap.position.x - playerPos.x;
+        const dz = ap.position.z - playerPos.z;
+        if (dx * dx + dz * dz < ap.radius * ap.radius) {
+          totalDamage += 8 * delta;
+        }
+      }
+      if (ap.life <= 0) {
+        this.scene.remove(ap.group);
+        disposeTree(ap.group);
+        this._acidPools.splice(i, 1);
+      }
+    }
+    return totalDamage > 0 ? totalDamage : null;
+  }
+
+  // ========================
   // CHROMATIC ABERRATION
   // ========================
   triggerChromaticAberration(intensity = 1) {
@@ -814,7 +879,7 @@ export class VFXManager {
   // ========================
   // MAIN UPDATE
   // ========================
-  update(delta, playerHpPct) {
+  update(delta, playerHpPct, playerPos) {
     this._updateShake(delta);
     this._updateHitMarker(delta);
     this._updateDamageNumbers(delta);
@@ -826,6 +891,7 @@ export class VFXManager {
     this._updateRain(delta);
     this._updateScorchMarks(delta);
     this._updateChromaticAberration(delta);
+    this.lastAcidDamage = this._updateAcidPools(delta, playerPos);
   }
 
   cleanup() {
@@ -862,6 +928,13 @@ export class VFXManager {
         disposeTree(s.mesh);
       }
       this._scorchMarks = [];
+    }
+    if (this._acidPools) {
+      for (const ap of this._acidPools) {
+        this.scene.remove(ap.group);
+        disposeTree(ap.group);
+      }
+      this._acidPools = [];
     }
     this.deathEffects = [];
     this.spawnEffects = [];
