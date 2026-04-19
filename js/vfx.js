@@ -583,6 +583,235 @@ export class VFXManager {
   }
 
   // ========================
+  // RAIN WEATHER SYSTEM
+  // ========================
+  initRain() {
+    if (this._rain) {
+      this.scene.remove(this._rain);
+      disposeTree(this._rain);
+    }
+    if (this._rainSplashes) {
+      this.scene.remove(this._rainSplashes);
+      disposeTree(this._rainSplashes);
+    }
+
+    const count = 800;
+    const positions = new Float32Array(count * 6);
+    const velocities = new Float32Array(count * 3);
+    for (let i = 0; i < count; i++) {
+      const x = (Math.random() - 0.5) * 60;
+      const y = Math.random() * 25;
+      const z = (Math.random() - 0.5) * 60;
+      const streakLen = 0.4 + Math.random() * 0.3;
+      positions[i * 6] = x;
+      positions[i * 6 + 1] = y;
+      positions[i * 6 + 2] = z;
+      positions[i * 6 + 3] = x + 0.02;
+      positions[i * 6 + 4] = y + streakLen;
+      positions[i * 6 + 5] = z;
+      velocities[i * 3] = (Math.random() - 0.5) * 0.5;
+      velocities[i * 3 + 1] = -12 - Math.random() * 6;
+      velocities[i * 3 + 2] = (Math.random() - 0.5) * 0.5;
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geo.userData.velocities = velocities;
+    geo.userData.count = count;
+    const mat = new THREE.LineBasicMaterial({
+      color: 0x8899bb, transparent: true, opacity: 0.2,
+      blending: THREE.AdditiveBlending, depthWrite: false,
+    });
+    this._rain = new THREE.LineSegments(geo, mat);
+    this._rain.frustumCulled = false;
+    this.scene.add(this._rain);
+
+    // Splash ring pool on ground
+    const splashCount = 40;
+    const splashPos = new Float32Array(splashCount * 3);
+    const splashSizes = new Float32Array(splashCount);
+    for (let i = 0; i < splashCount; i++) {
+      splashPos[i * 3] = (Math.random() - 0.5) * 50;
+      splashPos[i * 3 + 1] = 0.05;
+      splashPos[i * 3 + 2] = (Math.random() - 0.5) * 50;
+      splashSizes[i] = 0;
+    }
+    const splashGeo = new THREE.BufferGeometry();
+    splashGeo.setAttribute('position', new THREE.Float32BufferAttribute(splashPos, 3));
+    splashGeo.setAttribute('aSize', new THREE.Float32BufferAttribute(splashSizes, 1));
+    splashGeo.userData.life = new Float32Array(splashCount);
+    splashGeo.userData.count = splashCount;
+    const splashMat = new THREE.PointsMaterial({
+      color: 0xaabbcc, size: 0.3, transparent: true, opacity: 0.3,
+      blending: THREE.AdditiveBlending, depthWrite: false,
+    });
+    this._rainSplashes = new THREE.Points(splashGeo, splashMat);
+    this._rainSplashes.frustumCulled = false;
+    this.scene.add(this._rainSplashes);
+    this._rainSplashIdx = 0;
+  }
+
+  _updateRain(delta) {
+    if (!this._rain) return;
+    const positions = this._rain.geometry.attributes.position.array;
+    const velocities = this._rain.geometry.userData.velocities;
+    const count = this._rain.geometry.userData.count;
+    const camPos = this.camera.position;
+
+    for (let i = 0; i < count; i++) {
+      const vi = i * 3;
+      const pi = i * 6;
+      const dx = velocities[vi] * delta;
+      const dy = velocities[vi + 1] * delta;
+      const dz = velocities[vi + 2] * delta;
+      positions[pi] += dx;
+      positions[pi + 1] += dy;
+      positions[pi + 2] += dz;
+      positions[pi + 3] += dx;
+      positions[pi + 4] += dy;
+      positions[pi + 5] += dz;
+
+      if (positions[pi + 1] < 0) {
+        // Spawn splash
+        if (this._rainSplashes) {
+          const sg = this._rainSplashes.geometry;
+          const sp = sg.attributes.position.array;
+          const sl = sg.userData.life;
+          const si = this._rainSplashIdx % sg.userData.count;
+          sp[si * 3] = positions[pi];
+          sp[si * 3 + 1] = 0.05;
+          sp[si * 3 + 2] = positions[pi + 2];
+          sl[si] = 0.3;
+          sg.attributes.position.needsUpdate = true;
+          this._rainSplashIdx++;
+        }
+        const angle = Math.random() * Math.PI * 2;
+        const r = 5 + Math.random() * 25;
+        const nx = camPos.x + Math.cos(angle) * r;
+        const nz = camPos.z + Math.sin(angle) * r;
+        const ny = 15 + Math.random() * 10;
+        const streakLen = 0.4 + Math.random() * 0.3;
+        positions[pi] = nx;
+        positions[pi + 1] = ny;
+        positions[pi + 2] = nz;
+        positions[pi + 3] = nx + 0.02;
+        positions[pi + 4] = ny + streakLen;
+        positions[pi + 5] = nz;
+      }
+
+      const distX = positions[pi] - camPos.x;
+      const distZ = positions[pi + 2] - camPos.z;
+      if (distX * distX + distZ * distZ > 900) {
+        const angle = Math.random() * Math.PI * 2;
+        const r = 5 + Math.random() * 25;
+        positions[pi] = camPos.x + Math.cos(angle) * r;
+        positions[pi + 1] = Math.random() * 20;
+        positions[pi + 2] = camPos.z + Math.sin(angle) * r;
+        positions[pi + 3] = positions[pi] + 0.02;
+        positions[pi + 4] = positions[pi + 1] + 0.5;
+        positions[pi + 5] = positions[pi + 2];
+      }
+    }
+    this._rain.geometry.attributes.position.needsUpdate = true;
+
+    // Update splashes
+    if (this._rainSplashes) {
+      const sl = this._rainSplashes.geometry.userData.life;
+      const sc = this._rainSplashes.geometry.userData.count;
+      let anyAlive = false;
+      for (let i = 0; i < sc; i++) {
+        if (sl[i] > 0) {
+          sl[i] -= delta;
+          anyAlive = true;
+        }
+      }
+      if (anyAlive) {
+        this._rainSplashes.material.opacity = 0.3;
+      }
+    }
+  }
+
+  // ========================
+  // GROUND SCORCH MARKS
+  // ========================
+  createScorchMark(position, radius) {
+    if (!this._scorchMarks) this._scorchMarks = [];
+    if (this._scorchMarks.length > 15) {
+      const old = this._scorchMarks.shift();
+      this.scene.remove(old.mesh);
+      disposeTree(old.mesh);
+    }
+    const scorch = new THREE.Mesh(
+      new THREE.CircleGeometry(radius, 12),
+      new THREE.MeshBasicMaterial({
+        color: 0x111111, transparent: true, opacity: 0.5,
+        depthWrite: false,
+      })
+    );
+    scorch.rotation.x = -Math.PI / 2;
+    scorch.position.set(position.x, 0.015, position.z);
+    this.scene.add(scorch);
+    this._scorchMarks.push({ mesh: scorch, life: 12 });
+
+    // Burn ring around the scorch
+    const ring = new THREE.Mesh(
+      new THREE.RingGeometry(radius * 0.8, radius * 1.1, 16),
+      new THREE.MeshBasicMaterial({
+        color: 0x331100, transparent: true, opacity: 0.35,
+        depthWrite: false,
+      })
+    );
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.set(position.x, 0.016, position.z);
+    this.scene.add(ring);
+    this._scorchMarks.push({ mesh: ring, life: 12 });
+  }
+
+  _updateScorchMarks(delta) {
+    if (!this._scorchMarks) return;
+    for (let i = this._scorchMarks.length - 1; i >= 0; i--) {
+      const s = this._scorchMarks[i];
+      s.life -= delta;
+      if (s.life < 3) {
+        s.mesh.material.opacity *= 0.98;
+      }
+      if (s.life <= 0) {
+        this.scene.remove(s.mesh);
+        disposeTree(s.mesh);
+        this._scorchMarks.splice(i, 1);
+      }
+    }
+  }
+
+  // ========================
+  // CHROMATIC ABERRATION
+  // ========================
+  triggerChromaticAberration(intensity = 1) {
+    this._chromaTimer = 0.25 * intensity;
+    this._chromaIntensity = intensity;
+    const el = document.getElementById('chromatic-aberration');
+    if (el) {
+      el.style.display = 'block';
+      el.style.opacity = String(Math.min(1, 0.6 * intensity));
+    }
+  }
+
+  _updateChromaticAberration(delta) {
+    if (!this._chromaTimer || this._chromaTimer <= 0) return;
+    this._chromaTimer -= delta;
+    const el = document.getElementById('chromatic-aberration');
+    if (el) {
+      if (this._chromaTimer <= 0) {
+        el.style.display = 'none';
+        el.style.opacity = '0';
+        this._chromaTimer = 0;
+      } else {
+        const t = this._chromaTimer / (0.25 * this._chromaIntensity);
+        el.style.opacity = String(0.6 * this._chromaIntensity * t);
+      }
+    }
+  }
+
+  // ========================
   // MAIN UPDATE
   // ========================
   update(delta, playerHpPct) {
@@ -594,6 +823,9 @@ export class VFXManager {
     this._updateDeathEffects(delta);
     this._updateSpawnEffects(delta);
     this._updateEnvironmentParticles(delta);
+    this._updateRain(delta);
+    this._updateScorchMarks(delta);
+    this._updateChromaticAberration(delta);
   }
 
   cleanup() {
@@ -614,6 +846,23 @@ export class VFXManager {
       this.scene.remove(this._envParticles2);
       disposeTree(this._envParticles2);
     }
+    if (this._rain) {
+      this.scene.remove(this._rain);
+      disposeTree(this._rain);
+      this._rain = null;
+    }
+    if (this._rainSplashes) {
+      this.scene.remove(this._rainSplashes);
+      disposeTree(this._rainSplashes);
+      this._rainSplashes = null;
+    }
+    if (this._scorchMarks) {
+      for (const s of this._scorchMarks) {
+        this.scene.remove(s.mesh);
+        disposeTree(s.mesh);
+      }
+      this._scorchMarks = [];
+    }
     this.deathEffects = [];
     this.spawnEffects = [];
     this.envParticles = null;
@@ -627,5 +876,8 @@ export class VFXManager {
     this.hitMarkerTimer = 0;
     this.hitMarkerEl.className = '';
     this.lowHealthVignetteEl.style.display = 'none';
+    const chromaEl = document.getElementById('chromatic-aberration');
+    if (chromaEl) { chromaEl.style.display = 'none'; chromaEl.style.opacity = '0'; }
+    this._chromaTimer = 0;
   }
 }

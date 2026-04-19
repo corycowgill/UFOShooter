@@ -271,6 +271,25 @@ canvas#gameCanvas { display: block; width: 100vw; height: 100vh; }
   opacity: 0; transition: opacity 0.1s;
 }
 
+/* Chromatic aberration on damage */
+#chromatic-aberration {
+  position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+  pointer-events: none; z-index: 14;
+  display: none; opacity: 0;
+  background:
+    linear-gradient(90deg, rgba(255,0,0,0.08) 0%, transparent 3%, transparent 97%, rgba(255,0,0,0.08) 100%),
+    linear-gradient(90deg, transparent 0%, transparent 3%, transparent 97%, rgba(0,0,255,0.08) 100%);
+  mix-blend-mode: screen;
+  animation: chromaShift 0.08s steps(2) infinite;
+}
+@keyframes chromaShift {
+  0%   { transform: translate(-2px, 0); }
+  25%  { transform: translate(2px, 1px); }
+  50%  { transform: translate(-1px, -1px); }
+  75%  { transform: translate(1px, 0); }
+  100% { transform: translate(0, 1px); }
+}
+
 /* Wave announcement - holographic banner */
 #wave-announce {
   position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%);
@@ -983,6 +1002,7 @@ canvas#gameCanvas { display: block; width: 100vw; height: 100vh; }
 <div id="vignette"></div>
 
 <div id="damage-flash"></div>
+<div id="chromatic-aberration"></div>
 
 <div id="scope-overlay">
   <div class="scope-ring"></div>

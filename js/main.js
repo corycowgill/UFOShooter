@@ -568,7 +568,10 @@ function startGame() {
   weapons = new WeaponManager(camera, scene, particles, audio);
   // Rocket detonation hits are delivered asynchronously
   weapons.onRocketHit = (hits, pos) => {
-    if (vfx) vfx.shake(0.3, 0.5);
+    if (vfx) {
+      vfx.shake(0.3, 0.5);
+      vfx.createScorchMark(pos, 3);
+    }
     for (const hit of hits) processHit(hit);
   };
 
@@ -635,6 +638,7 @@ function loadLevel(index) {
   if (vfx) {
     const envType = currentLevelIndex === 0 ? 'dust' : (currentLevelIndex === 2 ? 'embers' : 'dust');
     vfx.initEnvironmentParticles(envType);
+    vfx.initRain();
   }
 
   // One-shot shadow map refresh — static world just finished building, so
@@ -729,8 +733,10 @@ function processHit(hit) {
     if (hit.enemy.type === 'bloater') {
       const pos = enemyPos;
       const radius = ALIEN_TYPES.bloater.explosionRadius;
-      // Bigger screen shake for explosion
-      if (vfx) vfx.shake(0.15, 0.3);
+      if (vfx) {
+        vfx.shake(0.15, 0.3);
+        vfx.createScorchMark(pos, radius * 0.6);
+      }
 
       // Damage nearby enemies
       const radiusSq = radius * radius;
@@ -757,6 +763,7 @@ function processHit(hit) {
       if (playerDist < radius) {
         const dmg = ALIEN_TYPES.bloater.damage * (1 - playerDist / radius);
         player.takeDamage(dmg, audio);
+        if (vfx) vfx.triggerChromaticAberration(dmg / 15);
       }
     }
   }
@@ -872,10 +879,16 @@ function animate() {
     const result = enemy.checkPlayerCollision(camera.position, delta);
     if (result) {
       player.takeDamage(result.damage, audio);
-      if (vfx) vfx.shake(0.08, 0.15);
+      if (vfx) {
+        vfx.shake(0.08, 0.15);
+        vfx.triggerChromaticAberration(result.damage / 20);
+      }
       if (result.type === 'explosion') {
         particles.createExplosion(enemy.mesh.position, 0xff4400, 5, 0.8);
-        if (vfx) vfx.shake(0.2, 0.4);
+        if (vfx) {
+          vfx.shake(0.2, 0.4);
+          vfx.createScorchMark(enemy.mesh.position, 2.5);
+        }
       }
     }
   }
@@ -889,6 +902,27 @@ function animate() {
   // Rotate UFO mothership
   if (currentLevelData && currentLevelData.ufo) {
     currentLevelData.ufo.rotation.y += delta * 0.1;
+  }
+
+  // Animate twinkling stars
+  if (currentLevelData && currentLevelData.starMats) {
+    const t = performance.now() * 0.001;
+    for (const m of currentLevelData.starMats) {
+      if (m.uniforms && m.uniforms.uTime) m.uniforms.uTime.value = t;
+    }
+  }
+
+  // Animate neon sign flicker
+  if (currentLevelData && currentLevelData.neonSigns) {
+    const t = performance.now() * 0.001;
+    for (const ns of currentLevelData.neonSigns) {
+      const ud = ns.userData;
+      const flicker = Math.random() < ud._neonFlickerChance;
+      const pulse = 0.7 + 0.3 * Math.sin(t * ud._neonSpeed + ud._neonPhase);
+      const alpha = flicker ? 0.1 : pulse;
+      ud._neonMat.opacity = alpha * 0.9;
+      ud._neonGlowMat.opacity = alpha * 0.15;
+    }
   }
 
   // Update HUD

@@ -513,7 +513,78 @@ function makeStreetLight(x, z) {
   const light = new THREE.PointLight(0xffdd88, 2.0, 25);
   light.position.set(1.2, 4.5, 0);
   group.add(light);
+  // Volumetric light cone — visible beam of light falling from the fixture
+  const coneH = 4.4;
+  const cone = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.15, 2.2, coneH, 12, 1, true),
+    new THREE.MeshBasicMaterial({
+      color: 0xffdd88, transparent: true, opacity: 0.045,
+      blending: THREE.AdditiveBlending, depthWrite: false,
+      side: THREE.DoubleSide, toneMapped: false,
+    })
+  );
+  cone.position.set(1.2, 4.5 - coneH / 2, 0);
+  group.add(cone);
+  // Inner brighter core cone
+  const coneInner = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.08, 1.0, coneH, 8, 1, true),
+    new THREE.MeshBasicMaterial({
+      color: 0xffeebb, transparent: true, opacity: 0.03,
+      blending: THREE.AdditiveBlending, depthWrite: false,
+      side: THREE.DoubleSide, toneMapped: false,
+    })
+  );
+  coneInner.position.set(1.2, 4.5 - coneH / 2, 0);
+  group.add(coneInner);
+  // Ground light pool — bright circle on the ground
+  const pool = new THREE.Mesh(
+    new THREE.CircleGeometry(2.0, 16),
+    new THREE.MeshBasicMaterial({
+      color: 0xffdd88, transparent: true, opacity: 0.06,
+      blending: THREE.AdditiveBlending, depthWrite: false,
+      toneMapped: false,
+    })
+  );
+  pool.rotation.x = -Math.PI / 2;
+  pool.position.set(1.2, 0.02, 0);
+  group.add(pool);
   group.position.set(x, 0, z);
+  return group;
+}
+
+function makeNeonSign(x, y, z, rotY, color, width, height) {
+  const group = new THREE.Group();
+  const mat = new THREE.MeshBasicMaterial({
+    color, transparent: true, opacity: 0.9,
+    toneMapped: false, blending: THREE.AdditiveBlending, depthWrite: false,
+  });
+  mat.color.multiplyScalar(2.5);
+  const sign = new THREE.Mesh(new THREE.PlaneGeometry(width, height), mat);
+  group.add(sign);
+  const glowMat = new THREE.MeshBasicMaterial({
+    color, transparent: true, opacity: 0.15,
+    toneMapped: false, blending: THREE.AdditiveBlending,
+    depthWrite: false, side: THREE.DoubleSide,
+  });
+  glowMat.color.multiplyScalar(1.5);
+  const glow = new THREE.Mesh(new THREE.PlaneGeometry(width * 1.4, height * 1.6), glowMat);
+  glow.position.z = -0.05;
+  group.add(glow);
+  // Frame outline
+  const frameMat = new THREE.MeshBasicMaterial({ color: 0x333333 });
+  const top = new THREE.Mesh(new THREE.BoxGeometry(width + 0.1, 0.04, 0.04), frameMat);
+  top.position.y = height / 2;
+  group.add(top);
+  const bot = new THREE.Mesh(new THREE.BoxGeometry(width + 0.1, 0.04, 0.04), frameMat);
+  bot.position.y = -height / 2;
+  group.add(bot);
+  group.position.set(x, y, z);
+  group.rotation.y = rotY;
+  group.userData._neonMat = mat;
+  group.userData._neonGlowMat = glowMat;
+  group.userData._neonPhase = Math.random() * Math.PI * 2;
+  group.userData._neonSpeed = 0.5 + Math.random() * 2;
+  group.userData._neonFlickerChance = 0.002 + Math.random() * 0.005;
   return group;
 }
 
@@ -1486,16 +1557,31 @@ function addGround(group, size, color = 0x333333) {
     }
   }
 
-  // Wet/reflective puddle patches
-  for (let i = 0; i < 8; i++) {
+  // Wet/reflective puddle patches — high shininess for specular highlights
+  const puddleMat = new THREE.MeshPhongMaterial({
+    color: 0x111122, emissive: 0x050510, transparent: true, opacity: 0.45,
+    shininess: 200, specular: 0x667788, reflectivity: 1,
+  });
+  puddleMat.__shared = true;
+  const puddleGlowMat = new THREE.MeshBasicMaterial({
+    color: 0x223344, transparent: true, opacity: 0.06,
+    blending: THREE.AdditiveBlending, depthWrite: false,
+  });
+  puddleGlowMat.__shared = true;
+  for (let i = 0; i < 12; i++) {
     const px = (Math.random() - 0.5) * size * 1.2;
     const pz = (Math.random() - 0.5) * size * 1.2;
-    const ps = 1.5 + Math.random() * 2.5;
-    const puddle = new THREE.Mesh(new THREE.CircleGeometry(ps, 8), wetMat);
+    const ps = 1.5 + Math.random() * 3;
+    const puddle = new THREE.Mesh(new THREE.CircleGeometry(ps, 10), puddleMat);
     puddle.rotation.x = -Math.PI / 2;
-    puddle.position.set(px, 0.008, pz);
+    puddle.position.set(px, 0.009, pz);
     puddle.scale.set(1 + Math.random() * 0.8, 1, 1 + Math.random() * 0.3);
     group.add(puddle);
+    // Subtle glow reflection in puddle
+    const glow = new THREE.Mesh(new THREE.CircleGeometry(ps * 0.6, 8), puddleGlowMat);
+    glow.rotation.x = -Math.PI / 2;
+    glow.position.set(px, 0.01, pz);
+    group.add(glow);
   }
 }
 
@@ -1571,13 +1657,57 @@ function addSky(scene) {
     else if (tint < 0.4) { starColors2.push(1.0, 1.0, 0.8); }     // pale yellow
     else { starColors2.push(1.0, 1.0, 1.0); }                      // white
   }
+  // Per-star random phase for twinkling
+  const starPhases = new Float32Array(3000);
+  const starSpeeds = new Float32Array(3000);
+  for (let i = 0; i < 3000; i++) {
+    starPhases[i] = Math.random() * Math.PI * 2;
+    starSpeeds[i] = 0.5 + Math.random() * 2.0;
+  }
   starGeo.setAttribute('position', new THREE.Float32BufferAttribute(starVerts, 3));
   starGeo.setAttribute('color', new THREE.Float32BufferAttribute(starColors2, 3));
-  const starMat = new THREE.PointsMaterial({ vertexColors: true, size: 0.6, transparent: true, opacity: 0.8 });
-  scene.add(new THREE.Points(starGeo, starMat));
-  // Bright stars (fewer, larger)
+  starGeo.setAttribute('aPhase', new THREE.Float32BufferAttribute(starPhases, 1));
+  starGeo.setAttribute('aSpeed', new THREE.Float32BufferAttribute(starSpeeds, 1));
+  const starMat = new THREE.ShaderMaterial({
+    transparent: true,
+    depthWrite: false,
+    uniforms: { uTime: { value: 0 } },
+    vertexShader: /* glsl */`
+      attribute vec3 color;
+      attribute float aPhase;
+      attribute float aSpeed;
+      uniform float uTime;
+      varying vec3 vColor;
+      varying float vAlpha;
+      void main() {
+        vColor = color;
+        float twinkle = 0.55 + 0.45 * sin(uTime * aSpeed + aPhase);
+        vAlpha = 0.8 * twinkle;
+        vec4 mv = modelViewMatrix * vec4(position, 1.0);
+        gl_Position = projectionMatrix * mv;
+        gl_PointSize = (0.4 + 0.4 * twinkle) * (300.0 / max(1.0, -mv.z));
+      }
+    `,
+    fragmentShader: /* glsl */`
+      varying vec3 vColor;
+      varying float vAlpha;
+      void main() {
+        vec2 c = gl_PointCoord - 0.5;
+        float d = length(c);
+        if (d > 0.5) discard;
+        float soft = 1.0 - smoothstep(0.15, 0.5, d);
+        gl_FragColor = vec4(vColor, vAlpha * soft);
+      }
+    `,
+  });
+  starMat.__shared = true;
+  const starPoints = new THREE.Points(starGeo, starMat);
+  scene.add(starPoints);
+  // Bright stars (fewer, larger) — also twinkle
   const brightStarGeo = new THREE.BufferGeometry();
   const brightVerts = [];
+  const brightPhases = [];
+  const brightSpeeds = [];
   for (let i = 0; i < 200; i++) {
     const theta = Math.random() * Math.PI * 2;
     const phi = Math.acos(Math.random() * 2 - 1);
@@ -1587,10 +1717,48 @@ function addSky(scene) {
       sr * Math.sin(phi) * Math.sin(theta),
       sr * Math.cos(phi)
     );
+    brightPhases.push(Math.random() * Math.PI * 2);
+    brightSpeeds.push(0.3 + Math.random() * 1.5);
   }
   brightStarGeo.setAttribute('position', new THREE.Float32BufferAttribute(brightVerts, 3));
-  const brightStarMat = new THREE.PointsMaterial({ color: 0xeeeeff, size: 1.2, transparent: true, opacity: 0.9 });
-  scene.add(new THREE.Points(brightStarGeo, brightStarMat));
+  brightStarGeo.setAttribute('aPhase', new THREE.Float32BufferAttribute(brightPhases, 1));
+  brightStarGeo.setAttribute('aSpeed', new THREE.Float32BufferAttribute(brightSpeeds, 1));
+  const brightStarMat = new THREE.ShaderMaterial({
+    transparent: true,
+    depthWrite: false,
+    uniforms: { uTime: { value: 0 }, uColor: { value: new THREE.Color(0xeeeeff) } },
+    vertexShader: /* glsl */`
+      attribute float aPhase;
+      attribute float aSpeed;
+      uniform float uTime;
+      uniform vec3 uColor;
+      varying vec3 vColor;
+      varying float vAlpha;
+      void main() {
+        vColor = uColor;
+        float twinkle = 0.5 + 0.5 * sin(uTime * aSpeed + aPhase);
+        vAlpha = 0.9 * twinkle;
+        vec4 mv = modelViewMatrix * vec4(position, 1.0);
+        gl_Position = projectionMatrix * mv;
+        gl_PointSize = (0.8 + 0.6 * twinkle) * (300.0 / max(1.0, -mv.z));
+      }
+    `,
+    fragmentShader: /* glsl */`
+      varying vec3 vColor;
+      varying float vAlpha;
+      void main() {
+        vec2 c = gl_PointCoord - 0.5;
+        float d = length(c);
+        if (d > 0.5) discard;
+        float soft = 1.0 - smoothstep(0.1, 0.5, d);
+        float spike = max(0.0, 1.0 - abs(c.x) * 12.0) * 0.3 + max(0.0, 1.0 - abs(c.y) * 12.0) * 0.3;
+        gl_FragColor = vec4(vColor, vAlpha * (soft + spike));
+      }
+    `,
+  });
+  brightStarMat.__shared = true;
+  const brightStarPoints = new THREE.Points(brightStarGeo, brightStarMat);
+  scene.add(brightStarPoints);
 
   // Nebula patches (soft colored cloud patches in the sky)
   const nebulaData = [
@@ -1920,7 +2088,7 @@ function addSky(scene) {
   // Enhanced fog with better density
   scene.fog = new THREE.FogExp2(0x0e0e2a, 0.0035);
 
-  return ufoGroup;
+  return { ufo: ufoGroup, starMats: [starMat, brightStarMat] };
 }
 
 function addCollider(colliders, mesh) {
@@ -1934,7 +2102,7 @@ function buildDowntownChicago(scene) {
   const colliders = [];
 
   addGround(group, 100, 0x2a2a2a);
-  const ufo = addSky(scene);
+  const { ufo, starMats } = addSky(scene);
 
   // Downtown twilight: dense blue-violet haze
   scene.fog = new THREE.FogExp2(0x0c0c28, 0.0042);
@@ -2710,6 +2878,28 @@ function buildDowntownChicago(scene) {
     group.add(makeStreetLight(-8, z));
   }
 
+  // === NEON SIGNS on building faces ===
+  const neonColors = [0xff0066, 0x00ffcc, 0xff6600, 0x00aaff, 0xff00ff, 0xffcc00, 0x00ff66];
+  const neonSigns = [];
+  const neonPlacements = [
+    { x: -16.49, y: 6, z: -70, ry: Math.PI / 2, w: 3, h: 0.6 },
+    { x: -18.49, y: 8, z: -20, ry: Math.PI / 2, w: 2.5, h: 0.5 },
+    { x: -16.49, y: 7, z: 15, ry: Math.PI / 2, w: 3.5, h: 0.7 },
+    { x: -18.49, y: 10, z: 30, ry: Math.PI / 2, w: 2.8, h: 0.5 },
+    { x: -14.49, y: 5, z: 50, ry: Math.PI / 2, w: 2, h: 0.5 },
+    { x: 16.49, y: 7, z: -60, ry: -Math.PI / 2, w: 3, h: 0.6 },
+    { x: 18.49, y: 9, z: -30, ry: -Math.PI / 2, w: 2.5, h: 0.5 },
+    { x: 16.49, y: 6, z: 20, ry: -Math.PI / 2, w: 3.2, h: 0.6 },
+    { x: 18.49, y: 8, z: 55, ry: -Math.PI / 2, w: 2.5, h: 0.5 },
+    { x: 20.49, y: 11, z: 70, ry: -Math.PI / 2, w: 3, h: 0.7 },
+  ];
+  for (let i = 0; i < neonPlacements.length; i++) {
+    const np = neonPlacements[i];
+    const ns = makeNeonSign(np.x, np.y, np.z, np.ry, neonColors[i % neonColors.length], np.w, np.h);
+    group.add(ns);
+    neonSigns.push(ns);
+  }
+
   // === TRAFFIC LIGHTS at intersections ===
   for (const zInt of [-35, 35]) {
     for (const xSide of [-7.5, 7.5]) {
@@ -2842,7 +3032,7 @@ function buildDowntownChicago(scene) {
 
   scene.add(group);
   freezeStaticGroup(group);
-  return { group, colliders, ufo, spawnPoints: generateSpawnPoints(80) };
+  return { group, colliders, ufo, starMats, neonSigns, spawnPoints: generateSpawnPoints(80) };
 }
 
 // ========== LEVEL 2: LINCOLN PARK ZOO ==========
@@ -2851,7 +3041,7 @@ function buildLincolnParkZoo(scene) {
   const colliders = [];
 
   addGround(group, 100, 0x1a3311);
-  const ufo = addSky(scene);
+  const { ufo, starMats } = addSky(scene);
 
   // Zoo at dusk: warm green haze
   scene.fog = new THREE.FogExp2(0x0d1a12, 0.0038);
@@ -3126,7 +3316,7 @@ function buildLincolnParkZoo(scene) {
 
   scene.add(group);
   freezeStaticGroup(group);
-  return { group, colliders, ufo, spawnPoints: generateSpawnPoints(70) };
+  return { group, colliders, ufo, starMats, spawnPoints: generateSpawnPoints(70) };
 }
 
 // ========== LEVEL 3: RAVENSWOOD ==========
@@ -3135,7 +3325,7 @@ function buildRavenswood(scene) {
   const colliders = [];
 
   addGround(group, 100, 0x2a2a2a);
-  const ufo = addSky(scene);
+  const { ufo, starMats } = addSky(scene);
 
   // Ravenswood at night: cool urban blue haze
   scene.fog = new THREE.FogExp2(0x0a0e1c, 0.0045);
@@ -3519,6 +3709,16 @@ function buildRavenswood(scene) {
     group.add(makeStreetLight(7, z));
   }
 
+  // Neon signs on storefronts
+  const rvNeonColors = [0xff3366, 0x00ffaa, 0xff8800, 0x6600ff, 0x00ccff];
+  const neonSigns = [];
+  for (let si = 0; si < 5; si++) {
+    const z = -20 + si * 10;
+    const ns = makeNeonSign(-9.4, 4.5, z, Math.PI / 2, rvNeonColors[si], 2.5, 0.5);
+    group.add(ns);
+    neonSigns.push(ns);
+  }
+
   // Trash cans and fire hydrants
   for (let z = -50; z < 50; z += 25) {
     group.add(makeTrashCan(-9, z));
@@ -3540,7 +3740,7 @@ function buildRavenswood(scene) {
 
   scene.add(group);
   freezeStaticGroup(group);
-  return { group, colliders, ufo, spawnPoints: generateSpawnPoints(75) };
+  return { group, colliders, ufo, starMats, neonSigns, spawnPoints: generateSpawnPoints(75) };
 }
 
 function generateSpawnPoints(radius) {
