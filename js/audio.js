@@ -381,6 +381,125 @@ export class AudioManager {
     osc.stop(t + 0.2);
   }
 
+  playFootstep(sprint = false) {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    const bufSize = Math.floor(this.ctx.sampleRate * 0.06);
+    const buf = this.ctx.createBuffer(1, bufSize, this.ctx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < bufSize; i++) {
+      data[i] = (Math.random() * 2 - 1) * (1 - i / bufSize);
+    }
+    const src = this.ctx.createBufferSource();
+    src.buffer = buf;
+    const filter = this.ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.value = sprint ? 600 : 400;
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(sprint ? 0.07 : 0.04, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.08);
+    src.connect(filter);
+    filter.connect(g);
+    g.connect(this.sfxGain);
+    src.start(t);
+  }
+
+  playDash() {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(300, t);
+    osc.frequency.exponentialRampToValueAtTime(80, t + 0.15);
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0.15, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.2);
+    const filter = this.ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.value = 200;
+    filter.Q.value = 1.5;
+    osc.connect(filter);
+    filter.connect(g);
+    g.connect(this.sfxGain);
+    osc.start(t);
+    osc.stop(t + 0.2);
+    this._noiseBurst(0.08, 0.12);
+  }
+
+  playWeaponSwitch() {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(1000, t);
+    osc.frequency.exponentialRampToValueAtTime(600, t + 0.06);
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0.1, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.08);
+    osc.connect(g);
+    g.connect(this.sfxGain);
+    osc.start(t);
+    osc.stop(t + 0.08);
+    const osc2 = this.ctx.createOscillator();
+    osc2.type = 'triangle';
+    osc2.frequency.setValueAtTime(2200, t + 0.03);
+    osc2.frequency.exponentialRampToValueAtTime(1600, t + 0.08);
+    const g2 = this.ctx.createGain();
+    g2.gain.setValueAtTime(0, t);
+    g2.gain.linearRampToValueAtTime(0.06, t + 0.04);
+    g2.gain.exponentialRampToValueAtTime(0.001, t + 0.1);
+    osc2.connect(g2);
+    g2.connect(this.sfxGain);
+    osc2.start(t);
+    osc2.stop(t + 0.1);
+  }
+
+  playMultiKill() {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    [880, 1100, 1320].forEach((freq, i) => {
+      const osc = this.ctx.createOscillator();
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      const g = this.ctx.createGain();
+      g.gain.setValueAtTime(0, t + i * 0.06);
+      g.gain.linearRampToValueAtTime(0.15, t + i * 0.06 + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.001, t + i * 0.06 + 0.25);
+      osc.connect(g);
+      g.connect(this.sfxGain);
+      osc.start(t + i * 0.06);
+      osc.stop(t + i * 0.06 + 0.25);
+    });
+  }
+
+  startHeartbeat() {
+    if (this._heartbeatActive) return;
+    this._heartbeatActive = true;
+  }
+
+  stopHeartbeat() {
+    this._heartbeatActive = false;
+  }
+
+  _pulseHeartbeat() {
+    if (!this._heartbeatActive || !this.ctx) return;
+    const t = this.ctx.currentTime;
+    for (let i = 0; i < 2; i++) {
+      const osc = this.ctx.createOscillator();
+      osc.type = 'sine';
+      osc.frequency.value = 40;
+      const g = this.ctx.createGain();
+      const offset = i * 0.15;
+      g.gain.setValueAtTime(0, t + offset);
+      g.gain.linearRampToValueAtTime(i === 0 ? 0.2 : 0.12, t + offset + 0.04);
+      g.gain.exponentialRampToValueAtTime(0.001, t + offset + 0.15);
+      osc.connect(g);
+      g.connect(this.sfxGain);
+      osc.start(t + offset);
+      osc.stop(t + offset + 0.15);
+    }
+  }
+
   startAmbient() {
     this.stopAmbient();
     if (!this.ctx) return;

@@ -1684,6 +1684,7 @@ export class WeaponManager {
       const colors = { laserRifle: 0xff0000, laserSword: 0x0088ff, sniperRifle: 0x8800ff, rocketLauncher: 0x00ffee };
       this._weaponAccentLight.color.setHex(colors[name] || 0xff0000);
     }
+    this.audio.playWeaponSwitch();
   }
 
   toggleZoom() {
@@ -2136,6 +2137,10 @@ export class WeaponManager {
       // Breathing bob
       const breatheY = Math.sin(time * 2.0) * 0.003;
 
+      // Movement tilt — weapon leans into movement direction
+      const moveTiltX = (this._moveTiltX || 0);
+      const moveTiltZ = (this._moveTiltZ || 0);
+
       // Apply recoil (kick back and up)
       const recoilZ = (this.recoilOffset || 0) * 0.15;
       const recoilRotUp = -(this.recoilRotX || 0) * 0.1;
@@ -2149,14 +2154,14 @@ export class WeaponManager {
       }
 
       model.position.set(
-        baseX + swayX,
+        baseX + swayX + moveTiltX * 0.02,
         baseY + swayY + breatheY + switchY,
         baseZ + recoilZ
       );
       model.rotation.set(
-        baseRotX + recoilRotUp,
+        baseRotX + recoilRotUp + moveTiltZ * 0.015,
         baseRotY,
-        baseRotZ + swayRotZ
+        baseRotZ + swayRotZ - moveTiltX * 0.03
       );
     }
 

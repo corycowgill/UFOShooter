@@ -111,6 +111,20 @@ let _recentKillTimer = 0;
 const MULTI_KILL_WINDOW = 1.0;
 const MULTI_KILL_THRESHOLD = 3;
 
+// Detail polish state
+let _footstepTimer = 0;
+let _crosshairFireTimer = 0;
+let _crosshairHitTimer = 0;
+let _lastHp = 100;
+let _killStreakTimer = 0;
+let _heartbeatTimer = 0;
+let _dashSoundPlayed = false;
+
+const KILL_STREAK_NAMES = [
+  '', '', '', 'TRIPLE KILL', 'QUAD KILL',
+  'RAMPAGE', 'UNSTOPPABLE', 'GODLIKE', 'LEGENDARY',
+];
+
 let currentLevelIndex = 0;
 let currentLevelData = null;
 let selectedStartLevel = 0;
@@ -705,9 +719,25 @@ function fireWeaponAlt() {
   }
 }
 
+function _crosshairFire() {
+  const ch = document.getElementById('crosshair');
+  if (ch) {
+    ch.classList.add('firing');
+    _crosshairFireTimer = 0.12;
+  }
+}
+function _crosshairHit() {
+  const ch = document.getElementById('crosshair');
+  if (ch) {
+    ch.classList.add('hit');
+    _crosshairHitTimer = 0.15;
+  }
+}
+
 function fireWeapon() {
   const result = weapons.fire(waveManager.enemies);
   if (!result) return;
+  _crosshairFire();
 
   // Handle hits
   if (Array.isArray(result)) {
@@ -726,6 +756,7 @@ function processHit(hit) {
   const killed = hit.enemy.takeDamage(hit.damage);
   const enemyPos = hit.enemy.mesh.position;
   const alienData = ALIEN_TYPES[hit.enemy.type];
+  _crosshairHit();
 
   // Hit marker and damage number
   if (vfx) {
@@ -747,12 +778,25 @@ function processHit(hit) {
     player.addKill();
     player.addScore(alienData.scoreValue);
 
-    // Kill feedback — track rapid kills and trigger time slowdown
+    // Kill feedback — track rapid kills and trigger time slowdown + streak
     _recentKills++;
     _recentKillTimer = MULTI_KILL_WINDOW;
     if (_recentKills >= MULTI_KILL_THRESHOLD) {
       _killTimeScale = 0.35;
       _killTimeScaleTimer = 0.4;
+      audio.playMultiKill();
+      const streakName = KILL_STREAK_NAMES[Math.min(_recentKills, KILL_STREAK_NAMES.length - 1)];
+      if (streakName) {
+        const ksEl = document.getElementById('kill-streak');
+        if (ksEl) {
+          ksEl.textContent = streakName;
+          ksEl.classList.remove('active', 'mega');
+          void ksEl.offsetWidth;
+          ksEl.classList.add('active');
+          if (_recentKills >= 6) ksEl.classList.add('mega');
+          _killStreakTimer = 1.5;
+        }
+      }
       _recentKills = 0;
     }
 
@@ -889,8 +933,88 @@ function animate() {
   controls.update(delta, currentLevelData ? currentLevelData.colliders : []);
   player.update(delta);
   particles.update(delta);
+
+  // Feed movement direction to weapon for tilt
+  if (weapons && controls) {
+    const dir = controls.direction;
+    const right = controls._tmpRight;
+    const fwd = controls._tmpForward;
+    const sideSpeed = dir.x * right.x + dir.z * right.z;
+    const fwdSpeed = dir.x * fwd.x + dir.z * fwd.z;
+    weapons._moveTiltX = (weapons._moveTiltX || 0) + (sideSpeed - (weapons._moveTiltX || 0)) * Math.min(1, 8 * delta);
+    weapons._moveTiltZ = (weapons._moveTiltZ || 0) + (fwdSpeed - (weapons._moveTiltZ || 0)) * Math.min(1, 8 * delta);
+  }
   weapons.update(delta, waveManager ? waveManager.enemies : null);
   hud.updateAnnouncement(delta);
+
+  // Footsteps
+  if (controls && controls.onGround && controls.direction.length() > 0.1 && controls.dashTimer <= 0) {
+    const stepInterval = controls.sprint ? 0.28 : 0.4;
+    _footstepTimer -= delta;
+    if (_footstepTimer <= 0) {
+      audio.playFootstep(controls.sprint);
+      _footstepTimer = stepInterval;
+    }
+  } else {
+    _footstepTimer = 0;
+  }
+
+  // Dash sound
+  if (controls && controls.dashTimer > 0 && !_dashSoundPlayed) {
+    audio.playDash();
+    _dashSoundPlayed = true;
+  }
+  if (controls && controls.dashTimer <= 0) _dashSoundPlayed = false;
+
+  // Crosshair dynamics
+  if (_crosshairFireTimer > 0) {
+    _crosshairFireTimer -= delta;
+    if (_crosshairFireTimer <= 0) {
+      const ch = document.getElementById('crosshair');
+      if (ch) ch.classList.remove('firing');
+    }
+  }
+  if (_crosshairHitTimer > 0) {
+    _crosshairHitTimer -= delta;
+    if (_crosshairHitTimer <= 0) {
+      const ch = document.getElementById('crosshair');
+      if (ch) ch.classList.remove('hit');
+    }
+  }
+
+  // Health bar damage flash
+  if (player.hp < _lastHp) {
+    const hbc = document.getElementById('health-bar-container');
+    if (hbc) {
+      hbc.classList.remove('damage-flash');
+      void hbc.offsetWidth;
+      hbc.classList.add('damage-flash');
+    }
+  }
+  _lastHp = player.hp;
+
+  // Low health heartbeat
+  const hpPct = player.hp / player.maxHp;
+  if (hpPct < 0.25 && hpPct > 0) {
+    audio.startHeartbeat();
+    _heartbeatTimer -= delta;
+    if (_heartbeatTimer <= 0) {
+      audio._pulseHeartbeat();
+      _heartbeatTimer = 0.8 + hpPct * 2;
+    }
+  } else {
+    audio.stopHeartbeat();
+    _heartbeatTimer = 0;
+  }
+
+  // Kill streak announcement
+  if (_killStreakTimer > 0) {
+    _killStreakTimer -= delta;
+    if (_killStreakTimer <= 0) {
+      const ksEl = document.getElementById('kill-streak');
+      if (ksEl) ksEl.classList.remove('active', 'mega');
+    }
+  }
   if (vfx) {
     vfx.update(delta, player.hp / player.maxHp, camera.position);
     if (vfx.lastAcidDamage && !player.dead) {

@@ -69,10 +69,16 @@ canvas#gameCanvas { display: block; width: 100vw; height: 100vh; }
   border-color: var(--c-primary); border-style: solid; border-width: 0;
   filter: drop-shadow(0 0 3px rgba(0,255,204,0.6));
 }
-#crosshair .bracket-tl { top: 0; left: 0; border-top-width: 2px; border-left-width: 2px; }
-#crosshair .bracket-tr { top: 0; right: 0; border-top-width: 2px; border-right-width: 2px; }
-#crosshair .bracket-bl { bottom: 0; left: 0; border-bottom-width: 2px; border-left-width: 2px; }
-#crosshair .bracket-br { bottom: 0; right: 0; border-bottom-width: 2px; border-right-width: 2px; }
+#crosshair .bracket-tl { top: 0; left: 0; border-top-width: 2px; border-left-width: 2px; transition: top 0.08s, left 0.08s; }
+#crosshair .bracket-tr { top: 0; right: 0; border-top-width: 2px; border-right-width: 2px; transition: top 0.08s, right 0.08s; }
+#crosshair .bracket-bl { bottom: 0; left: 0; border-bottom-width: 2px; border-left-width: 2px; transition: bottom 0.08s, left 0.08s; }
+#crosshair .bracket-br { bottom: 0; right: 0; border-bottom-width: 2px; border-right-width: 2px; transition: bottom 0.08s, right 0.08s; }
+#crosshair.firing .bracket-tl { top: -6px; left: -6px; }
+#crosshair.firing .bracket-tr { top: -6px; right: -6px; }
+#crosshair.firing .bracket-bl { bottom: -6px; left: -6px; }
+#crosshair.firing .bracket-br { bottom: -6px; right: -6px; }
+#crosshair.hit .dot { background: #ff4444; box-shadow: 0 0 12px #ff4444, 0 0 20px rgba(255,68,68,0.6); }
+#crosshair .dot { transition: background 0.1s, box-shadow 0.1s; }
 
 /* HUD */
 #hud {
@@ -154,6 +160,13 @@ canvas#gameCanvas { display: block; width: 100vw; height: 100vh; }
     inset 0 -2px 4px rgba(0,0,0,0.4),
     inset 0 1px 2px rgba(255,255,255,0.25),
     0 0 8px rgba(0,255,204,0.4);
+}
+#health-bar-container.damage-flash {
+  animation: hbFlash 0.2s ease-out;
+}
+@keyframes hbFlash {
+  0% { box-shadow: 0 0 24px rgba(255,34,68,0.9), inset 0 0 16px rgba(255,0,0,0.5); }
+  100% { box-shadow: 0 0 12px rgba(0,255,204,0.25), inset 0 0 16px rgba(0,40,60,0.6); }
 }
 /* Segment dividers */
 #health-bar-container::after {
@@ -982,6 +995,20 @@ canvas#gameCanvas { display: block; width: 100vw; height: 100vh; }
   background: rgba(0,60,60,0.7); border: 1px solid #066;
   padding: 2px 5px; border-radius: 3px; letter-spacing: 1px;
 }
+
+/* Kill streak announcement */
+#kill-streak {
+  position: fixed; top: 35%; left: 50%; transform: translate(-50%, -50%) scale(0.8);
+  font-family: var(--font-mono); font-size: 36px; font-weight: bold;
+  letter-spacing: 8px; text-transform: uppercase;
+  color: var(--c-warn); pointer-events: none; z-index: 26;
+  text-shadow: 0 0 20px var(--c-warn), 0 0 40px rgba(255,200,0,0.5), 0 0 80px rgba(255,200,0,0.2);
+  opacity: 0; transition: opacity 0.15s, transform 0.15s;
+}
+#kill-streak.active {
+  opacity: 1; transform: translate(-50%, -50%) scale(1);
+}
+#kill-streak.mega { color: var(--c-hot); text-shadow: 0 0 20px var(--c-hot), 0 0 40px rgba(255,0,170,0.5); }
 </style>
 </head>
 <body>
@@ -1003,6 +1030,7 @@ canvas#gameCanvas { display: block; width: 100vw; height: 100vh; }
 
 <div id="damage-flash"></div>
 <div id="chromatic-aberration"></div>
+<div id="kill-streak"></div>
 
 <div id="scope-overlay">
   <div class="scope-ring"></div>

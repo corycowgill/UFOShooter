@@ -208,6 +208,11 @@ export class HUD {
     ctx.stroke();
 
     // Enemies
+    const time = performance.now() * 0.001;
+    const typeColors = {
+      grunt: '#0c4', swarmer: '#90f', bloater: '#f40',
+      stalker: '#088', spitter: '#8c0', drone: '#48f', boss: '#f60',
+    };
     for (const enemy of enemies) {
       if (enemy.dead) continue;
       const dx = (enemy.mesh.position.x - playerPos.x) * scale;
@@ -217,13 +222,33 @@ export class HUD {
 
       if (ex < 0 || ex > w || ey < 0 || ey > h) continue;
 
-      if (enemy.type === 'grunt') ctx.fillStyle = '#0c4';
-      else if (enemy.type === 'swarmer') ctx.fillStyle = '#90f';
-      else ctx.fillStyle = '#f22';
+      ctx.fillStyle = typeColors[enemy.type] || '#f22';
 
-      ctx.beginPath();
-      ctx.arc(ex, ey, 2, 0, Math.PI * 2);
-      ctx.fill();
+      if (enemy.isBoss) {
+        const pulse = 4 + Math.sin(time * 4) * 1.5;
+        ctx.fillStyle = '#f60';
+        ctx.beginPath();
+        ctx.arc(ex, ey, pulse, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#ff0';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(ex, ey, pulse + 2, 0, Math.PI * 2);
+        ctx.stroke();
+      } else if (enemy.isElite) {
+        ctx.beginPath();
+        ctx.arc(ex, ey, 3, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#ff0';
+        ctx.lineWidth = 0.5;
+        ctx.beginPath();
+        ctx.arc(ex, ey, 4, 0, Math.PI * 2);
+        ctx.stroke();
+      } else {
+        ctx.beginPath();
+        ctx.arc(ex, ey, 2, 0, Math.PI * 2);
+        ctx.fill();
+      }
     }
 
     // Border
