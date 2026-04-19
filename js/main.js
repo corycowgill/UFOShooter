@@ -582,8 +582,9 @@ function startGame() {
   // Load selected level
   loadLevel(currentLevelIndex);
 
-  // Start music
+  // Start music + ambient
   audio.startMusic();
+  audio.startAmbient();
 
   // Lock pointer
   controls.lock();
@@ -657,6 +658,7 @@ function returnToMenu() {
   const tc = document.getElementById('touch-controls');
   if (tc) tc.classList.remove('active');
   audio.stopMusic();
+  audio.stopAmbient();
   if (waveManager) waveManager.cleanup();
   if (particles) particles.cleanup();
   if (vfx) vfx.cleanup();
@@ -710,11 +712,12 @@ function processHit(hit) {
       _spawnPickup(enemyPos);
     }
 
-    // Kill feed entry
+    // Kill feed entry + type-scaled death VFX
     if (vfx) {
       const weaponData = weapons.getWeaponData();
       vfx.addKillFeedEntry(alienData.name, weaponData.name);
-      vfx.createDeathEffect(enemyPos, alienData.color || 0x00ff00, 1);
+      const deathScale = { bloater: 2.5, drone: 0.6, swarmer: 0.5, stalker: 0.8, spitter: 1.3 }[hit.enemy.type] || 1;
+      vfx.createDeathEffect(enemyPos, alienData.color || 0x00ff00, deathScale);
     }
 
     // Bloater explosion chain damage
@@ -875,6 +878,7 @@ function gameOver() {
   state = GameState.GAME_OVER;
   controls.unlock();
   audio.stopMusic();
+  audio.stopAmbient();
 
   const tc = document.getElementById('touch-controls');
   if (tc) tc.classList.remove('active');

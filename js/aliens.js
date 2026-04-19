@@ -3048,6 +3048,7 @@ export class Alien {
     this._attackRecoil = 0;         // seconds of remaining recoil pose
     this._hitFlinch = 0;            // seconds of remaining damage-flinch pose
     this._hitPunch = 0;             // seconds of remaining hit scale-punch
+    this._knockback = 0;            // knockback speed from incoming damage
   }
 
   _initAmbientVFX() {
@@ -3149,6 +3150,9 @@ export class Alien {
     const dist = toPlayer.length();
     toPlayer.normalize();
 
+    // Save direction before behaviors overwrite _tmpVec
+    const tpx = toPlayer.x, tpz = toPlayer.z;
+
     // Rotate to face player
     const angle = Math.atan2(toPlayer.x, toPlayer.z);
     this.mesh.rotation.y = angle;
@@ -3166,6 +3170,15 @@ export class Alien {
       this._spitterBehavior(delta, dist, toPlayer, playerPos);
     } else if (this.data.behavior === 'aerial') {
       this._droneBehavior(delta, dist, toPlayer, playerPos);
+    }
+
+    // Knockback — push away from player, decays exponentially
+    if (this._knockback > 0) {
+      const kb = this._knockback * delta * 8;
+      this.mesh.position.x -= tpx * kb;
+      this.mesh.position.z -= tpz * kb;
+      this._knockback *= Math.pow(0.008, delta);
+      if (this._knockback < 0.1) this._knockback = 0;
     }
 
     // Update projectiles
@@ -3487,33 +3500,55 @@ export class Alien {
     // Bob up and down
     this.mesh.position.y += Math.sin(this.pulseTime * 4) * 0.5 * delta;
 
-    // Shoot
+    // Burst fire — 3 rapid shots with slight spread
     this.attackCooldown -= delta;
     if (this.attackCooldown <= 0 && dist < this.data.attackRange) {
       this.attackCooldown = this.data.attackRate;
-      this._shootAtPlayer(playerPos);
+      this._burstFire(playerPos, 3, 0.08);
+    }
+  }
+
+  _burstFire(playerPos, count, interval) {
+    for (let i = 0; i < count; i++) {
+      setTimeout(() => {
+        if (this.dead) return;
+        this._shootAtPlayer(playerPos);
+      }, i * interval * 1000);
     }
   }
 
   _shootAtPlayer(playerPos) {
     this.audio.playAlienShoot();
-    const from = this._tmpVec;
-    from.copy(this.mesh.position);
+    const from = new THREE.Vector3().copy(this.mesh.position);
     from.y += this.type === 'drone' ? 0 : 1.2;
-    const speed = this.type === 'spitter' ? 25 : (this.type === 'drone' ? 40 : 30);
+    const speed = this.type === 'spitter' ? 22 : (this.type === 'drone' ? 42 : 30);
     const bolt = this.particles.createAlienBolt(from, playerPos, speed, this.type);
+    // Spitter acid lobs with gravity
+    if (this.type === 'spitter') {
+      bolt.gravity = 4;
+      bolt.direction.y += 0.35;
+      bolt.direction.normalize();
+    }
     this.projectiles.push(bolt);
-    // Kick the body backward briefly so firing reads visually
     this._attackRecoil = 0.25;
   }
 
   _updateProjectiles(delta, playerPos) {
     for (let i = this.projectiles.length - 1; i >= 0; i--) {
       const bolt = this.projectiles[i];
+      // Gravity (spitter acid arc)
+      if (bolt.gravity) {
+        bolt.direction.y -= bolt.gravity * delta;
+      }
       const bSpd = bolt.speed * delta;
       bolt.mesh.position.x += bolt.direction.x * bSpd;
       bolt.mesh.position.y += bolt.direction.y * bSpd;
       bolt.mesh.position.z += bolt.direction.z * bSpd;
+      if (bolt.gravity) bolt.mesh.lookAt(
+        bolt.mesh.position.x + bolt.direction.x,
+        bolt.mesh.position.y + bolt.direction.y,
+        bolt.mesh.position.z + bolt.direction.z
+      );
       bolt.life -= delta;
 
       if (bolt.life <= 0) {
@@ -3542,6 +3577,10 @@ export class Alien {
     this._hitPunch = 0.08;
     this._hitFlinch = 0.2;
 
+    // Knockback proportional to damage; heavier aliens resist more
+    const mass = { bloater: 3, swarmer: 0.5, drone: 0.7, stalker: 0.8 }[this.type] || 1;
+    this._knockback = Math.min(15, amount * 0.12 / mass);
+
     if (this.hp <= 0) {
       this.die();
       return true;
@@ -3561,11 +3600,21 @@ export class Alien {
     });
     this.projectiles = [];
 
-    // Bloater explodes on death
+    // Type-specific death behavior
     if (this.type === 'bloater') {
-      this.particles.createExplosion(this.mesh.position, 0xff4400, 5, 0.8);
+      this.particles.createExplosion(this.mesh.position, 0xff4400, 6, 1.0);
       this.audio.playExplosion();
-      this.deathTimer = 0.1; // Remove quickly since we show explosion
+      this.deathTimer = 0.1;
+    } else if (this.type === 'swarmer') {
+      this.deathTimer = 0.4;
+    } else if (this.type === 'drone') {
+      this.particles.createExplosion(this.mesh.position, 0x4488ff, 2, 0.4);
+      this.deathTimer = 0.8;
+    } else if (this.type === 'stalker') {
+      for (let i = 0, len = this._allMaterials.length; i < len; i++) {
+        this._allMaterials[i].opacity = 1;
+      }
+      this.deathTimer = 0.6;
     }
   }
 

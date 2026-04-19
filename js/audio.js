@@ -381,6 +381,71 @@ export class AudioManager {
     osc.stop(t + 0.2);
   }
 
+  startAmbient() {
+    this.stopAmbient();
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+
+    // City wind — filtered noise
+    const bufSize = this.ctx.sampleRate * 2;
+    const buf = this.ctx.createBuffer(1, bufSize, this.ctx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < bufSize; i++) data[i] = Math.random() * 2 - 1;
+    const windSrc = this.ctx.createBufferSource();
+    windSrc.buffer = buf;
+    windSrc.loop = true;
+    const windFilter = this.ctx.createBiquadFilter();
+    windFilter.type = 'lowpass';
+    windFilter.frequency.value = 180;
+    const windLfo = this.ctx.createOscillator();
+    windLfo.type = 'sine';
+    windLfo.frequency.value = 0.15;
+    const windLfoGain = this.ctx.createGain();
+    windLfoGain.gain.value = 60;
+    windLfo.connect(windLfoGain);
+    windLfoGain.connect(windFilter.frequency);
+    windLfo.start(t);
+    const windGain = this.ctx.createGain();
+    windGain.gain.value = 0.025;
+    windSrc.connect(windFilter);
+    windFilter.connect(windGain);
+    windGain.connect(this.musicGain);
+    windSrc.start(t);
+
+    // Electrical hum (60 Hz mains)
+    const hum = this.ctx.createOscillator();
+    hum.type = 'sine';
+    hum.frequency.value = 60;
+    const humGain = this.ctx.createGain();
+    humGain.gain.value = 0.012;
+    hum.connect(humGain);
+    humGain.connect(this.musicGain);
+    hum.start(t);
+
+    // Distant rumble — very low filtered noise
+    const rumbleSrc = this.ctx.createBufferSource();
+    rumbleSrc.buffer = buf;
+    rumbleSrc.loop = true;
+    const rumbleFilter = this.ctx.createBiquadFilter();
+    rumbleFilter.type = 'lowpass';
+    rumbleFilter.frequency.value = 50;
+    const rumbleGain = this.ctx.createGain();
+    rumbleGain.gain.value = 0.03;
+    rumbleSrc.connect(rumbleFilter);
+    rumbleFilter.connect(rumbleGain);
+    rumbleGain.connect(this.musicGain);
+    rumbleSrc.start(t);
+
+    this._ambientNodes = [windSrc, windLfo, hum, rumbleSrc];
+  }
+
+  stopAmbient() {
+    if (this._ambientNodes) {
+      this._ambientNodes.forEach(n => { try { n.stop(); } catch(e) {} });
+      this._ambientNodes = null;
+    }
+  }
+
   _noiseBurst(volume, duration) {
     const t = this.ctx.currentTime;
     const bufferSize = this.ctx.sampleRate * duration;

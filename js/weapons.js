@@ -132,6 +132,10 @@ export class WeaponManager {
     // Callback: called with array of hits when a rocket detonates
     this.onRocketHit = null;
 
+    // Weapon switch draw animation
+    this._switchTimer = 0;
+    this._switchDuration = 0.2;
+
     this._initWeaponView();
   }
 
@@ -1669,12 +1673,13 @@ export class WeaponManager {
 
   switchWeapon(name) {
     if (!WEAPONS[name]) return;
+    if (this.current === name) return;
     if (this.zoomed) this.toggleZoom();
     Object.values(this.weaponModels).forEach(m => m.visible = false);
     if (this.weaponModels[name]) this.weaponModels[name].visible = true;
     this.current = name;
     this.cooldown = 0;
-    // Update accent light color per weapon
+    this._switchTimer = this._switchDuration;
     if (this._weaponAccentLight) {
       const colors = { laserRifle: 0xff0000, laserSword: 0x0088ff, sniperRifle: 0x8800ff, rocketLauncher: 0x00ffee };
       this._weaponAccentLight.color.setHex(colors[name] || 0xff0000);
@@ -2046,9 +2051,17 @@ export class WeaponManager {
       const recoilZ = (this.recoilOffset || 0) * 0.15;
       const recoilRotUp = -(this.recoilRotX || 0) * 0.1;
 
+      // Switch draw animation — weapon rises from below
+      let switchY = 0;
+      if (this._switchTimer > 0) {
+        this._switchTimer -= delta;
+        const t = Math.max(0, this._switchTimer / this._switchDuration);
+        switchY = -t * 0.35;
+      }
+
       model.position.set(
         baseX + swayX,
-        baseY + swayY + breatheY,
+        baseY + swayY + breatheY + switchY,
         baseZ + recoilZ
       );
       model.rotation.set(
