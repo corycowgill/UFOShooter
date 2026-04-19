@@ -677,6 +677,8 @@ function loadLevel(index) {
     vfx.initGroundFog();
     vfx.initLightning();
     vfx.initSmokeWisps();
+    vfx.initPuddles();
+    vfx.initDustMotes();
   }
 
   // One-shot shadow map refresh — static world just finished building, so
@@ -1160,8 +1162,10 @@ function animate() {
   if (currentLevelData && currentLevelData.ufo) {
     const ufo = currentLevelData.ufo;
     ufo.rotation.y += delta * 0.1;
-    // Tractor beam pulse
     const bt = performance.now() * 0.001;
+    // Gentle hover bob
+    ufo.position.y = 80 + Math.sin(bt * 0.3) * 1.5 + Math.sin(bt * 0.7) * 0.5;
+    // Tractor beam pulse
     const ud = ufo.userData;
     if (ud._beamMat) {
       const pulse = 0.03 + 0.015 * Math.sin(bt * 1.5) + 0.008 * Math.sin(bt * 3.7);
@@ -1189,6 +1193,23 @@ function animate() {
       const alpha = flicker ? 0.1 : pulse;
       ud._neonMat.opacity = alpha * 0.9;
       ud._neonGlowMat.opacity = alpha * 0.15;
+    }
+  }
+
+  // Animate streetlight flicker
+  if (currentLevelData && currentLevelData.streetLights) {
+    const t = performance.now() * 0.001;
+    for (const sl of currentLevelData.streetLights) {
+      const ud = sl.userData;
+      if (!ud._streetLight) continue;
+      const flicker = Math.random() < ud._streetFlickerChance;
+      const pulse = 0.85 + 0.15 * Math.sin(t * 1.2 + ud._streetPhase);
+      const intensity = flicker ? 0.2 : pulse;
+      ud._streetLight.intensity = 2.0 * intensity;
+      ud._streetHalo.opacity = 0.55 * intensity;
+      ud._streetCone.opacity = 0.045 * intensity;
+      ud._streetConeInner.opacity = 0.03 * intensity;
+      ud._streetPool.opacity = 0.06 * intensity;
     }
   }
 

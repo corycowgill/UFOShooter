@@ -1060,6 +1060,105 @@ export class VFXManager {
   }
 
   // ========================
+  // WET GROUND PUDDLES
+  // ========================
+  initPuddles() {
+    if (this._puddles) {
+      for (const p of this._puddles) {
+        this.scene.remove(p.mesh);
+        disposeTree(p.mesh);
+      }
+    }
+    this._puddles = [];
+    const count = 12;
+    for (let i = 0; i < count; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const r = 5 + Math.random() * 40;
+      const x = Math.cos(angle) * r;
+      const z = Math.sin(angle) * r;
+      const size = 0.8 + Math.random() * 2.5;
+      const mat = new THREE.MeshBasicMaterial({
+        color: 0x4488aa, transparent: true, opacity: 0.08,
+        blending: THREE.AdditiveBlending, depthWrite: false,
+        toneMapped: false,
+      });
+      const mesh = new THREE.Mesh(new THREE.CircleGeometry(size, 10), mat);
+      mesh.rotation.x = -Math.PI / 2;
+      mesh.position.set(x, 0.012, z);
+      this.scene.add(mesh);
+      this._puddles.push({ mesh, mat, phase: Math.random() * Math.PI * 2, size });
+    }
+  }
+
+  _updatePuddles(delta) {
+    if (!this._puddles) return;
+    const t = performance.now() * 0.001;
+    for (const p of this._puddles) {
+      const shimmer = 0.06 + 0.04 * Math.sin(t * 1.5 + p.phase) + 0.02 * Math.sin(t * 3.1 + p.phase * 2);
+      p.mat.opacity = shimmer;
+    }
+  }
+
+  // ========================
+  // LIGHT DUST MOTES
+  // ========================
+  initDustMotes() {
+    if (this._dustMotes) {
+      this.scene.remove(this._dustMotes);
+      disposeTree(this._dustMotes);
+    }
+    const count = 60;
+    const positions = new Float32Array(count * 3);
+    const sizes = new Float32Array(count);
+    for (let i = 0; i < count; i++) {
+      positions[i * 3] = (Math.random() - 0.5) * 60;
+      positions[i * 3 + 1] = 0.5 + Math.random() * 8;
+      positions[i * 3 + 2] = (Math.random() - 0.5) * 60;
+      sizes[i] = 0.5 + Math.random() * 1.5;
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geo.setAttribute('size', new THREE.Float32BufferAttribute(sizes, 1));
+    geo.userData._count = count;
+    geo.userData._phases = Array.from({ length: count }, () => Math.random() * Math.PI * 2);
+    const mat = new THREE.PointsMaterial({
+      color: 0xffeedd, size: 0.15, transparent: true, opacity: 0.12,
+      blending: THREE.AdditiveBlending, depthWrite: false,
+      sizeAttenuation: true,
+    });
+    this._dustMotes = new THREE.Points(geo, mat);
+    this._dustMotes.frustumCulled = false;
+    this.scene.add(this._dustMotes);
+  }
+
+  _updateDustMotes(delta) {
+    if (!this._dustMotes) return;
+    const pos = this._dustMotes.geometry.attributes.position.array;
+    const count = this._dustMotes.geometry.userData._count;
+    const phases = this._dustMotes.geometry.userData._phases;
+    const t = performance.now() * 0.001;
+    const camPos = this.camera.position;
+    for (let i = 0; i < count; i++) {
+      const idx = i * 3;
+      pos[idx] += Math.sin(t * 0.15 + phases[i]) * 0.005;
+      pos[idx + 1] += Math.sin(t * 0.1 + phases[i] * 1.7) * 0.004;
+      pos[idx + 2] += Math.cos(t * 0.12 + phases[i] * 0.9) * 0.005;
+      const dx = pos[idx] - camPos.x;
+      const dz = pos[idx + 2] - camPos.z;
+      if (dx * dx + dz * dz > 900 || pos[idx + 1] > 10 || pos[idx + 1] < 0) {
+        const a = Math.random() * Math.PI * 2;
+        const r = 3 + Math.random() * 25;
+        pos[idx] = camPos.x + Math.cos(a) * r;
+        pos[idx + 1] = 0.5 + Math.random() * 6;
+        pos[idx + 2] = camPos.z + Math.sin(a) * r;
+      }
+    }
+    this._dustMotes.geometry.attributes.position.needsUpdate = true;
+    const pulse = 0.08 + 0.04 * Math.sin(t * 0.5);
+    this._dustMotes.material.opacity = pulse;
+  }
+
+  // ========================
   // MAIN UPDATE
   // ========================
   update(delta, playerHpPct, playerPos) {
@@ -1075,6 +1174,8 @@ export class VFXManager {
     this._updateGroundFog(delta);
     this._updateLightning(delta);
     this._updateSmokeWisps(delta);
+    this._updatePuddles(delta);
+    this._updateDustMotes(delta);
     this._updateScorchMarks(delta);
     this._updateChromaticAberration(delta);
     this.lastAcidDamage = this._updateAcidPools(delta, playerPos);
@@ -1121,6 +1222,18 @@ export class VFXManager {
       this.scene.remove(this._smokeWisps);
       disposeTree(this._smokeWisps);
       this._smokeWisps = null;
+    }
+    if (this._puddles) {
+      for (const p of this._puddles) {
+        this.scene.remove(p.mesh);
+        disposeTree(p.mesh);
+      }
+      this._puddles = null;
+    }
+    if (this._dustMotes) {
+      this.scene.remove(this._dustMotes);
+      disposeTree(this._dustMotes);
+      this._dustMotes = null;
     }
     if (this._scorchMarks) {
       for (const s of this._scorchMarks) {

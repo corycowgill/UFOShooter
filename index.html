@@ -1108,6 +1108,29 @@ canvas#gameCanvas { display: block; width: 100vw; height: 100vh; }
   border: 1px solid var(--c-line-dim);
 }
 #enemy-callout.active { opacity: 1; }
+
+/* Film grain overlay for cinematic look */
+#film-grain {
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  pointer-events: none; z-index: 5; opacity: 0.06;
+  mix-blend-mode: overlay;
+  background-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="2" height="2"><rect width="1" height="1" fill="%23fff" opacity="0.4"/><rect x="1" y="1" width="1" height="1" fill="%23fff" opacity="0.2"/></svg>');
+  background-size: 4px 4px;
+  animation: grainShift 0.15s steps(3) infinite;
+}
+@keyframes grainShift {
+  0% { transform: translate(0, 0); }
+  33% { transform: translate(-1px, 1px); }
+  66% { transform: translate(1px, -1px); }
+}
+
+/* Ambient glow at screen edges */
+#ambient-glow {
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  pointer-events: none; z-index: 3;
+  background: radial-gradient(ellipse at 50% 0%, rgba(0, 255, 136, 0.03) 0%, transparent 60%),
+              radial-gradient(ellipse at 50% 100%, rgba(0, 100, 255, 0.02) 0%, transparent 50%);
+}
 </style>
 </head>
 <body>
@@ -1126,6 +1149,8 @@ canvas#gameCanvas { display: block; width: 100vw; height: 100vh; }
 </div>
 <div id="scanlines"></div>
 <div id="vignette"></div>
+<div id="film-grain"></div>
+<div id="ambient-glow"></div>
 
 <div id="damage-flash"></div>
 <div id="chromatic-aberration"></div>

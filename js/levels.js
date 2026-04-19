@@ -549,6 +549,13 @@ function makeStreetLight(x, z) {
   pool.position.set(1.2, 0.02, 0);
   group.add(pool);
   group.position.set(x, 0, z);
+  group.userData._streetLight = light;
+  group.userData._streetHalo = halo.material;
+  group.userData._streetCone = cone.material;
+  group.userData._streetConeInner = coneInner.material;
+  group.userData._streetPool = pool.material;
+  group.userData._streetPhase = Math.random() * Math.PI * 2;
+  group.userData._streetFlickerChance = 0.003 + Math.random() * 0.004;
   return group;
 }
 
@@ -2448,8 +2455,9 @@ function buildDowntownChicago(scene) {
   group.add(parkPath);
 
   // Park lamp posts
+  const streetLights = [];
   for (const [lx, lz] of [[20, 10], [20, 30], [40, 10], [40, 30]]) {
-    group.add(makeStreetLight(lx, lz));
+    const sl = makeStreetLight(lx, lz); group.add(sl); streetLights.push(sl);
   }
 
   // ================================================
@@ -2877,8 +2885,8 @@ function buildDowntownChicago(scene) {
   for (let z = -80; z < 80; z += 15) {
     // Skip river zone (-7 to 7)
     if (z > -8 && z < 8) continue;
-    group.add(makeStreetLight(8, z));
-    group.add(makeStreetLight(-8, z));
+    const sl1 = makeStreetLight(8, z); group.add(sl1); streetLights.push(sl1);
+    const sl2 = makeStreetLight(-8, z); group.add(sl2); streetLights.push(sl2);
   }
 
   // === NEON SIGNS on building faces ===
@@ -3035,7 +3043,7 @@ function buildDowntownChicago(scene) {
 
   scene.add(group);
   freezeStaticGroup(group);
-  return { group, colliders, ufo, starMats, neonSigns, spawnPoints: generateSpawnPoints(80) };
+  return { group, colliders, ufo, starMats, neonSigns, streetLights, spawnPoints: generateSpawnPoints(80) };
 }
 
 // ========== LEVEL 2: LINCOLN PARK ZOO ==========
@@ -3312,14 +3320,15 @@ function buildLincolnParkZoo(scene) {
   }
 
   // Lamp posts
+  const streetLights = [];
   for (let z = -40; z < 50; z += 12) {
-    group.add(makeStreetLight(2.5, z));
-    group.add(makeStreetLight(-2.5, z));
+    const sl1 = makeStreetLight(2.5, z); group.add(sl1); streetLights.push(sl1);
+    const sl2 = makeStreetLight(-2.5, z); group.add(sl2); streetLights.push(sl2);
   }
 
   scene.add(group);
   freezeStaticGroup(group);
-  return { group, colliders, ufo, starMats, spawnPoints: generateSpawnPoints(70) };
+  return { group, colliders, ufo, starMats, streetLights, spawnPoints: generateSpawnPoints(70) };
 }
 
 // ========== LEVEL 3: RAVENSWOOD ==========
@@ -3707,9 +3716,10 @@ function buildRavenswood(scene) {
   }
 
   // Street lights
+  const streetLights = [];
   for (let z = -60; z < 60; z += 15) {
-    group.add(makeStreetLight(-7, z));
-    group.add(makeStreetLight(7, z));
+    const sl1 = makeStreetLight(-7, z); group.add(sl1); streetLights.push(sl1);
+    const sl2 = makeStreetLight(7, z); group.add(sl2); streetLights.push(sl2);
   }
 
   // Neon signs on storefronts
@@ -3743,7 +3753,7 @@ function buildRavenswood(scene) {
 
   scene.add(group);
   freezeStaticGroup(group);
-  return { group, colliders, ufo, starMats, neonSigns, spawnPoints: generateSpawnPoints(75) };
+  return { group, colliders, ufo, starMats, neonSigns, streetLights, spawnPoints: generateSpawnPoints(75) };
 }
 
 function generateSpawnPoints(radius) {
