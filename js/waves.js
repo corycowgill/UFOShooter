@@ -1,6 +1,15 @@
 // waves.js - Wave spawning system
 import { Alien } from './aliens.js';
 
+const WAVE_THEMES = [
+  null,
+  { name: 'SWARM RUSH', mix: { swarmer: 0.55, stalker: 0.25, grunt: 0.2 } },
+  { name: 'HEAVY ASSAULT', mix: { bloater: 0.35, grunt: 0.35, spitter: 0.3 } },
+  { name: 'AIR STRIKE', mix: { drone: 0.5, spitter: 0.25, grunt: 0.25 } },
+  { name: 'SHADOW HUNT', mix: { stalker: 0.45, swarmer: 0.3, spitter: 0.25 } },
+  { name: 'ACID RAIN', mix: { spitter: 0.45, drone: 0.3, bloater: 0.25 } },
+];
+
 export class WaveManager {
   constructor(scene, particles, audio) {
     this.scene = scene;
@@ -13,6 +22,7 @@ export class WaveManager {
     this.spawnPoints = [];
     this.spawnQueue = [];
     this.spawnTimer = 0;
+    this.waveTheme = null;
   }
 
   setSpawnPoints(points) {
@@ -32,44 +42,69 @@ export class WaveManager {
     const baseCount = 3 + w * 2;
     const maxEnemies = Math.min(baseCount, 30);
 
-    if (w <= 3) {
-      // Early waves: grunts, swarmers, first stalkers
+    // Pick theme — themed waves appear from wave 3 onward, ~40% chance
+    this.waveTheme = null;
+    if (w >= 3 && Math.random() < 0.4) {
+      const pool = w >= 7 ? WAVE_THEMES.slice(1) : WAVE_THEMES.slice(1, 3);
+      this.waveTheme = pool[Math.floor(Math.random() * pool.length)];
+    }
+
+    if (this.waveTheme) {
+      const mix = this.waveTheme.mix;
+      const types = Object.keys(mix);
+      let remaining = maxEnemies;
+      for (let t = 0; t < types.length; t++) {
+        const count = t === types.length - 1
+          ? remaining
+          : Math.ceil(maxEnemies * mix[types[t]]);
+        for (let i = 0; i < Math.min(count, remaining); i++) {
+          queue.push({ type: types[t], elite: false });
+        }
+        remaining -= Math.min(count, remaining);
+      }
+    } else if (w <= 3) {
       const grunts = Math.ceil(maxEnemies * 0.55);
       const swarmers = Math.ceil(maxEnemies * 0.3);
       const stalkers = maxEnemies - grunts - swarmers;
-      for (let i = 0; i < grunts; i++) queue.push('grunt');
-      for (let i = 0; i < swarmers; i++) queue.push('swarmer');
-      for (let i = 0; i < Math.max(0, stalkers); i++) queue.push('stalker');
+      for (let i = 0; i < grunts; i++) queue.push({ type: 'grunt', elite: false });
+      for (let i = 0; i < swarmers; i++) queue.push({ type: 'swarmer', elite: false });
+      for (let i = 0; i < Math.max(0, stalkers); i++) queue.push({ type: 'stalker', elite: false });
     } else if (w <= 6) {
-      // Mid waves: introduce bloaters and spitters
       const grunts = Math.ceil(maxEnemies * 0.25);
       const swarmers = Math.ceil(maxEnemies * 0.2);
       const bloaters = Math.ceil(maxEnemies * 0.15);
       const stalkers = Math.ceil(maxEnemies * 0.2);
       const spitters = maxEnemies - grunts - swarmers - bloaters - stalkers;
-      for (let i = 0; i < grunts; i++) queue.push('grunt');
-      for (let i = 0; i < swarmers; i++) queue.push('swarmer');
-      for (let i = 0; i < bloaters; i++) queue.push('bloater');
-      for (let i = 0; i < stalkers; i++) queue.push('stalker');
-      for (let i = 0; i < Math.max(0, spitters); i++) queue.push('spitter');
+      for (let i = 0; i < grunts; i++) queue.push({ type: 'grunt', elite: false });
+      for (let i = 0; i < swarmers; i++) queue.push({ type: 'swarmer', elite: false });
+      for (let i = 0; i < bloaters; i++) queue.push({ type: 'bloater', elite: false });
+      for (let i = 0; i < stalkers; i++) queue.push({ type: 'stalker', elite: false });
+      for (let i = 0; i < Math.max(0, spitters); i++) queue.push({ type: 'spitter', elite: false });
     } else {
-      // Late waves: full mix with drones
       const grunts = Math.ceil(maxEnemies * 0.18);
       const swarmers = Math.ceil(maxEnemies * 0.15);
       const bloaters = Math.ceil(maxEnemies * 0.15);
       const stalkers = Math.ceil(maxEnemies * 0.17);
       const spitters = Math.ceil(maxEnemies * 0.15);
       const drones = maxEnemies - grunts - swarmers - bloaters - stalkers - spitters;
-      for (let i = 0; i < grunts; i++) queue.push('grunt');
-      for (let i = 0; i < swarmers; i++) queue.push('swarmer');
-      for (let i = 0; i < bloaters; i++) queue.push('bloater');
-      for (let i = 0; i < stalkers; i++) queue.push('stalker');
-      for (let i = 0; i < spitters; i++) queue.push('spitter');
-      for (let i = 0; i < Math.max(0, drones); i++) queue.push('drone');
+      for (let i = 0; i < grunts; i++) queue.push({ type: 'grunt', elite: false });
+      for (let i = 0; i < swarmers; i++) queue.push({ type: 'swarmer', elite: false });
+      for (let i = 0; i < bloaters; i++) queue.push({ type: 'bloater', elite: false });
+      for (let i = 0; i < stalkers; i++) queue.push({ type: 'stalker', elite: false });
+      for (let i = 0; i < spitters; i++) queue.push({ type: 'spitter', elite: false });
+      for (let i = 0; i < Math.max(0, drones); i++) queue.push({ type: 'drone', elite: false });
     }
 
-    // Scale stats with wave — HP, speed, and damage all increase so
-    // late waves present genuine pressure, not just HP sponges.
+    // Elite enemies — every 3rd wave starting at wave 3
+    if (w >= 3 && w % 3 === 0) {
+      let eliteCount = Math.min(3, Math.floor(w / 3));
+      for (let i = queue.length - 1; i >= 0 && eliteCount > 0; i--) {
+        queue[i].elite = true;
+        eliteCount--;
+      }
+    }
+
+    // Scale stats with wave
     this.hpMultiplier = 1 + (w - 1) * 0.1;
     this.speedMultiplier = 1 + (w - 1) * 0.04;
     this.damageMultiplier = 1 + (w - 1) * 0.06;
@@ -88,9 +123,9 @@ export class WaveManager {
     if (this.state === 'spawning') {
       this.spawnTimer -= delta;
       if (this.spawnTimer <= 0 && this.spawnQueue.length > 0) {
-        const type = this.spawnQueue.shift();
-        this._spawnEnemy(type, playerPos);
-        this.spawnTimer = 0.5; // Spawn every 0.5 seconds
+        const entry = this.spawnQueue.shift();
+        this._spawnEnemy(entry, playerPos);
+        this.spawnTimer = 0.5;
       }
       if (this.spawnQueue.length === 0) {
         this.state = 'active';
@@ -110,7 +145,7 @@ export class WaveManager {
     // Check if wave complete
     if (this.state === 'active' && this.getAliveCount() === 0) {
       this.state = 'complete';
-      this.stateTimer = 3; // 3 second break
+      this.stateTimer = 3;
     }
 
     // Wait between waves
@@ -122,7 +157,10 @@ export class WaveManager {
     }
   }
 
-  _spawnEnemy(type, playerPos) {
+  _spawnEnemy(entry, playerPos) {
+    const type = typeof entry === 'string' ? entry : entry.type;
+    const isElite = typeof entry === 'object' && entry.elite;
+
     // Pick a spawn point away from player
     let bestPoint = this.spawnPoints[0];
     let bestDist = 0;
@@ -133,7 +171,6 @@ export class WaveManager {
         bestPoint = p;
       }
     }
-    // Add some randomness
     const spawnPos = bestPoint.clone().add(new THREE.Vector3(
       (Math.random() - 0.5) * 10,
       0,
@@ -147,9 +184,19 @@ export class WaveManager {
       speed: enemy.data.speed * this.speedMultiplier,
       damage: Math.floor(enemy.data.damage * this.damageMultiplier),
     });
+
+    if (isElite) {
+      enemy.hp = Math.floor(enemy.hp * 2.5);
+      enemy.maxHp = enemy.hp;
+      enemy.data.damage = Math.floor(enemy.data.damage * 1.5);
+      enemy.data.scoreValue *= 3;
+      enemy.isElite = true;
+      enemy.mesh.scale.multiplyScalar(1.25);
+      enemy._addEliteAura();
+    }
+
     this.enemies.push(enemy);
 
-    // Spawn teleport effect
     if (this.vfx) {
       this.vfx.createSpawnEffect(spawnPos.clone());
     }

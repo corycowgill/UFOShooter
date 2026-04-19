@@ -1,4 +1,15 @@
-// player.js - Player state, health, score
+// player.js - Player state, health, score, perks
+export const PERKS = [
+  { id: 'rapidFire',    name: 'RAPID FIRE',    desc: 'Fire 20% faster' },
+  { id: 'toughSkin',    name: 'TOUGH SKIN',    desc: '+25 max HP' },
+  { id: 'quickFeet',    name: 'QUICK FEET',    desc: '15% faster movement' },
+  { id: 'vampire',      name: 'VAMPIRE',       desc: 'Kills restore 5 HP' },
+  { id: 'blastRadius',  name: 'BLAST RADIUS',  desc: '+40% explosion radius' },
+  { id: 'sharpshooter', name: 'SHARPSHOOTER',  desc: '+15% weapon damage' },
+  { id: 'comboMaster',  name: 'COMBO MASTER',  desc: '+1.5s combo window' },
+  { id: 'scavenger',    name: 'SCAVENGER',     desc: '+25% pickup drop rate' },
+];
+
 export class Player {
   constructor() {
     this.maxHp = 100;
@@ -11,14 +22,12 @@ export class Player {
     this.regenDelay = 5;
     this.regenRate = 5;
 
-    // Combo system — rapid kills within a time window increase the
-    // multiplier. Score from each kill is multiplied by the current
-    // combo count. The timer resets on each kill; if it expires the
-    // combo drops back to 0.
     this.combo = 0;
     this.comboTimer = 0;
-    this.comboWindow = 3.0; // seconds to maintain combo
+    this.comboWindow = 3.0;
     this.bestCombo = 0;
+
+    this.perks = [];
   }
 
   takeDamage(amount, audio) {
@@ -57,6 +66,30 @@ export class Player {
     if (this.combo > this.bestCombo) this.bestCombo = this.combo;
   }
 
+  addPerk(perkId) {
+    this.perks.push(perkId);
+    if (perkId === 'toughSkin') {
+      this.maxHp += 25;
+      this.hp += 25;
+    }
+    if (perkId === 'comboMaster') {
+      this.comboWindow += 1.5;
+    }
+  }
+
+  perkCount(id) {
+    let n = 0;
+    for (let i = 0; i < this.perks.length; i++) if (this.perks[i] === id) n++;
+    return n;
+  }
+
+  get fireRateMultiplier() { return Math.pow(0.8, this.perkCount('rapidFire')); }
+  get damageMultiplier() { return 1 + this.perkCount('sharpshooter') * 0.15; }
+  get speedMultiplier() { return 1 + this.perkCount('quickFeet') * 0.15; }
+  get explosionRadiusMultiplier() { return 1 + this.perkCount('blastRadius') * 0.4; }
+  get vampireHeal() { return this.perkCount('vampire') * 5; }
+  get dropRateBonus() { return this.perkCount('scavenger') * 0.25; }
+
   update(delta) {
     if (this.regenTimer > 0) {
       this.regenTimer -= delta;
@@ -68,7 +101,6 @@ export class Player {
       this.damageFlashTimer -= delta;
     }
 
-    // Combo decay
     if (this.comboTimer > 0) {
       this.comboTimer -= delta;
       if (this.comboTimer <= 0) {
@@ -78,6 +110,7 @@ export class Player {
   }
 
   reset() {
+    this.maxHp = 100;
     this.hp = this.maxHp;
     this.score = 0;
     this.kills = 0;
@@ -86,6 +119,8 @@ export class Player {
     this.regenTimer = 0;
     this.combo = 0;
     this.comboTimer = 0;
+    this.comboWindow = 3.0;
     this.bestCombo = 0;
+    this.perks = [];
   }
 }

@@ -4,7 +4,7 @@ import { AudioManager } from './audio.js';
 import { ParticleSystem } from './particles.js';
 import { WeaponManager } from './weapons.js';
 import { WaveManager } from './waves.js';
-import { Player } from './player.js';
+import { Player, PERKS } from './player.js';
 import { HUD } from './hud.js';
 import { HelpGuide } from './help.js';
 import { VFXManager } from './vfx.js';
@@ -574,6 +574,7 @@ function startGame() {
 
   // Player
   player = new Player();
+  weapons.player = player;
 
   // Wave manager
   waveManager = new WaveManager(scene, particles, audio);
@@ -706,9 +707,13 @@ function processHit(hit) {
     player.addKill();
     player.addScore(alienData.scoreValue);
 
-    // Health pickup drop — tougher enemies have higher drop chance
-    const dropChance = PICKUP_DROP_CHANCE + (alienData.hp > 50 ? 0.15 : 0);
-    if (Math.random() < dropChance) {
+    // Vampire perk
+    if (player.vampireHeal > 0) player.heal(player.vampireHeal);
+
+    // Health pickup drop — tougher enemies and elites have higher drop chance
+    const dropChance = PICKUP_DROP_CHANCE + (alienData.hp > 50 ? 0.15 : 0) + player.dropRateBonus;
+    const guaranteedDrop = hit.enemy.isElite;
+    if (guaranteedDrop || Math.random() < dropChance) {
       _spawnPickup(enemyPos);
     }
 
@@ -757,6 +762,44 @@ function processHit(hit) {
   }
 }
 
+// ===== PERK SELECTION =====
+let _perkPending = false;
+
+function _showPerkSelection(onComplete) {
+  const el = document.getElementById('perk-select');
+  if (!el) { onComplete(); return; }
+
+  // Pick 3 random unique perks
+  const pool = PERKS.slice();
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+  const choices = pool.slice(0, 3);
+
+  el.innerHTML = '<div class="perk-title">CHOOSE AN UPGRADE</div><div class="perk-cards"></div>';
+  const cards = el.querySelector('.perk-cards');
+  _perkPending = true;
+
+  for (const perk of choices) {
+    const card = document.createElement('button');
+    card.className = 'perk-card';
+    card.innerHTML = `<div class="perk-name">${perk.name}</div><div class="perk-desc">${perk.desc}</div>`;
+    card.addEventListener('click', () => {
+      player.addPerk(perk.id);
+      if (perk.id === 'quickFeet' && controls) {
+        controls.speed = 12 * player.speedMultiplier;
+      }
+      el.style.display = 'none';
+      _perkPending = false;
+      hud.updatePerks(player.perks);
+      onComplete();
+    });
+    cards.appendChild(card);
+  }
+  el.style.display = 'flex';
+}
+
 // ===== GAME LOOP =====
 let lastWaveState = '';
 // Reusable vectors for animate() loop - avoid per-frame allocations
@@ -774,7 +817,8 @@ function animate() {
 
   if (state === GameState.GAME_OVER) return;
   if (state !== GameState.PLAYING) return;
-  if (helpGuide.isOpen) return; // Pause while help is open
+  if (helpGuide.isOpen) return;
+  if (_perkPending) return;
 
   // Update systems
   controls.update(delta, currentLevelData ? currentLevelData.colliders : []);
@@ -796,26 +840,28 @@ function animate() {
     if (waveManager.shouldChangeLevelAfterWave()) {
       setTimeout(() => {
         loadLevel(currentLevelIndex + 1);
-        waveManager.startWave();
-        hud.showWaveAnnouncement(waveManager.wave, LEVELS[currentLevelIndex].name, true);
+        _showPerkSelection(() => {
+          waveManager.startWave();
+          const theme = waveManager.waveTheme;
+          hud.showWaveAnnouncement(waveManager.wave, LEVELS[currentLevelIndex].name, true, theme ? theme.name : null);
+        });
       }, 2500);
+    } else {
+      setTimeout(() => {
+        _showPerkSelection(() => {
+          waveManager.startWave();
+          const theme = waveManager.waveTheme;
+          hud.showWaveAnnouncement(waveManager.wave, LEVELS[currentLevelIndex].name, false, theme ? theme.name : null);
+        });
+      }, 2000);
     }
-  }
-
-  if (waveManager.state === 'waiting' && prevState !== 'waiting') {
-    // Auto-start next wave
-    setTimeout(() => {
-      if (state === GameState.PLAYING && waveManager.state === 'waiting') {
-        waveManager.startWave();
-        hud.showWaveAnnouncement(waveManager.wave, LEVELS[currentLevelIndex].name, false);
-      }
-    }, 500);
   }
 
   // Auto-start first wave
   if (waveManager.wave === 0 && waveManager.state === 'waiting') {
     waveManager.startWave();
-    hud.showWaveAnnouncement(waveManager.wave, LEVELS[currentLevelIndex].name, false);
+    const theme = waveManager.waveTheme;
+    hud.showWaveAnnouncement(waveManager.wave, LEVELS[currentLevelIndex].name, false, theme ? theme.name : null);
   }
 
   // Update health pickups
@@ -846,7 +892,7 @@ function animate() {
   }
 
   // Update HUD
-  hud.update(player, waveManager, weapons.getWeaponData(), LEVELS[currentLevelIndex].name);
+  hud.update(player, waveManager, weapons.getWeaponData(), LEVELS[currentLevelIndex].name, controls);
 
   // Minimap
   camera.getWorldDirection(_minimapDir);
@@ -891,6 +937,9 @@ function gameOver() {
   document.getElementById('vignette').style.display = 'none';
 
   document.getElementById('game-over').style.display = 'flex';
+  const perkEl = document.getElementById('perk-select');
+  if (perkEl) perkEl.style.display = 'none';
+  _perkPending = false;
   document.getElementById('go-waves').textContent = waveManager.wave;
   document.getElementById('go-kills').textContent = player.kills;
   document.getElementById('go-score').textContent = player.score;

@@ -23,11 +23,14 @@ export class HUD {
       wave: -1, enemyCount: -1, score: -1, levelName: '',
       hpBucket: -2, hpText: '', hpBarColor: '',
       weaponName: '', cooldownBucket: -1, ammoText: '',
-      combo: 0,
+      combo: 0, dashPct: -1,
     };
+    this.dashEl = document.getElementById('dash-indicator');
+    this.dashFillEl = document.getElementById('dash-fill');
+    this.perksEl = document.getElementById('active-perks');
   }
 
-  update(player, waveManager, weaponData, levelName) {
+  update(player, waveManager, weaponData, levelName, controls) {
     const els = this.elements;
     const last = this._last;
 
@@ -86,6 +89,18 @@ export class HUD {
       last.ammoText = ammoText;
     }
 
+    // Dash cooldown
+    if (this.dashFillEl && controls) {
+      const cd = controls.dashCooldown;
+      const max = controls.dashCooldownMax;
+      const pct = cd > 0 ? Math.round((1 - cd / max) * 100) : 100;
+      if (pct !== last.dashPct) {
+        this.dashFillEl.style.width = pct + '%';
+        this.dashFillEl.style.background = pct >= 100 ? '#0ff' : '#088';
+        last.dashPct = pct;
+      }
+    }
+
     // Combo display
     const combo = player.combo;
     if (combo !== last.combo) {
@@ -113,17 +128,31 @@ export class HUD {
     }
   }
 
-  showWaveAnnouncement(wave, levelName, isNewLevel) {
+  showWaveAnnouncement(wave, levelName, isNewLevel, theme) {
     const els = this.elements;
     if (isNewLevel) {
       els.waveAnnounceText.textContent = levelName;
       els.waveAnnounceSub.textContent = `Wave ${wave} incoming...`;
     } else {
       els.waveAnnounceText.textContent = `WAVE ${wave}`;
-      els.waveAnnounceSub.textContent = 'Get ready!';
+      els.waveAnnounceSub.textContent = theme ? `// ${theme}` : 'Get ready!';
     }
     els.waveAnnounce.style.display = 'block';
     this.announceTimer = 3;
+  }
+
+  updatePerks(perkIds) {
+    if (!this.perksEl) return;
+    const counts = {};
+    for (const id of perkIds) counts[id] = (counts[id] || 0) + 1;
+    const names = {
+      rapidFire: 'RAPID', toughSkin: 'TOUGH', quickFeet: 'SPEED',
+      vampire: 'VAMP', blastRadius: 'BLAST', sharpshooter: 'SHARP',
+      comboMaster: 'COMBO', scavenger: 'SCAV',
+    };
+    this.perksEl.innerHTML = Object.entries(counts)
+      .map(([id, n]) => `<span class="perk-tag">${names[id] || id}${n > 1 ? ' x' + n : ''}</span>`)
+      .join('');
   }
 
   showWaveComplete(wave) {

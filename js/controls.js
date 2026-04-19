@@ -32,6 +32,13 @@ export class FPSControls {
     this.onGround = true;
     this.verticalVelocity = 0;
 
+    // Dash
+    this.dashCooldown = 0;
+    this.dashCooldownMax = 2.0;
+    this.dashDuration = 0.15;
+    this.dashTimer = 0;
+    this.dashSpeed = 50;
+
     this.sensitivity = 0.002;
 
     // Touch state (mobile / iOS)
@@ -230,6 +237,11 @@ export class FPSControls {
           this.onGround = false;
         }
         break;
+      case 'KeyE':
+        if (this.dashCooldown <= 0 && this.dashTimer <= 0) {
+          this.dashTimer = this.dashDuration;
+        }
+        break;
     }
   }
 
@@ -365,7 +377,17 @@ export class FPSControls {
     const useTouch = this.touchEnabled && this.isLocked;
     if (!this.isLocked && !useGamepad && !useTouch) return;
 
-    const speed = this.speed * (this.sprint ? this.sprintMultiplier : 1);
+    let speed = this.speed * (this.sprint ? this.sprintMultiplier : 1);
+
+    // Dash — short speed burst, then cooldown
+    if (this.dashTimer > 0) {
+      this.dashTimer -= delta;
+      speed = this.dashSpeed;
+      if (this.dashTimer <= 0) {
+        this.dashCooldown = this.dashCooldownMax;
+      }
+    }
+    if (this.dashCooldown > 0) this.dashCooldown -= delta;
 
     // Horizontal movement
     this.direction.set(0, 0, 0);

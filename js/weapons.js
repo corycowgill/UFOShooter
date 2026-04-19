@@ -1699,7 +1699,8 @@ export class WeaponManager {
   fire(enemies) {
     if (this.cooldown > 0) return null;
     const weapon = WEAPONS[this.current];
-    this.cooldown = weapon.fireRate;
+    const frMul = this.player ? this.player.fireRateMultiplier : 1;
+    this.cooldown = weapon.fireRate * frMul;
 
     // Play sound
     if (this.current === 'laserRifle') this.audio.playLaserRifle();
@@ -1800,8 +1801,8 @@ export class WeaponManager {
       body, nose, core, halo, exhaust,
       position: spawn.clone(),
       velocity: dir.clone().multiplyScalar(weapon.projectileSpeed),
-      damage: weapon.damage,
-      radius: weapon.explosionRadius,
+      damage: Math.floor(weapon.damage * (this.player ? this.player.damageMultiplier : 1)),
+      radius: weapon.explosionRadius * (this.player ? this.player.explosionRadiusMultiplier : 1),
       range: weapon.range,
       distanceTraveled: 0,
       age: 0,
@@ -1958,7 +1959,8 @@ export class WeaponManager {
       } else {
         this.particles.createLaserBeam(muzzlePos, closestHit.point, weapon.color, 0.15, weapon.beamWidth);
       }
-      return { hit: true, enemy: closestHit.enemy, damage: weapon.damage, point: closestHit.point, weaponKey: this.current };
+      const dmgMul = this.player ? this.player.damageMultiplier : 1;
+      return { hit: true, enemy: closestHit.enemy, damage: Math.floor(weapon.damage * dmgMul), point: closestHit.point, weaponKey: this.current };
     } else {
       // Draw beam to max range
       const endPoint = this._tmpEnd.set(
@@ -1998,7 +2000,8 @@ export class WeaponManager {
       const dot = dir.dot(toEnemy);
       if (dot > 0.3) {
         this.particles.createWeaponImpact(enemy.mesh.position, 'laserSword');
-        hits.push({ hit: true, enemy, damage: weapon.damage, point: enemy.mesh.position, weaponKey: 'laserSword' });
+        const dmgMul = this.player ? this.player.damageMultiplier : 1;
+        hits.push({ hit: true, enemy, damage: Math.floor(weapon.damage * dmgMul), point: enemy.mesh.position, weaponKey: 'laserSword' });
       }
     }
     return hits.length > 0 ? hits : { hit: false };

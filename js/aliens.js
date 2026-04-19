@@ -3051,6 +3051,32 @@ export class Alien {
     this._knockback = 0;            // knockback speed from incoming damage
   }
 
+  _addEliteAura() {
+    const ring = new THREE.Mesh(
+      cGeom(THREE.TorusGeometry, 0.9, 0.04, 6, 20),
+      new THREE.MeshBasicMaterial({
+        color: 0xffaa00, transparent: true, opacity: 0.7, toneMapped: false,
+      })
+    );
+    ring.material.color.multiplyScalar(3.0);
+    ring.rotation.x = Math.PI / 2;
+    ring.position.y = 0.05;
+    this.mesh.add(ring);
+    this._eliteRing = ring;
+
+    const crown = new THREE.Mesh(
+      cGeom(THREE.OctahedronGeometry, 0.2, 0),
+      new THREE.MeshBasicMaterial({
+        color: 0xffdd00, transparent: true, opacity: 0.8, toneMapped: false,
+      })
+    );
+    crown.material.color.multiplyScalar(4.0);
+    const topY = this.type === 'drone' ? 0.6 : (this.type === 'bloater' ? 2.2 : 1.8);
+    crown.position.y = topY;
+    this.mesh.add(crown);
+    this._eliteCrown = crown;
+  }
+
   _initAmbientVFX() {
     if (this.type === 'bloater') {
       // Plasma leak particles orbiting the bloater
@@ -3197,6 +3223,18 @@ export class Alien {
     // Update ambient VFX - skip for distant aliens (LOD optimization)
     if (dist < 50) {
       this._updateAmbientVFX(delta, dist);
+    }
+
+    // Elite aura animation
+    if (this.isElite && dist < 50) {
+      if (this._eliteRing) {
+        this._eliteRing.rotation.z += delta * 2;
+        this._eliteRing.material.opacity = 0.5 + Math.sin(this.pulseTime * 4) * 0.3;
+      }
+      if (this._eliteCrown) {
+        this._eliteCrown.rotation.y += delta * 3;
+        this._eliteCrown.position.y += Math.sin(this.pulseTime * 3) * 0.002;
+      }
     }
 
     // Health-based visual degradation - skip for distant aliens
