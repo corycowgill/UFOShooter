@@ -1009,6 +1009,105 @@ canvas#gameCanvas { display: block; width: 100vw; height: 100vh; }
   opacity: 1; transform: translate(-50%, -50%) scale(1);
 }
 #kill-streak.mega { color: var(--c-hot); text-shadow: 0 0 20px var(--c-hot), 0 0 40px rgba(255,0,170,0.5); }
+
+/* Boss health bar */
+#boss-health {
+  position: fixed; top: 70px; left: 50%; transform: translateX(-50%);
+  width: 400px; pointer-events: none; z-index: 25;
+  opacity: 0; transition: opacity 0.3s;
+  text-align: center;
+}
+#boss-health.active { opacity: 1; }
+#boss-health .boss-name {
+  font-family: var(--font-mono); font-size: 14px; font-weight: bold;
+  letter-spacing: 4px; text-transform: uppercase;
+  color: #ff6600; margin-bottom: 6px;
+  text-shadow: 0 0 12px rgba(255,102,0,0.6), 0 0 24px rgba(255,102,0,0.3);
+}
+#boss-health .boss-bar-bg {
+  width: 100%; height: 14px;
+  background: rgba(0,0,0,0.75);
+  border: 1px solid #ff4400;
+  box-shadow: 0 0 12px rgba(255,68,0,0.3), inset 0 0 8px rgba(40,0,0,0.6);
+  position: relative;
+  clip-path: polygon(6px 0, calc(100% - 6px) 0, 100% 50%, calc(100% - 6px) 100%, 6px 100%, 0 50%);
+}
+#boss-health .boss-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #ff2200, #ff6600, #ffaa00);
+  transition: width 0.2s ease;
+  box-shadow: inset 0 1px 2px rgba(255,255,255,0.3), 0 0 8px rgba(255,102,0,0.5);
+}
+#boss-health .boss-bar-bg::after {
+  content: ''; position: absolute; inset: 0;
+  background: repeating-linear-gradient(90deg,
+    transparent 0, transparent 18px,
+    rgba(0,0,0,0.5) 18px, rgba(0,0,0,0.5) 20px);
+  pointer-events: none;
+}
+#boss-health.enraged .boss-bar-fill {
+  background: linear-gradient(90deg, #ff0000, #ff2200);
+  animation: bossEnrage 0.5s ease-in-out infinite alternate;
+}
+@keyframes bossEnrage {
+  0% { box-shadow: inset 0 1px 2px rgba(255,255,255,0.3), 0 0 8px rgba(255,0,0,0.5); }
+  100% { box-shadow: inset 0 1px 2px rgba(255,255,255,0.3), 0 0 16px rgba(255,0,0,0.8); }
+}
+
+/* Damage direction indicator */
+#damage-direction {
+  position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  width: 200px; height: 200px; pointer-events: none; z-index: 15;
+}
+.dmg-dir-wedge {
+  position: absolute; width: 60px; height: 20px;
+  background: radial-gradient(ellipse at center, rgba(255,0,0,0.7), transparent);
+  opacity: 0; transition: opacity 0.15s;
+}
+.dmg-dir-wedge.active { opacity: 1; }
+.dmg-dir-n { top: -10px; left: 50%; transform: translateX(-50%); }
+.dmg-dir-s { bottom: -10px; left: 50%; transform: translateX(-50%); }
+.dmg-dir-e { right: -10px; top: 50%; transform: translateY(-50%) rotate(90deg); }
+.dmg-dir-w { left: -10px; top: 50%; transform: translateY(-50%) rotate(90deg); }
+
+/* Wave countdown */
+#wave-countdown {
+  position: fixed; bottom: 140px; left: 50%; transform: translateX(-50%);
+  font-family: var(--font-mono); font-size: 13px; letter-spacing: 3px;
+  color: var(--c-secondary); text-transform: uppercase;
+  pointer-events: none; z-index: 22; opacity: 0;
+  text-shadow: 0 0 8px rgba(0,170,255,0.5);
+  transition: opacity 0.3s;
+}
+#wave-countdown.active { opacity: 1; }
+
+/* Dash speed lines */
+#speed-lines {
+  position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+  pointer-events: none; z-index: 13; opacity: 0;
+  background:
+    repeating-linear-gradient(90deg,
+      transparent 0, transparent 48%,
+      rgba(0,255,204,0.04) 49%, transparent 50%,
+      transparent 98%, rgba(0,255,204,0.04) 99%, transparent 100%),
+    radial-gradient(ellipse at center, transparent 30%, rgba(0,200,200,0.06) 100%);
+  transition: opacity 0.1s;
+}
+#speed-lines.active { opacity: 1; }
+
+/* Enemy type callout */
+#enemy-callout {
+  position: fixed; bottom: 180px; left: 50%; transform: translateX(-50%);
+  font-family: var(--font-mono); font-size: 12px; letter-spacing: 3px;
+  color: var(--c-primary); text-transform: uppercase;
+  pointer-events: none; z-index: 22;
+  opacity: 0; transition: opacity 0.3s;
+  text-shadow: 0 0 8px var(--c-primary);
+  background: rgba(0,10,20,0.6);
+  padding: 4px 16px;
+  border: 1px solid var(--c-line-dim);
+}
+#enemy-callout.active { opacity: 1; }
 </style>
 </head>
 <body>
@@ -1031,6 +1130,19 @@ canvas#gameCanvas { display: block; width: 100vw; height: 100vh; }
 <div id="damage-flash"></div>
 <div id="chromatic-aberration"></div>
 <div id="kill-streak"></div>
+<div id="speed-lines"></div>
+<div id="damage-direction">
+  <div class="dmg-dir-wedge dmg-dir-n"></div>
+  <div class="dmg-dir-wedge dmg-dir-s"></div>
+  <div class="dmg-dir-wedge dmg-dir-e"></div>
+  <div class="dmg-dir-wedge dmg-dir-w"></div>
+</div>
+<div id="boss-health">
+  <div class="boss-name" id="boss-name">OVERLORD</div>
+  <div class="boss-bar-bg"><div class="boss-bar-fill" id="boss-bar-fill"></div></div>
+</div>
+<div id="wave-countdown"></div>
+<div id="enemy-callout"></div>
 
 <div id="scope-overlay">
   <div class="scope-ring"></div>

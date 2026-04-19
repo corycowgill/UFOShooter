@@ -119,6 +119,10 @@ let _lastHp = 100;
 let _killStreakTimer = 0;
 let _heartbeatTimer = 0;
 let _dashSoundPlayed = false;
+let _dmgDirTimers = { n: 0, s: 0, e: 0, w: 0 };
+let _seenEnemyTypes = new Set();
+let _calloutTimer = 0;
+let _weaponHeat = 0;
 
 const KILL_STREAK_NAMES = [
   '', '', '', 'TRIPLE KILL', 'QUAD KILL',
@@ -554,6 +558,9 @@ function startGame() {
   // Reset state
   state = GameState.PLAYING;
   currentLevelIndex = selectedStartLevel;
+  _seenEnemyTypes = new Set();
+  _weaponHeat = 0;
+  _lastHp = 100;
 
   // Hide menus
   document.getElementById('main-menu').style.display = 'none';
@@ -692,6 +699,8 @@ function returnToMenu() {
   if (tc) tc.classList.remove('active');
   audio.stopMusic();
   audio.stopAmbient();
+  audio.stopHeartbeat();
+  _hideOverlays();
   if (waveManager) waveManager.cleanup();
   if (particles) particles.cleanup();
   if (vfx) vfx.cleanup();
@@ -716,6 +725,63 @@ function fireWeaponAlt() {
     }
   } else if (result.hit) {
     processHit(result);
+  }
+}
+
+function _hideOverlays() {
+  const ids = ['boss-health', 'kill-streak', 'speed-lines', 'wave-countdown', 'enemy-callout'];
+  for (const id of ids) {
+    const el = document.getElementById(id);
+    if (el) el.classList.remove('active', 'mega', 'enraged');
+  }
+  document.querySelectorAll('.dmg-dir-wedge').forEach(el => el.classList.remove('active'));
+}
+
+function _showDamageDirection(enemyPos) {
+  const forward = new THREE.Vector3();
+  camera.getWorldDirection(forward);
+  forward.y = 0;
+  forward.normalize();
+  const right = new THREE.Vector3().crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
+  const toEnemy = new THREE.Vector3().subVectors(enemyPos, camera.position);
+  toEnemy.y = 0;
+  toEnemy.normalize();
+  const dotFwd = forward.dot(toEnemy);
+  const dotRight = right.dot(toEnemy);
+  let dir;
+  if (Math.abs(dotFwd) > Math.abs(dotRight)) {
+    dir = dotFwd > 0 ? 'n' : 's';
+  } else {
+    dir = dotRight > 0 ? 'e' : 'w';
+  }
+  // Map: 'n' = front (from ahead), 's' = behind, 'e' = right, 'w' = left
+  // Show the indicator on the side the damage came FROM
+  _dmgDirTimers[dir] = 0.5;
+  const el = document.querySelector(`.dmg-dir-${dir}`);
+  if (el) el.classList.add('active');
+}
+
+function _updateBossHealthBar(enemies) {
+  const bossEl = document.getElementById('boss-health');
+  if (!bossEl) return;
+  let boss = null;
+  for (const e of enemies) {
+    if (e.isBoss && !e.dead) { boss = e; break; }
+  }
+  if (boss) {
+    bossEl.classList.add('active');
+    const pct = Math.max(0, boss.hp / boss.maxHp * 100);
+    const fill = document.getElementById('boss-bar-fill');
+    if (fill) fill.style.width = pct + '%';
+    const nameEl = document.getElementById('boss-name');
+    if (nameEl) nameEl.textContent = boss.isElite ? '◆ ELITE OVERLORD' : '◆ OVERLORD';
+    if (pct < 30) {
+      bossEl.classList.add('enraged');
+    } else {
+      bossEl.classList.remove('enraged');
+    }
+  } else {
+    bossEl.classList.remove('active', 'enraged');
   }
 }
 
@@ -1066,6 +1132,7 @@ function animate() {
     const result = enemy.checkPlayerCollision(camera.position, delta);
     if (result) {
       player.takeDamage(result.damage, audio);
+      _showDamageDirection(enemy.mesh.position);
       if (vfx) {
         vfx.shake(0.08, 0.15);
         vfx.triggerChromaticAberration(result.damage / 20);
@@ -1109,6 +1176,77 @@ function animate() {
       const alpha = flicker ? 0.1 : pulse;
       ud._neonMat.opacity = alpha * 0.9;
       ud._neonGlowMat.opacity = alpha * 0.15;
+    }
+  }
+
+  // Boss health bar
+  _updateBossHealthBar(waveManager.enemies);
+
+  // Speed lines on dash
+  const slEl = document.getElementById('speed-lines');
+  if (slEl) {
+    if (controls && controls.dashTimer > 0) {
+      slEl.classList.add('active');
+    } else {
+      slEl.classList.remove('active');
+    }
+  }
+
+  // Damage direction timers
+  for (const dir of ['n', 's', 'e', 'w']) {
+    if (_dmgDirTimers[dir] > 0) {
+      _dmgDirTimers[dir] -= delta;
+      if (_dmgDirTimers[dir] <= 0) {
+        const el = document.querySelector(`.dmg-dir-${dir}`);
+        if (el) el.classList.remove('active');
+      }
+    }
+  }
+
+  // Enemy type callouts
+  if (_calloutTimer > 0) {
+    _calloutTimer -= delta;
+    if (_calloutTimer <= 0) {
+      const ecEl = document.getElementById('enemy-callout');
+      if (ecEl) ecEl.classList.remove('active');
+    }
+  }
+  for (const enemy of waveManager.enemies) {
+    if (!enemy.dead && !_seenEnemyTypes.has(enemy.type)) {
+      _seenEnemyTypes.add(enemy.type);
+      const alienData = ALIEN_TYPES[enemy.type];
+      const ecEl = document.getElementById('enemy-callout');
+      if (ecEl && alienData) {
+        ecEl.textContent = `▸ NEW THREAT: ${alienData.name.toUpperCase()}`;
+        ecEl.classList.add('active');
+        _calloutTimer = 3;
+      }
+    }
+  }
+
+  // Wave countdown between waves
+  const wcEl = document.getElementById('wave-countdown');
+  if (wcEl) {
+    if (waveManager.state === 'complete') {
+      const t = Math.ceil(waveManager.stateTimer);
+      wcEl.textContent = `NEXT WAVE IN ${t}`;
+      wcEl.classList.add('active');
+    } else {
+      wcEl.classList.remove('active');
+    }
+  }
+
+  // Weapon heat glow
+  if (weapons.cooldown > 0) {
+    _weaponHeat = Math.min(1, _weaponHeat + delta * 3);
+  } else {
+    _weaponHeat = Math.max(0, _weaponHeat - delta * 1.5);
+  }
+  if (weapons._weaponAccentLight) {
+    weapons._weaponAccentLight.intensity = 0.35 + _weaponHeat * 0.8 + Math.sin(performance.now() * 0.003) * 0.12;
+    if (_weaponHeat > 0.5) {
+      const r = 1, g = 1 - (_weaponHeat - 0.5) * 1.2, b = 1 - _weaponHeat;
+      weapons._weaponAccentLight.color.setRGB(r, Math.max(0.2, g), Math.max(0, b));
     }
   }
 
@@ -1167,6 +1305,7 @@ function gameOver() {
   const bestComboEl = document.getElementById('go-combo');
   if (bestComboEl) bestComboEl.textContent = player.bestCombo;
   _clearPickups();
+  _hideOverlays();
 }
 
 // ===== START =====
