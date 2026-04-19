@@ -27,18 +27,31 @@ export class Player {
     this.comboWindow = 3.0;
     this.bestCombo = 0;
 
+    this.shield = 0;
+    this.maxShield = 50;
+
     this.perks = [];
   }
 
   takeDamage(amount, audio) {
     if (this.dead) return;
-    this.hp -= amount;
+    let remaining = amount;
+    if (this.shield > 0) {
+      const absorbed = Math.min(this.shield, remaining);
+      this.shield -= absorbed;
+      remaining -= absorbed;
+      if (audio.playShieldHit) audio.playShieldHit();
+    }
+    if (remaining > 0) {
+      this.hp -= remaining;
+      audio.playPlayerHit();
+    }
     this.damageFlashTimer = 0.2;
     this.regenTimer = this.regenDelay;
-    audio.playPlayerHit();
 
     const flash = document.getElementById('damage-flash');
     if (flash) {
+      flash.style.background = this.shield > 0 && remaining <= 0 ? 'rgba(0, 150, 255, 0.3)' : '';
       flash.style.opacity = '1';
       setTimeout(() => { flash.style.opacity = '0'; }, 150);
     }
@@ -47,6 +60,10 @@ export class Player {
       this.hp = 0;
       this.dead = true;
     }
+  }
+
+  addShield(amount) {
+    this.shield = Math.min(this.maxShield, this.shield + amount);
   }
 
   heal(amount) {
@@ -121,6 +138,7 @@ export class Player {
     this.comboTimer = 0;
     this.comboWindow = 3.0;
     this.bestCombo = 0;
+    this.shield = 0;
     this.perks = [];
   }
 }

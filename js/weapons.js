@@ -11,6 +11,8 @@ export const WEAPONS = {
     color: 0xff0000,
     beamWidth: 0.02,
     spread: 0.015,
+    maxAmmo: Infinity,
+    reloadTime: 0,
     description: 'Fast and forgiving. Low per-shot damage but high fire rate. Slight spread at range.',
     key: '1',
   },
@@ -21,6 +23,8 @@ export const WEAPONS = {
     range: 4.0,
     type: 'melee',
     color: 0x0088ff,
+    maxAmmo: Infinity,
+    reloadTime: 0,
     description: 'Extreme close-range DPS. Hits all enemies in a wide arc — the ultimate combo builder.',
     key: '2',
   },
@@ -33,6 +37,8 @@ export const WEAPONS = {
     color: 0x8800ff,
     beamWidth: 0.015,
     zoom: 3,
+    maxAmmo: 12,
+    reloadTime: 2.0,
     description: 'Pinpoint burst damage. One-shots most enemies. Slow fire rate demands accuracy.',
     key: '3',
   },
@@ -45,6 +51,8 @@ export const WEAPONS = {
     color: 0x00ffee,
     projectileSpeed: 55,
     explosionRadius: 8,
+    maxAmmo: 6,
+    reloadTime: 2.8,
     description: 'Devastating AoE. Slow and self-damaging but obliterates clusters.',
     key: '4',
   },
@@ -135,6 +143,24 @@ export class WeaponManager {
     // Weapon switch draw animation
     this._switchTimer = 0;
     this._switchDuration = 0.2;
+
+    // Ammo system
+    this.ammo = {};
+    this.reloading = {};
+    this.reloadTimer = {};
+    for (const [key, w] of Object.entries(WEAPONS)) {
+      this.ammo[key] = w.maxAmmo;
+      this.reloading[key] = false;
+      this.reloadTimer[key] = 0;
+    }
+
+    // Grenade system
+    this.grenadeCount = 3;
+    this.grenadeMax = 3;
+    this.grenadeCooldown = 0;
+    this.grenadeCooldownMax = 0.5;
+    this.grenadeProjectiles = [];
+    this.onGrenadeHit = null;
 
     this._initWeaponView();
   }
@@ -1675,6 +1701,10 @@ export class WeaponManager {
     if (!WEAPONS[name]) return;
     if (this.current === name) return;
     if (this.zoomed) this.toggleZoom();
+    const prev = this.current;
+    if (WEAPONS[prev].maxAmmo !== Infinity && this.ammo[prev] < WEAPONS[prev].maxAmmo && !this.reloading[prev]) {
+      this.reload(prev);
+    }
     Object.values(this.weaponModels).forEach(m => m.visible = false);
     if (this.weaponModels[name]) this.weaponModels[name].visible = true;
     this.current = name;
@@ -1697,11 +1727,75 @@ export class WeaponManager {
     document.getElementById('crosshair').style.display = this.zoomed ? 'none' : 'block';
   }
 
+  addAmmo(weaponKey, amount) {
+    const w = WEAPONS[weaponKey];
+    if (!w || w.maxAmmo === Infinity) return;
+    this.ammo[weaponKey] = Math.min(w.maxAmmo, this.ammo[weaponKey] + amount);
+  }
+
+  addGrenade(count) {
+    this.grenadeCount = Math.min(this.grenadeMax, this.grenadeCount + count);
+  }
+
+  reload(weaponKey) {
+    const w = WEAPONS[weaponKey || this.current];
+    if (!w || w.maxAmmo === Infinity) return;
+    const key = weaponKey || this.current;
+    if (this.reloading[key]) return;
+    if (this.ammo[key] >= w.maxAmmo) return;
+    this.reloading[key] = true;
+    this.reloadTimer[key] = w.reloadTime;
+    if (this.audio && this.audio.playReload) this.audio.playReload();
+  }
+
+  throwGrenade() {
+    if (this.grenadeCooldown > 0 || this.grenadeCount <= 0) return false;
+    this.grenadeCount--;
+    this.grenadeCooldown = this.grenadeCooldownMax;
+    const origin = this.camera.position.clone();
+    const dir = new THREE.Vector3();
+    this.camera.getWorldDirection(dir);
+    const right = new THREE.Vector3().crossVectors(dir, new THREE.Vector3(0, 1, 0)).normalize();
+    const spawn = origin.clone().add(dir.clone().multiplyScalar(1)).add(right.multiplyScalar(0.3)).add(new THREE.Vector3(0, -0.1, 0));
+    const velocity = dir.clone().multiplyScalar(28).add(new THREE.Vector3(0, 8, 0));
+
+    const grenade = new THREE.Group();
+    const body = new THREE.Mesh(
+      new THREE.SphereGeometry(0.12, 8, 8),
+      new THREE.MeshPhongMaterial({ color: 0x334433, emissive: 0x112211, shininess: 60 })
+    );
+    grenade.add(body);
+    const glow = new THREE.Mesh(
+      new THREE.SphereGeometry(0.18, 8, 8),
+      new THREE.MeshBasicMaterial({ color: 0x44ff44, transparent: true, opacity: 0.4 })
+    );
+    grenade.add(glow);
+    grenade.position.copy(spawn);
+    this.scene.add(grenade);
+
+    this.grenadeProjectiles.push({
+      mesh: grenade, glow: glow.material,
+      position: spawn.clone(), velocity: velocity.clone(),
+      age: 0, fuse: 1.8, bounced: false,
+    });
+    if (this.audio && this.audio.playGrenadeThrow) this.audio.playGrenadeThrow();
+    return true;
+  }
+
   fire(enemies) {
     if (this.cooldown > 0) return null;
     const weapon = WEAPONS[this.current];
+    if (this.reloading[this.current]) return null;
+    if (weapon.maxAmmo !== Infinity && this.ammo[this.current] <= 0) {
+      this.reload();
+      return null;
+    }
     const frMul = this.player ? this.player.fireRateMultiplier : 1;
     this.cooldown = weapon.fireRate * frMul;
+    if (weapon.maxAmmo !== Infinity) {
+      this.ammo[this.current]--;
+      if (this.ammo[this.current] <= 0) this.reload();
+    }
 
     // Play sound
     if (this.current === 'laserRifle') this.audio.playLaserRifle();
@@ -1727,6 +1821,12 @@ export class WeaponManager {
 
   fireAlt(enemies) {
     if (this.cooldown > 0) return null;
+    const weapon = WEAPONS[this.current];
+    if (this.reloading[this.current]) return null;
+    if (weapon.maxAmmo !== Infinity && this.ammo[this.current] <= 0) {
+      this.reload();
+      return null;
+    }
     const frMul = this.player ? this.player.fireRateMultiplier : 1;
     const dmgMul = this.player ? this.player.damageMultiplier : 1;
 
@@ -1758,6 +1858,10 @@ export class WeaponManager {
       this.cooldown = 2.5 * frMul;
       this.recoilOffset = 2.0;
       this.recoilRotX = 1.8;
+      if (this.ammo.sniperRifle !== Infinity) {
+        this.ammo.sniperRifle = Math.max(0, this.ammo.sniperRifle - 2);
+        if (this.ammo.sniperRifle <= 0) this.reload();
+      }
       this.audio.playSniperShot();
       const weapon = WEAPONS.sniperRifle;
       const result = this._hitscanAttack(enemies, { ...weapon, damage: Math.floor(70 * dmgMul) });
@@ -1798,6 +1902,10 @@ export class WeaponManager {
       this.cooldown = 2.2 * frMul;
       this.recoilOffset = 2.5;
       this.recoilRotX = 2.0;
+      if (this.ammo.rocketLauncher !== Infinity) {
+        this.ammo.rocketLauncher = Math.max(0, this.ammo.rocketLauncher - 1);
+        if (this.ammo.rocketLauncher <= 0) this.reload();
+      }
       if (this.audio.playRocketLaunch) this.audio.playRocketLaunch();
       const weapon = WEAPONS.rocketLauncher;
       this._launchRocket({
@@ -2096,9 +2204,22 @@ export class WeaponManager {
 
   update(delta, enemies) {
     if (this.cooldown > 0) this.cooldown -= delta;
+    if (this.grenadeCooldown > 0) this.grenadeCooldown -= delta;
+
+    // Reload timers
+    for (const key of Object.keys(this.reloading)) {
+      if (this.reloading[key]) {
+        this.reloadTimer[key] -= delta;
+        if (this.reloadTimer[key] <= 0) {
+          this.reloading[key] = false;
+          this.ammo[key] = WEAPONS[key].maxAmmo;
+        }
+      }
+    }
 
     // Advance rocket projectiles
     if (enemies) this._updateProjectiles(delta, enemies);
+    this._updateGrenades(delta, enemies);
 
     // Recoil recovery
     if (this.recoilOffset > 0) {
@@ -2193,10 +2314,98 @@ export class WeaponManager {
     }
   }
 
+  _updateGrenades(delta, enemies) {
+    for (let i = this.grenadeProjectiles.length - 1; i >= 0; i--) {
+      const g = this.grenadeProjectiles[i];
+      g.age += delta;
+      g.velocity.y -= 22 * delta;
+      g.position.x += g.velocity.x * delta;
+      g.position.y += g.velocity.y * delta;
+      g.position.z += g.velocity.z * delta;
+
+      if (g.position.y < 0.15) {
+        g.position.y = 0.15;
+        g.velocity.y *= -0.3;
+        g.velocity.x *= 0.6;
+        g.velocity.z *= 0.6;
+        g.bounced = true;
+      }
+
+      g.mesh.position.copy(g.position);
+      g.mesh.rotation.x += delta * 8;
+      g.mesh.rotation.z += delta * 5;
+      const fuseProgress = g.age / g.fuse;
+      g.glow.opacity = 0.3 + 0.5 * fuseProgress;
+
+      if (g.age >= g.fuse) {
+        this._detonateGrenade(g, enemies);
+        this.scene.remove(g.mesh);
+        disposeTree(g.mesh);
+        this.grenadeProjectiles.splice(i, 1);
+      }
+    }
+  }
+
+  _detonateGrenade(g, enemies) {
+    const pos = g.position;
+    const radius = 7;
+    const damage = 100;
+    const dmgMul = this.player ? this.player.damageMultiplier : 1;
+    const radMul = this.player ? this.player.explosionRadiusMultiplier : 1;
+    const actualRadius = radius * radMul;
+    const radiusSq = actualRadius * actualRadius;
+
+    this.particles.createExplosion(pos, 0x44ff44, 5, 1.0);
+    if (this.audio && this.audio.playExplosion) this.audio.playExplosion();
+
+    const hits = [];
+    if (enemies) {
+      for (const enemy of enemies) {
+        if (enemy.dead) continue;
+        const dx = enemy.mesh.position.x - pos.x;
+        const dy = enemy.mesh.position.y - pos.y;
+        const dz = enemy.mesh.position.z - pos.z;
+        const distSq = dx * dx + dy * dy + dz * dz;
+        if (distSq < radiusSq) {
+          const dist = Math.sqrt(distSq);
+          const falloff = 1 - dist / actualRadius;
+          hits.push({
+            hit: true, enemy,
+            damage: Math.floor(damage * dmgMul * falloff),
+            point: enemy.mesh.position,
+            weaponKey: 'grenade',
+          });
+        }
+      }
+    }
+    if (hits.length > 0 && this.onGrenadeHit) this.onGrenadeHit(hits, pos);
+  }
+
   getWeaponData() {
     const w = WEAPONS[this.current];
     const cooldownPct = this.cooldown > 0 ? this.cooldown / w.fireRate : 0;
-    return { ...w, cooldownPct, currentKey: this.current };
+    const isReloading = this.reloading[this.current];
+    const reloadPct = isReloading ? 1 - this.reloadTimer[this.current] / w.reloadTime : 0;
+    return {
+      ...w, cooldownPct, currentKey: this.current,
+      ammo: this.ammo[this.current], isReloading, reloadPct,
+      grenadeCount: this.grenadeCount, grenadeMax: this.grenadeMax,
+    };
+  }
+
+  resetAmmo() {
+    for (const key of Object.keys(WEAPONS)) {
+      this.ammo[key] = WEAPONS[key].maxAmmo;
+      this.reloading[key] = false;
+      this.reloadTimer[key] = 0;
+    }
+    this.grenadeCount = this.grenadeMax;
+    this.grenadeCooldown = 0;
+    for (const g of this.grenadeProjectiles) {
+      this.scene.remove(g.mesh);
+      disposeTree(g.mesh);
+    }
+    this.grenadeProjectiles.length = 0;
   }
 
   // Build a standalone model for help guide preview

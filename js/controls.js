@@ -336,6 +336,11 @@ export class FPSControls {
       this.onGamepadCycleWeapon();
     }
 
+    // LB (4) = Grenade
+    if (this.gamepadPressed(4) && this.onGamepadGrenade) {
+      this.onGamepadGrenade();
+    }
+
     // Back/Select (8) = Help
     if (this.gamepadPressed(8) && this.onGamepadHelp) {
       this.onGamepadHelp();

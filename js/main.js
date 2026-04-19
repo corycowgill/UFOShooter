@@ -37,53 +37,70 @@ let controls, audio, particles, weapons, waveManager, player, hud, helpGuide, vf
 // ---------------------------------------------------------------------------
 const _pickups = [];
 let _pickupGeo = null;
-let _pickupMat = null;
+let _pickupMats = {};
 const PICKUP_HEAL = 20;
+const PICKUP_SHIELD = 30;
 const PICKUP_LIFETIME = 15;
-const PICKUP_COLLECT_DIST_SQ = 4; // 2 meters squared
+const PICKUP_COLLECT_DIST_SQ = 4;
 const PICKUP_DROP_CHANCE = 0.3;
 
 function _initPickupPrimitives() {
   if (_pickupGeo) return;
   _pickupGeo = new THREE.SphereGeometry(0.2, 8, 8);
   _pickupGeo.__shared = true;
-  _pickupMat = new THREE.MeshBasicMaterial({
-    color: 0x00ff66,
-    transparent: true,
-    opacity: 0.85,
-    toneMapped: false,
-  });
-  _pickupMat.color.multiplyScalar(3.0);
-  _pickupMat.__shared = true;
+  const makeMat = (color) => {
+    const m = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.85, toneMapped: false });
+    m.color.multiplyScalar(3.0);
+    m.__shared = true;
+    return m;
+  };
+  _pickupMats.health = makeMat(0x00ff66);
+  _pickupMats.shield = makeMat(0x0088ff);
+  _pickupMats.ammo = makeMat(0xffaa00);
+  _pickupMats.grenade = makeMat(0x44ff44);
 }
 
-function _spawnPickup(position) {
+function _spawnPickup(position, type) {
   _initPickupPrimitives();
-  const mesh = new THREE.Mesh(_pickupGeo, _pickupMat);
+  const kind = type || 'health';
+  const mesh = new THREE.Mesh(_pickupGeo, _pickupMats[kind] || _pickupMats.health);
   mesh.position.set(position.x, 0.5, position.z);
   scene.add(mesh);
-  _pickups.push({ mesh, life: PICKUP_LIFETIME });
+  _pickups.push({ mesh, life: PICKUP_LIFETIME, type: kind });
 }
 
 function _updatePickups(delta, playerPos) {
   for (let i = _pickups.length - 1; i >= 0; i--) {
     const p = _pickups[i];
     p.life -= delta;
-    // Pulse + hover
     p.mesh.position.y = 0.5 + Math.sin(performance.now() * 0.004 + i) * 0.15;
     p.mesh.rotation.y += delta * 2;
-    // Fade out in last 3 seconds
     if (p.life < 3) {
-      p.mesh.material = p.mesh.material === _pickupMat ? _pickupMat : p.mesh.material;
       p.mesh.visible = Math.sin(p.life * 10) > 0;
     }
-    // Collect?
     const dx = p.mesh.position.x - playerPos.x;
     const dz = p.mesh.position.z - playerPos.z;
     if (dx * dx + dz * dz < PICKUP_COLLECT_DIST_SQ && !player.dead) {
-      player.heal(PICKUP_HEAL);
+      if (p.type === 'health') {
+        player.heal(PICKUP_HEAL);
+        if (vfx) vfx.showHealFlash();
+      } else if (p.type === 'shield') {
+        player.addShield(PICKUP_SHIELD);
+        const flash = document.getElementById('damage-flash');
+        if (flash) {
+          flash.style.background = 'rgba(0, 100, 255, 0.25)';
+          flash.style.opacity = '1';
+          setTimeout(() => { flash.style.opacity = '0'; setTimeout(() => { flash.style.background = ''; }, 200); }, 150);
+        }
+      } else if (p.type === 'ammo') {
+        if (weapons) {
+          weapons.addAmmo('sniperRifle', 4);
+          weapons.addAmmo('rocketLauncher', 2);
+        }
+      } else if (p.type === 'grenade') {
+        if (weapons) weapons.addGrenade(1);
+      }
       audio.playPickup();
-      if (vfx) vfx.showHealFlash();
       _removePickup(i);
       continue;
     }
@@ -418,6 +435,8 @@ function setupEventListeners() {
         case 'Digit2': weapons.switchWeapon('laserSword'); currentWeaponIdx = 1; break;
         case 'Digit3': weapons.switchWeapon('sniperRifle'); currentWeaponIdx = 2; break;
         case 'Digit4': weapons.switchWeapon('rocketLauncher'); currentWeaponIdx = 3; break;
+        case 'KeyQ': weapons.throwGrenade(); break;
+        case 'KeyR': weapons.reload(); break;
         case 'KeyH':
         case 'Tab':
           e.preventDefault();
@@ -516,6 +535,12 @@ function _setupGamepadCallbacks() {
     currentWeaponIdx = 2;
   };
 
+  // LB (Button 4) = grenade
+  controls.onGamepadGrenade = () => {
+    if (state !== GameState.PLAYING || helpGuide.isOpen) return;
+    weapons.throwGrenade();
+  };
+
   // Y = cycle weapon
   controls.onGamepadCycleWeapon = () => {
     if (state !== GameState.PLAYING) return;
@@ -609,6 +634,13 @@ function startGame() {
     }
     for (const hit of hits) processHit(hit);
   };
+  weapons.onGrenadeHit = (hits, pos) => {
+    if (vfx) {
+      vfx.shake(0.25, 0.4);
+      vfx.createScorchMark(pos, 2.5);
+    }
+    for (const hit of hits) processHit(hit);
+  };
 
   // Player
   player = new Player();
@@ -651,12 +683,18 @@ function loadLevel(index) {
     waveManager.scene = scene;
     waveManager.cleanup();
     _clearPickups();
-    // Clear any in-flight rocket projectiles (they reference the old scene)
+    // Clear any in-flight rocket/grenade projectiles (they reference the old scene)
     if (weapons && weapons.projectiles) {
       for (const p of weapons.projectiles) {
         if (p.mesh) _disposeProjectile(p.mesh);
       }
       weapons.projectiles.length = 0;
+    }
+    if (weapons && weapons.grenadeProjectiles) {
+      for (const g of weapons.grenadeProjectiles) {
+        if (g.mesh) disposeTree(g.mesh);
+      }
+      weapons.grenadeProjectiles.length = 0;
     }
     weapons.scene = scene;
   }
@@ -824,16 +862,33 @@ function fireWeapon() {
 }
 
 function processHit(hit) {
-  const killed = hit.enemy.takeDamage(hit.damage);
+  let damage = hit.damage;
+  let isCrit = false;
+  if (hit.point && hit.enemy.mesh) {
+    const hitY = hit.point.y;
+    const baseY = hit.enemy.mesh.position.y;
+    const heights = { grunt: 1.8, swarmer: 1.0, bloater: 2.0, stalker: 1.6, spitter: 1.8, drone: 1.4, boss: 3.5 };
+    const h = heights[hit.enemy.type] || 1.5;
+    if (hitY > baseY + h * 0.7) {
+      isCrit = true;
+      damage = Math.floor(damage * 2);
+    }
+  }
+  const killed = hit.enemy.takeDamage(damage);
   const enemyPos = hit.enemy.mesh.position;
   const alienData = ALIEN_TYPES[hit.enemy.type];
   _crosshairHit();
+
+  // Crit feedback
+  if (isCrit) {
+    if (audio.playCritHit) audio.playCritHit();
+  }
 
   // Hit marker and damage number
   if (vfx) {
     vfx.showHitMarker(killed);
     _dmgNumPos.set(enemyPos.x, enemyPos.y + 1.5, enemyPos.z);
-    vfx.showDamageNumber(_dmgNumPos, hit.damage, killed);
+    vfx.showDamageNumber(_dmgNumPos, damage, killed, isCrit);
     // Weapon-specific screen shake
     const weaponKey = hit.weaponKey || 'laserRifle';
     if (weaponKey === 'sniperRifle') {
@@ -874,11 +929,16 @@ function processHit(hit) {
     // Vampire perk
     if (player.vampireHeal > 0) player.heal(player.vampireHeal);
 
-    // Health pickup drop — tougher enemies and elites have higher drop chance
+    // Pickup drops — varied types based on luck
     const dropChance = PICKUP_DROP_CHANCE + (alienData.hp > 50 ? 0.15 : 0) + player.dropRateBonus;
     const guaranteedDrop = hit.enemy.isElite;
     if (guaranteedDrop || Math.random() < dropChance) {
-      _spawnPickup(enemyPos);
+      const roll = Math.random();
+      let pickupType = 'health';
+      if (roll < 0.12) pickupType = 'grenade';
+      else if (roll < 0.25) pickupType = 'ammo';
+      else if (roll < 0.38) pickupType = 'shield';
+      _spawnPickup(enemyPos, pickupType);
     }
 
     // Kill feed entry + type-scaled death VFX
@@ -910,7 +970,10 @@ function processHit(hit) {
           if (chainKill) {
             player.addKill();
             player.addScore(ALIEN_TYPES[other.type].scoreValue);
-            if (Math.random() < PICKUP_DROP_CHANCE) _spawnPickup(other.mesh.position);
+            if (Math.random() < PICKUP_DROP_CHANCE) {
+              const cr = Math.random();
+              _spawnPickup(other.mesh.position, cr < 0.15 ? 'ammo' : (cr < 0.3 ? 'shield' : 'health'));
+            }
             if (vfx) {
               vfx.addKillFeedEntry(ALIEN_TYPES[other.type].name, 'EXPLOSION');
               vfx.createDeathEffect(other.mesh.position, ALIEN_TYPES[other.type].color || 0x00ff00, 1);
@@ -918,9 +981,9 @@ function processHit(hit) {
           }
         }
       }
-      // Damage player if close
+      // Damage player if close (dash = invincible)
       const playerDist = camera.position.distanceTo(pos);
-      if (playerDist < radius) {
+      if (playerDist < radius && !(controls && controls.dashTimer > 0)) {
         const dmg = ALIEN_TYPES.bloater.damage * (1 - playerDist / radius);
         player.takeDamage(dmg, audio);
         if (vfx) vfx.triggerChromaticAberration(dmg / 15);
@@ -1088,7 +1151,7 @@ function animate() {
   }
   if (vfx) {
     vfx.update(delta, player.hp / player.maxHp, camera.position);
-    if (vfx.lastAcidDamage && !player.dead) {
+    if (vfx.lastAcidDamage && !player.dead && !(controls && controls.dashTimer > 0)) {
       player.takeDamage(vfx.lastAcidDamage, audio);
     }
   }
@@ -1132,10 +1195,11 @@ function animate() {
   // Update health pickups
   _updatePickups(delta, camera.position);
 
-  // Check enemy collisions with player
+  // Check enemy collisions with player (dash = i-frames)
+  const dashing = controls && controls.dashTimer > 0;
   for (const enemy of waveManager.enemies) {
     const result = enemy.checkPlayerCollision(camera.position, delta);
-    if (result) {
+    if (result && !dashing) {
       player.takeDamage(result.damage, audio);
       _showDamageDirection(enemy.mesh.position);
       if (vfx) {
@@ -1286,6 +1350,19 @@ function animate() {
 
   // Update HUD
   hud.update(player, waveManager, weapons.getWeaponData(), LEVELS[currentLevelIndex].name, controls);
+
+  // Reload bar
+  const reloadBarC = document.getElementById('reload-bar-container');
+  const reloadBar = document.getElementById('reload-bar');
+  if (reloadBarC && reloadBar) {
+    const wd = weapons.getWeaponData();
+    if (wd.isReloading) {
+      reloadBarC.style.display = 'block';
+      reloadBar.style.width = Math.round(wd.reloadPct * 100) + '%';
+    } else {
+      reloadBarC.style.display = 'none';
+    }
+  }
 
   // Minimap
   camera.getWorldDirection(_minimapDir);

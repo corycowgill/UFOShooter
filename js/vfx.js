@@ -139,11 +139,10 @@ export class VFXManager {
   // ========================
   // DAMAGE NUMBERS
   // ========================
-  showDamageNumber(worldPos, damage, isKill = false) {
-    // Project world position to screen
+  showDamageNumber(worldPos, damage, isKill = false, isCrit = false) {
     const el = document.createElement('div');
-    el.className = 'dmg-num' + (isKill ? ' kill' : '');
-    el.textContent = isKill ? `${Math.round(damage)} KILL` : Math.round(damage);
+    el.className = 'dmg-num' + (isKill ? ' kill' : '') + (isCrit ? ' crit' : '');
+    el.textContent = isCrit && !isKill ? `${Math.round(damage)} CRIT` : (isKill ? `${Math.round(damage)} KILL` : Math.round(damage));
     this.damageNumberContainer.appendChild(el);
 
     this.damageNumbers.push({

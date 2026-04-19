@@ -565,6 +565,109 @@ export class AudioManager {
     }
   }
 
+  playGrenadeThrow() {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(300, t);
+    osc.frequency.exponentialRampToValueAtTime(150, t + 0.15);
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0.2, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.2);
+    osc.connect(g);
+    g.connect(this.sfxGain);
+    osc.start(t);
+    osc.stop(t + 0.2);
+    this._noiseBurst(0.08, 0.1);
+  }
+
+  playGrenadeExplode() {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(80, t);
+    osc.frequency.exponentialRampToValueAtTime(30, t + 0.4);
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0.35, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.5);
+    osc.connect(g);
+    g.connect(this.sfxGain);
+    osc.start(t);
+    osc.stop(t + 0.5);
+    this._noiseBurst(0.3, 0.35);
+  }
+
+  playReload() {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    const osc1 = this.ctx.createOscillator();
+    osc1.type = 'triangle';
+    osc1.frequency.setValueAtTime(600, t);
+    osc1.frequency.exponentialRampToValueAtTime(900, t + 0.08);
+    const g1 = this.ctx.createGain();
+    g1.gain.setValueAtTime(0.12, t);
+    g1.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+    osc1.connect(g1);
+    g1.connect(this.sfxGain);
+    osc1.start(t);
+    osc1.stop(t + 0.12);
+    const osc2 = this.ctx.createOscillator();
+    osc2.type = 'sine';
+    osc2.frequency.setValueAtTime(1200, t + 0.1);
+    osc2.frequency.exponentialRampToValueAtTime(800, t + 0.2);
+    const g2 = this.ctx.createGain();
+    g2.gain.setValueAtTime(0.08, t + 0.1);
+    g2.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
+    osc2.connect(g2);
+    g2.connect(this.sfxGain);
+    osc2.start(t + 0.1);
+    osc2.stop(t + 0.22);
+  }
+
+  playCritHit() {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(1400, t);
+    osc.frequency.exponentialRampToValueAtTime(2200, t + 0.06);
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0.15, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.1);
+    osc.connect(g);
+    g.connect(this.sfxGain);
+    osc.start(t);
+    osc.stop(t + 0.1);
+    const osc2 = this.ctx.createOscillator();
+    osc2.type = 'sine';
+    osc2.frequency.setValueAtTime(2600, t + 0.03);
+    const g2 = this.ctx.createGain();
+    g2.gain.setValueAtTime(0.1, t + 0.03);
+    g2.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+    osc2.connect(g2);
+    g2.connect(this.sfxGain);
+    osc2.start(t + 0.03);
+    osc2.stop(t + 0.12);
+  }
+
+  playShieldHit() {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(500, t);
+    osc.frequency.exponentialRampToValueAtTime(200, t + 0.15);
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0.15, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.2);
+    osc.connect(g);
+    g.connect(this.sfxGain);
+    osc.start(t);
+    osc.stop(t + 0.2);
+  }
+
   _noiseBurst(volume, duration) {
     const t = this.ctx.currentTime;
     const bufferSize = this.ctx.sampleRate * duration;

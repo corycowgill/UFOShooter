@@ -825,6 +825,10 @@ canvas#gameCanvas { display: block; width: 100vw; height: 100vh; }
   color: #ff4444; font-size: 22px;
   text-shadow: 0 0 8px #ff0000, 0 0 16px #ff0000, 0 0 24px rgba(255,0,0,0.3);
 }
+.dmg-num.crit {
+  color: #ffaa00; font-size: 20px;
+  text-shadow: 0 0 8px #ff6600, 0 0 16px #ff4400, 0 0 24px rgba(255,100,0,0.4);
+}
 
 /* Kill Feed */
 #kill-feed {
@@ -1109,6 +1113,35 @@ canvas#gameCanvas { display: block; width: 100vw; height: 100vh; }
 }
 #enemy-callout.active { opacity: 1; }
 
+/* Shield bar */
+#shield-bar-container {
+  display: none; width: 100%; height: 4px; margin-top: 3px;
+  background: rgba(0, 50, 120, 0.3); border: 1px solid rgba(0, 136, 255, 0.4);
+  border-radius: 2px; overflow: hidden;
+}
+#shield-bar {
+  width: 0%; height: 100%;
+  background: linear-gradient(90deg, #0066ff, #00ccff);
+  transition: width 0.15s;
+}
+
+/* Grenade counter */
+#grenade-count {
+  position: absolute; bottom: 96px; left: 50%; transform: translateX(40px);
+  font-size: 11px; color: #4f4; letter-spacing: 1px;
+  text-shadow: 0 0 6px rgba(68,255,68,0.5);
+  pointer-events: none;
+}
+
+/* Reload bar overlay */
+#reload-bar-container {
+  display: none; position: fixed; bottom: 200px; left: 50%; transform: translateX(-50%);
+  width: 80px; height: 6px; background: rgba(0,0,0,0.5);
+  border: 1px solid rgba(255,170,0,0.6); border-radius: 3px; overflow: hidden;
+  z-index: 30;
+}
+#reload-bar { width: 0%; height: 100%; background: #ffaa00; transition: width 0.1s; }
+
 /* Film grain overlay for cinematic look */
 #film-grain {
   position: fixed; top: 0; left: 0; right: 0; bottom: 0;
@@ -1195,6 +1228,7 @@ canvas#gameCanvas { display: block; width: 100vw; height: 100vh; }
     <div>
       <div id="health-text">HP: 100/100</div>
       <div id="health-bar-container"><div id="health-bar"></div></div>
+      <div id="shield-bar-container"><div id="shield-bar"></div></div>
     </div>
     <div id="weapon-info">
       <div class="weapon-name" id="weapon-name">LASER RIFLE</div>
@@ -1208,6 +1242,8 @@ canvas#gameCanvas { display: block; width: 100vw; height: 100vh; }
     width:60px; height:4px; background:rgba(0,0,0,0.5); border:1px solid #0aa;
     border-radius:2px; overflow:hidden;
   "><div id="dash-fill" style="width:100%; height:100%; background:#0ff; transition:width 0.1s;"></div></div>
+  <div id="grenade-count">G: 3</div>
+  <div id="reload-bar-container"><div id="reload-bar"></div></div>
   <div id="active-perks" style="
     position:absolute; top:50px; left:20px;
     display:flex; gap:4px; flex-wrap:wrap; max-width:200px;
@@ -1287,7 +1323,9 @@ canvas#gameCanvas { display: block; width: 100vw; height: 100vh; }
     <div><span>4</span> - Plasma Rocket</div>
     <div><span>Shift</span> - Sprint</div>
     <div><span>Space</span> - Jump</div>
-    <div><span>E</span> - Dash (2s cooldown)</div>
+    <div><span>E</span> - Dash (2s cooldown, invincible)</div>
+    <div><span>Q</span> - Throw Grenade</div>
+    <div><span>R</span> - Reload Weapon</div>
     <div><span>H / Tab</span> - Help Guide</div>
     <div><span>ESC</span> - Release Mouse</div>
   </div>

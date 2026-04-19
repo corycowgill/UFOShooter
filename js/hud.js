@@ -81,12 +81,42 @@ export class HUD {
       els.cooldownFill.style.width = cdBucket + '%';
       last.cooldownBucket = cdBucket;
     }
-    const ammoText = weaponData.currentKey === 'laserSword'
-      ? 'MELEE'
-      : (weaponData.cooldownPct > 0 ? 'CHARGING...' : 'READY');
+    let ammoText;
+    if (weaponData.currentKey === 'laserSword') {
+      ammoText = 'MELEE';
+    } else if (weaponData.isReloading) {
+      const pct = Math.round(weaponData.reloadPct * 100);
+      ammoText = `RELOADING ${pct}%`;
+    } else if (weaponData.maxAmmo !== Infinity) {
+      ammoText = `${weaponData.ammo} / ${weaponData.maxAmmo}`;
+    } else {
+      ammoText = weaponData.cooldownPct > 0 ? 'CHARGING...' : 'READY';
+    }
     if (ammoText !== last.ammoText) {
       els.ammoDisplay.textContent = ammoText;
       last.ammoText = ammoText;
+    }
+
+    // Grenade counter
+    const grenadeEl = document.getElementById('grenade-count');
+    if (grenadeEl) {
+      const gt = `G: ${weaponData.grenadeCount}`;
+      if (gt !== last.grenadeText) {
+        grenadeEl.textContent = gt;
+        grenadeEl.style.opacity = weaponData.grenadeCount > 0 ? '1' : '0.4';
+        last.grenadeText = gt;
+      }
+    }
+
+    // Shield bar
+    const shieldEl = document.getElementById('shield-bar');
+    if (shieldEl && player.shield !== undefined) {
+      const sPct = Math.round(player.shield / player.maxShield * 100);
+      if (sPct !== last.shieldPct) {
+        shieldEl.style.width = sPct + '%';
+        shieldEl.parentElement.style.display = sPct > 0 ? 'block' : 'none';
+        last.shieldPct = sPct;
+      }
     }
 
     // Dash cooldown
