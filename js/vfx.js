@@ -731,6 +731,189 @@ export class VFXManager {
   }
 
   // ========================
+  // GROUND FOG / MIST LAYER
+  // ========================
+  initGroundFog() {
+    if (this._groundFog) {
+      this.scene.remove(this._groundFog);
+      disposeTree(this._groundFog);
+    }
+    const fogMat = new THREE.ShaderMaterial({
+      transparent: true,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+      uniforms: {
+        uTime: { value: 0 },
+        uOpacity: { value: 0.18 },
+        uColor: { value: new THREE.Color(0x223344) },
+      },
+      vertexShader: /* glsl */`
+        varying vec2 vUv;
+        void main() {
+          vUv = uv;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: /* glsl */`
+        uniform float uTime;
+        uniform float uOpacity;
+        uniform vec3 uColor;
+        varying vec2 vUv;
+        float hash(vec2 p) {
+          return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+        }
+        float noise(vec2 p) {
+          vec2 i = floor(p);
+          vec2 f = fract(p);
+          f = f * f * (3.0 - 2.0 * f);
+          float a = hash(i);
+          float b = hash(i + vec2(1.0, 0.0));
+          float c = hash(i + vec2(0.0, 1.0));
+          float d = hash(i + vec2(1.0, 1.0));
+          return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+        }
+        float fbm(vec2 p) {
+          float v = 0.0;
+          v += 0.5 * noise(p); p *= 2.01;
+          v += 0.25 * noise(p); p *= 2.02;
+          v += 0.125 * noise(p);
+          return v;
+        }
+        void main() {
+          vec2 uv = vUv * 3.0;
+          float n = fbm(uv + uTime * 0.08);
+          float n2 = fbm(uv * 1.5 - uTime * 0.05 + 3.7);
+          float fog = (n + n2) * 0.5;
+          float edge = smoothstep(0.0, 0.2, vUv.x) * smoothstep(1.0, 0.8, vUv.x)
+                     * smoothstep(0.0, 0.2, vUv.y) * smoothstep(1.0, 0.8, vUv.y);
+          gl_FragColor = vec4(uColor, fog * uOpacity * edge);
+        }
+      `,
+    });
+    const fogPlane = new THREE.Mesh(
+      new THREE.PlaneGeometry(160, 160),
+      fogMat
+    );
+    fogPlane.rotation.x = -Math.PI / 2;
+    fogPlane.position.y = 0.3;
+    fogPlane.renderOrder = 1;
+    this._groundFog = fogPlane;
+    this._groundFogMat = fogMat;
+    this.scene.add(fogPlane);
+  }
+
+  _updateGroundFog(delta) {
+    if (!this._groundFog) return;
+    this._groundFogMat.uniforms.uTime.value += delta;
+    this._groundFog.position.x = this.camera.position.x;
+    this._groundFog.position.z = this.camera.position.z;
+  }
+
+  // ========================
+  // LIGHTNING SYSTEM
+  // ========================
+  initLightning() {
+    this._lightningTimer = 3 + Math.random() * 8;
+    this._lightningFlash = 0;
+    this._lightningLight = new THREE.DirectionalLight(0xccddff, 0);
+    this._lightningLight.position.set(50, 100, 30);
+    this.scene.add(this._lightningLight);
+  }
+
+  _updateLightning(delta) {
+    if (!this._lightningLight) return;
+    this._lightningTimer -= delta;
+    if (this._lightningTimer <= 0) {
+      this._lightningFlash = 0.15 + Math.random() * 0.1;
+      this._lightningLight.intensity = 2 + Math.random() * 3;
+      this._lightningLight.position.set(
+        (Math.random() - 0.5) * 100,
+        80 + Math.random() * 40,
+        (Math.random() - 0.5) * 100
+      );
+      this._lightningTimer = 4 + Math.random() * 12;
+      if (Math.random() < 0.4) {
+        this._lightningDoubleTimer = 0.08 + Math.random() * 0.06;
+      }
+    }
+    if (this._lightningFlash > 0) {
+      this._lightningFlash -= delta;
+      if (this._lightningFlash <= 0) {
+        this._lightningLight.intensity = 0;
+        if (this._lightningDoubleTimer > 0) {
+          this._lightningDoubleTimer -= delta;
+          if (this._lightningDoubleTimer <= 0) {
+            this._lightningFlash = 0.06;
+            this._lightningLight.intensity = 1.5;
+            this._lightningDoubleTimer = 0;
+          }
+        }
+      } else {
+        this._lightningLight.intensity *= 0.85;
+      }
+    }
+  }
+
+  // ========================
+  // SMOKE WISPS
+  // ========================
+  initSmokeWisps() {
+    if (this._smokeWisps) {
+      this.scene.remove(this._smokeWisps);
+      disposeTree(this._smokeWisps);
+    }
+    const count = 30;
+    const positions = new Float32Array(count * 3);
+    const alphas = new Float32Array(count);
+    const phases = new Float32Array(count);
+    for (let i = 0; i < count; i++) {
+      positions[i * 3] = (Math.random() - 0.5) * 80;
+      positions[i * 3 + 1] = 0.3 + Math.random() * 2;
+      positions[i * 3 + 2] = (Math.random() - 0.5) * 80;
+      alphas[i] = 0.05 + Math.random() * 0.1;
+      phases[i] = Math.random() * Math.PI * 2;
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geo.userData.alphas = alphas;
+    geo.userData.phases = phases;
+    geo.userData.count = count;
+    const mat = new THREE.PointsMaterial({
+      color: 0x556677, size: 3.0, transparent: true, opacity: 0.08,
+      blending: THREE.NormalBlending, depthWrite: false,
+      sizeAttenuation: true,
+    });
+    this._smokeWisps = new THREE.Points(geo, mat);
+    this._smokeWisps.frustumCulled = false;
+    this.scene.add(this._smokeWisps);
+  }
+
+  _updateSmokeWisps(delta) {
+    if (!this._smokeWisps) return;
+    const pos = this._smokeWisps.geometry.attributes.position.array;
+    const phases = this._smokeWisps.geometry.userData.phases;
+    const count = this._smokeWisps.geometry.userData.count;
+    const t = performance.now() * 0.001;
+    const camPos = this.camera.position;
+    for (let i = 0; i < count; i++) {
+      const idx = i * 3;
+      pos[idx] += Math.sin(t * 0.3 + phases[i]) * 0.01;
+      pos[idx + 1] += Math.sin(t * 0.2 + phases[i] * 1.3) * 0.003;
+      pos[idx + 2] += Math.cos(t * 0.25 + phases[i] * 0.7) * 0.01;
+      const dx = pos[idx] - camPos.x;
+      const dz = pos[idx + 2] - camPos.z;
+      if (dx * dx + dz * dz > 1600 || pos[idx + 1] > 4) {
+        const angle = Math.random() * Math.PI * 2;
+        const r = 5 + Math.random() * 30;
+        pos[idx] = camPos.x + Math.cos(angle) * r;
+        pos[idx + 1] = 0.3 + Math.random() * 1.5;
+        pos[idx + 2] = camPos.z + Math.sin(angle) * r;
+      }
+    }
+    this._smokeWisps.geometry.attributes.position.needsUpdate = true;
+  }
+
+  // ========================
   // GROUND SCORCH MARKS
   // ========================
   createScorchMark(position, radius) {
@@ -889,6 +1072,9 @@ export class VFXManager {
     this._updateSpawnEffects(delta);
     this._updateEnvironmentParticles(delta);
     this._updateRain(delta);
+    this._updateGroundFog(delta);
+    this._updateLightning(delta);
+    this._updateSmokeWisps(delta);
     this._updateScorchMarks(delta);
     this._updateChromaticAberration(delta);
     this.lastAcidDamage = this._updateAcidPools(delta, playerPos);
@@ -921,6 +1107,20 @@ export class VFXManager {
       this.scene.remove(this._rainSplashes);
       disposeTree(this._rainSplashes);
       this._rainSplashes = null;
+    }
+    if (this._groundFog) {
+      this.scene.remove(this._groundFog);
+      disposeTree(this._groundFog);
+      this._groundFog = null;
+    }
+    if (this._lightningLight) {
+      this.scene.remove(this._lightningLight);
+      this._lightningLight = null;
+    }
+    if (this._smokeWisps) {
+      this.scene.remove(this._smokeWisps);
+      disposeTree(this._smokeWisps);
+      this._smokeWisps = null;
     }
     if (this._scorchMarks) {
       for (const s of this._scorchMarks) {

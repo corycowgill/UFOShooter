@@ -2072,6 +2072,9 @@ function addSky(scene) {
     frame.rotation.y = port.rotation.y;
     ufoGroup.add(frame);
   }
+  ufoGroup.userData._beamMat = beamMeshMat;
+  ufoGroup.userData._innerBeamMat = innerBeamMat;
+  ufoGroup.userData._beamGroundGlowMat = beamGroundGlow.material;
   ufoGroup.position.set(0, 80, -30);
   scene.add(ufoGroup);
 

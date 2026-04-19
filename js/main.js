@@ -674,6 +674,9 @@ function loadLevel(index) {
     const envType = currentLevelIndex === 0 ? 'dust' : (currentLevelIndex === 2 ? 'embers' : 'dust');
     vfx.initEnvironmentParticles(envType);
     vfx.initRain();
+    vfx.initGroundFog();
+    vfx.initLightning();
+    vfx.initSmokeWisps();
   }
 
   // One-shot shadow map refresh — static world just finished building, so
@@ -1153,9 +1156,19 @@ function animate() {
     return;
   }
 
-  // Rotate UFO mothership
+  // Animate UFO mothership
   if (currentLevelData && currentLevelData.ufo) {
-    currentLevelData.ufo.rotation.y += delta * 0.1;
+    const ufo = currentLevelData.ufo;
+    ufo.rotation.y += delta * 0.1;
+    // Tractor beam pulse
+    const bt = performance.now() * 0.001;
+    const ud = ufo.userData;
+    if (ud._beamMat) {
+      const pulse = 0.03 + 0.015 * Math.sin(bt * 1.5) + 0.008 * Math.sin(bt * 3.7);
+      ud._beamMat.opacity = pulse;
+      ud._innerBeamMat.opacity = pulse * 0.6;
+      ud._beamGroundGlowMat.opacity = 0.03 + 0.02 * Math.sin(bt * 2.0 + 1.0);
+    }
   }
 
   // Animate twinkling stars
