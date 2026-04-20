@@ -1511,13 +1511,14 @@ function makeRock(x, z, scale = 1) {
 }
 
 function addGround(group, size, color = 0x333333) {
-  // Main ground
+  // Main ground — uses MeshBasicMaterial so it's always clearly visible
+  // independent of scene lighting. The emissive-style color prevents the
+  // floor from disappearing into the dark sky background.
   const ground = new THREE.Mesh(
     new THREE.PlaneGeometry(size * 2, size * 2, 1, 1),
-    makeMaterial(color, 0x1a1a1a)
+    new THREE.MeshBasicMaterial({ color })
   );
   ground.rotation.x = -Math.PI / 2;
-  ground.receiveShadow = true;
   group.add(ground);
 
   // Procedural ground detail grid lines (subtle)
@@ -2121,7 +2122,7 @@ function buildDowntownChicago(scene) {
   const group = new THREE.Group();
   const colliders = [];
 
-  addGround(group, 100, 0x2a2a2a);
+  addGround(group, 100, 0x3a3a3a);
   const { ufo, starMats } = addSky(scene);
 
   // Downtown twilight: dense blue-violet haze
@@ -3061,7 +3062,7 @@ function buildLincolnParkZoo(scene) {
   const group = new THREE.Group();
   const colliders = [];
 
-  addGround(group, 100, 0x1a3311);
+  addGround(group, 100, 0x2a4422);
   const { ufo, starMats } = addSky(scene);
 
   // Zoo at dusk: warm green haze
@@ -3346,7 +3347,7 @@ function buildRavenswood(scene) {
   const group = new THREE.Group();
   const colliders = [];
 
-  addGround(group, 100, 0x2a2a2a);
+  addGround(group, 100, 0x3a3a3a);
   const { ufo, starMats } = addSky(scene);
 
   // Ravenswood at night: cool urban blue haze
