@@ -546,18 +546,6 @@ function makeStreetLight(x, z) {
   pool.rotation.x = -Math.PI / 2;
   pool.position.set(1.2, 0.02, 0);
   group.add(pool);
-  // Wider soft outer glow on ground
-  const poolOuter = new THREE.Mesh(
-    new THREE.CircleGeometry(6.0, 16),
-    new THREE.MeshBasicMaterial({
-      color: 0xffdd88, transparent: true, opacity: 0.06,
-      blending: THREE.AdditiveBlending, depthWrite: false,
-      toneMapped: false,
-    })
-  );
-  poolOuter.rotation.x = -Math.PI / 2;
-  poolOuter.position.set(1.2, 0.01, 0);
-  group.add(poolOuter);
   group.position.set(x, 0, z);
   group.userData._streetLight = light;
   group.userData._streetHalo = halo.material;

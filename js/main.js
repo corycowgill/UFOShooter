@@ -246,9 +246,9 @@ function _init() {
     // pushes core colors to 3-5x so they dominate the bloom pass.
     bloomPass = new UnrealBloomPass(
       new THREE.Vector2(window.innerWidth, window.innerHeight),
-      0.9,  // strength
-      0.6,  // radius
-      0.9   // threshold
+      0.7,  // strength (reduced from 0.9)
+      0.4,  // radius (reduced from 0.6 — smaller radius = cheaper blur)
+      0.95  // threshold (higher = fewer pixels bloom, cheaper pass)
     );
     composer.addPass(bloomPass);
     composer.addPass(new OutputPass());
@@ -1055,6 +1055,7 @@ function _showPerkSelection(onComplete) {
 
 // ===== GAME LOOP =====
 let lastWaveState = '';
+let _frameCounter = 0;
 // Reusable vectors for animate() loop - avoid per-frame allocations
 const _minimapDir = new THREE.Vector3();
 const _dmgNumPos = new THREE.Vector3();
@@ -1066,6 +1067,7 @@ const _UP = new THREE.Vector3(0, 1, 0);
 function animate() {
   requestAnimationFrame(animate);
   let delta = Math.min(clock.getDelta(), 0.05); // Cap delta
+  _frameCounter++;
 
   if (state === GameState.MENU) {
     updateMenu(delta);
@@ -1271,8 +1273,8 @@ function animate() {
     }
   }
 
-  // Animate neon sign flicker
-  if (currentLevelData && currentLevelData.neonSigns) {
+  // Animate neon sign flicker (throttled — every 3rd frame is imperceptible)
+  if (currentLevelData && currentLevelData.neonSigns && (_frameCounter % 3) === 0) {
     const t = performance.now() * 0.001;
     for (const ns of currentLevelData.neonSigns) {
       const ud = ns.userData;
@@ -1284,8 +1286,8 @@ function animate() {
     }
   }
 
-  // Animate streetlight flicker
-  if (currentLevelData && currentLevelData.streetLights) {
+  // Animate streetlight flicker (throttled — every 3rd frame)
+  if (currentLevelData && currentLevelData.streetLights && (_frameCounter % 3) === 0) {
     const t = performance.now() * 0.001;
     for (const sl of currentLevelData.streetLights) {
       const ud = sl.userData;

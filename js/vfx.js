@@ -142,6 +142,8 @@ export class VFXManager {
   // DAMAGE NUMBERS
   // ========================
   showDamageNumber(worldPos, damage, isKill = false, isCrit = false) {
+    // Cap active damage numbers to avoid DOM/CPU blowup during multi-kills
+    if (this.damageNumbers.length >= 60) return;
     let el;
     if (this._dmgPool.length > 0) {
       el = this._dmgPool.pop();
@@ -154,18 +156,13 @@ export class VFXManager {
     el.style.opacity = '1';
     this.damageNumberContainer.appendChild(el);
 
-    let entry;
-    if (this.damageNumbers.length < 60) {
-      entry = { el, worldPos: worldPos.clone(), life: 1.0, offsetY: 0, velocity: -80 - Math.random() * 40 };
-    } else {
-      entry = this.damageNumbers[this.damageNumbers.length - 1];
-      entry.el = el;
-      entry.worldPos.copy(worldPos);
-      entry.life = 1.0;
-      entry.offsetY = 0;
-      entry.velocity = -80 - Math.random() * 40;
-    }
-    this.damageNumbers.push(entry);
+    this.damageNumbers.push({
+      el,
+      worldPos: worldPos.clone(),
+      life: 1.0,
+      offsetY: 0,
+      velocity: -80 - Math.random() * 40,
+    });
   }
 
   _updateDamageNumbers(delta) {
@@ -533,24 +530,25 @@ export class VFXManager {
     const positions = this.envParticles.geometry.attributes.position.array;
     const velocities = this.envParticles.geometry.userData.velocities;
     const camPos = this.camera.position;
+    const count1 = positions.length / 3;
+    const isDust = this.envParticleType === 'dust';
+    const nowSec = isDust ? performance.now() * 0.001 : 0;
 
-    for (let i = 0; i < positions.length / 3; i++) {
+    for (let i = 0; i < count1; i++) {
       const idx = i * 3;
       positions[idx] += velocities[idx] * delta;
       positions[idx + 1] += velocities[idx + 1] * delta;
       positions[idx + 2] += velocities[idx + 2] * delta;
 
-      // Add subtle sine wave motion for dust
-      if (this.envParticleType === 'dust') {
-        positions[idx] += Math.sin(performance.now() * 0.001 + i) * 0.003;
+      if (isDust) {
+        positions[idx] += Math.sin(nowSec + i) * 0.003;
       }
 
-      // Respawn particles that go too far from camera
+      // Squared-distance check — avoids Math.sqrt per particle
       const dx = positions[idx] - camPos.x;
       const dz = positions[idx + 2] - camPos.z;
-      const dist = Math.sqrt(dx * dx + dz * dz);
 
-      if (dist > 30 || positions[idx + 1] > 20 || positions[idx + 1] < 0) {
+      if (dx * dx + dz * dz > 900 || positions[idx + 1] > 20 || positions[idx + 1] < 0) {
         const angle = Math.random() * Math.PI * 2;
         const r = 5 + Math.random() * 25;
         positions[idx] = camPos.x + Math.cos(angle) * r;
@@ -566,23 +564,21 @@ export class VFXManager {
       const pos2 = this._envParticles2.geometry.attributes.position.array;
       const vel2 = this._envParticles2.geometry.userData.velocities;
       const time = performance.now() * 0.001;
+      const count2 = pos2.length / 3;
 
-      for (let i = 0; i < pos2.length / 3; i++) {
+      for (let i = 0; i < count2; i++) {
         const idx = i * 3;
         pos2[idx] += vel2[idx] * delta;
         pos2[idx + 1] += vel2[idx + 1] * delta;
         pos2[idx + 2] += vel2[idx + 2] * delta;
 
-        // Gentle swaying drift
         pos2[idx] += Math.sin(time * 0.5 + i * 1.7) * 0.002;
         pos2[idx + 1] += Math.cos(time * 0.3 + i * 2.1) * 0.001;
 
-        // Respawn if too far from camera or out of bounds
         const dx2 = pos2[idx] - camPos.x;
         const dz2 = pos2[idx + 2] - camPos.z;
-        const dist2 = Math.sqrt(dx2 * dx2 + dz2 * dz2);
 
-        if (dist2 > 35 || pos2[idx + 1] > 14 || pos2[idx + 1] < -0.5) {
+        if (dx2 * dx2 + dz2 * dz2 > 1225 || pos2[idx + 1] > 14 || pos2[idx + 1] < -0.5) {
           const angle2 = Math.random() * Math.PI * 2;
           const r2 = 4 + Math.random() * 28;
           pos2[idx] = camPos.x + Math.cos(angle2) * r2;
@@ -1105,6 +1101,9 @@ export class VFXManager {
 
   _updatePuddles(delta) {
     if (!this._puddles) return;
+    // Throttle — shimmer is low-frequency, every 3rd frame is fine
+    this._puddleFrame = (this._puddleFrame || 0) + 1;
+    if ((this._puddleFrame % 3) !== 0) return;
     const t = performance.now() * 0.001;
     for (const p of this._puddles) {
       const shimmer = 0.06 + 0.04 * Math.sin(t * 1.5 + p.phase) + 0.02 * Math.sin(t * 3.1 + p.phase * 2);
@@ -1146,6 +1145,10 @@ export class VFXManager {
 
   _updateDustMotes(delta) {
     if (!this._dustMotes) return;
+    // Throttle — dust motes drift slowly, updating every other frame is imperceptible
+    // and halves the GPU buffer upload cost.
+    this._dustMoteFrame = (this._dustMoteFrame || 0) + 1;
+    if ((this._dustMoteFrame & 1) !== 0) return;
     const pos = this._dustMotes.geometry.attributes.position.array;
     const count = this._dustMotes.geometry.userData._count;
     const phases = this._dustMotes.geometry.userData._phases;
@@ -1153,9 +1156,9 @@ export class VFXManager {
     const camPos = this.camera.position;
     for (let i = 0; i < count; i++) {
       const idx = i * 3;
-      pos[idx] += Math.sin(t * 0.15 + phases[i]) * 0.005;
-      pos[idx + 1] += Math.sin(t * 0.1 + phases[i] * 1.7) * 0.004;
-      pos[idx + 2] += Math.cos(t * 0.12 + phases[i] * 0.9) * 0.005;
+      pos[idx] += Math.sin(t * 0.15 + phases[i]) * 0.01;
+      pos[idx + 1] += Math.sin(t * 0.1 + phases[i] * 1.7) * 0.008;
+      pos[idx + 2] += Math.cos(t * 0.12 + phases[i] * 0.9) * 0.01;
       const dx = pos[idx] - camPos.x;
       const dz = pos[idx + 2] - camPos.z;
       if (dx * dx + dz * dz > 900 || pos[idx + 1] > 10 || pos[idx + 1] < 0) {
