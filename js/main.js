@@ -429,7 +429,7 @@ function setupEventListeners() {
 
   // Pointer lock
   document.getElementById('gameCanvas').addEventListener('click', () => {
-    if (state === GameState.PLAYING && !helpGuide.isOpen) {
+    if (state === GameState.PLAYING && !helpGuide.isOpen && !_perkPending) {
       controls.lock();
     }
   });
@@ -1019,6 +1019,8 @@ function _showPerkSelection(onComplete) {
   const el = document.getElementById('perk-select');
   if (!el) { onComplete(); return; }
 
+  if (controls) controls.unlock();
+
   // Pick 3 random unique perks
   const pool = PERKS.slice();
   for (let i = pool.length - 1; i > 0; i--) {
@@ -1043,6 +1045,7 @@ function _showPerkSelection(onComplete) {
       el.style.display = 'none';
       _perkPending = false;
       hud.updatePerks(player.perks);
+      if (controls) controls.lock();
       onComplete();
     });
     cards.appendChild(card);
