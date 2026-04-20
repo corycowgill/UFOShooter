@@ -510,9 +510,7 @@ function makeStreetLight(x, z) {
   );
   halo.position.set(1.2, 4.55, 0);
   group.add(halo);
-  const light = new THREE.PointLight(0xffdd88, 2.0, 25);
-  light.position.set(1.2, 4.5, 0);
-  group.add(light);
+  const light = null;
   // Volumetric light cone — visible beam of light falling from the fixture
   const coneH = 4.4;
   const cone = new THREE.Mesh(

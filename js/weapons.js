@@ -1,6 +1,8 @@
 // weapons.js - Three weapon types: Laser Rifle, Laser Sword, Sniper Laser Rifle
 import { disposeTree } from './particles.js';
 
+const _UP = new THREE.Vector3(0, 1, 0);
+
 export const WEAPONS = {
   laserRifle: {
     name: 'LASER RIFLE',
@@ -161,6 +163,8 @@ export class WeaponManager {
     this.grenadeCooldownMax = 0.5;
     this.grenadeProjectiles = [];
     this.onGrenadeHit = null;
+
+    this._weaponDataCache = {};
 
     this._initWeaponView();
   }
@@ -1752,12 +1756,14 @@ export class WeaponManager {
     if (this.grenadeCooldown > 0 || this.grenadeCount <= 0) return false;
     this.grenadeCount--;
     this.grenadeCooldown = this.grenadeCooldownMax;
-    const origin = this.camera.position.clone();
-    const dir = new THREE.Vector3();
+    const dir = this._tmpDir.set(0, 0, 0);
     this.camera.getWorldDirection(dir);
-    const right = new THREE.Vector3().crossVectors(dir, new THREE.Vector3(0, 1, 0)).normalize();
-    const spawn = origin.clone().add(dir.clone().multiplyScalar(1)).add(right.multiplyScalar(0.3)).add(new THREE.Vector3(0, -0.1, 0));
-    const velocity = dir.clone().multiplyScalar(28).add(new THREE.Vector3(0, 8, 0));
+    const right = this._tmpToEnemy.crossVectors(dir, _UP).normalize();
+    const spawn = this._tmpMuzzle.copy(this.camera.position)
+      .addScaledVector(dir, 1).addScaledVector(right, 0.3);
+    spawn.y -= 0.1;
+    const velocity = this._tmpEnd.copy(dir).multiplyScalar(28);
+    velocity.y += 8;
 
     const grenade = new THREE.Group();
     const body = new THREE.Mesh(
@@ -1920,17 +1926,13 @@ export class WeaponManager {
   }
 
   _launchRocket(weapon) {
-    const origin = this.camera.position;
-    const dir = new THREE.Vector3();
+    const dir = this._tmpDir.set(0, 0, 0);
     this.camera.getWorldDirection(dir);
 
-    // Spawn slightly ahead of camera, offset down-right to match hip-fired rocket
-    const right = new THREE.Vector3();
-    right.crossVectors(dir, new THREE.Vector3(0, 1, 0)).normalize();
-    const spawn = new THREE.Vector3().copy(origin)
-      .add(dir.clone().multiplyScalar(1.2))
-      .add(right.multiplyScalar(0.25))
-      .add(new THREE.Vector3(0, -0.2, 0));
+    const right = this._tmpToEnemy.crossVectors(dir, _UP).normalize();
+    const spawn = this._tmpMuzzle.copy(this.camera.position)
+      .addScaledVector(dir, 1.2).addScaledVector(right, 0.25);
+    spawn.y -= 0.2;
 
     // Build rocket mesh: elongated glowing warhead with trail
     const rocket = new THREE.Group();
@@ -1985,7 +1987,7 @@ export class WeaponManager {
     // forces every MeshPhongMaterial in the scene to recompile.
     rocket.position.copy(spawn);
     // Orient rocket to face direction of travel
-    rocket.lookAt(spawn.clone().add(dir));
+    rocket.lookAt(this._tmpEnd.copy(spawn).add(dir));
     this.scene.add(rocket);
 
     // Muzzle flash at launch
@@ -2383,14 +2385,20 @@ export class WeaponManager {
 
   getWeaponData() {
     const w = WEAPONS[this.current];
-    const cooldownPct = this.cooldown > 0 ? this.cooldown / w.fireRate : 0;
-    const isReloading = this.reloading[this.current];
-    const reloadPct = isReloading ? 1 - this.reloadTimer[this.current] / w.reloadTime : 0;
-    return {
-      ...w, cooldownPct, currentKey: this.current,
-      ammo: this.ammo[this.current], isReloading, reloadPct,
-      grenadeCount: this.grenadeCount, grenadeMax: this.grenadeMax,
-    };
+    const d = this._weaponDataCache;
+    d.name = w.name; d.damage = w.damage; d.fireRate = w.fireRate;
+    d.range = w.range; d.type = w.type; d.color = w.color;
+    d.maxAmmo = w.maxAmmo; d.reloadTime = w.reloadTime;
+    d.spread = w.spread; d.beamWidth = w.beamWidth;
+    d.description = w.description; d.key = w.key;
+    d.cooldownPct = this.cooldown > 0 ? this.cooldown / w.fireRate : 0;
+    d.currentKey = this.current;
+    d.ammo = this.ammo[this.current];
+    d.isReloading = this.reloading[this.current];
+    d.reloadPct = d.isReloading ? 1 - this.reloadTimer[this.current] / w.reloadTime : 0;
+    d.grenadeCount = this.grenadeCount;
+    d.grenadeMax = this.grenadeMax;
+    return d;
   }
 
   resetAmmo() {

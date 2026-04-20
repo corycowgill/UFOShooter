@@ -20,6 +20,8 @@ export class VFXManager {
 
     // Damage numbers
     this.damageNumbers = [];
+    this._dmgPool = [];
+    this._tmpScreenPos = new THREE.Vector3();
 
     // Kill feed
     this.killFeed = [];
@@ -140,18 +142,30 @@ export class VFXManager {
   // DAMAGE NUMBERS
   // ========================
   showDamageNumber(worldPos, damage, isKill = false, isCrit = false) {
-    const el = document.createElement('div');
+    let el;
+    if (this._dmgPool.length > 0) {
+      el = this._dmgPool.pop();
+    } else {
+      el = document.createElement('div');
+    }
     el.className = 'dmg-num' + (isKill ? ' kill' : '') + (isCrit ? ' crit' : '');
     el.textContent = isCrit && !isKill ? `${Math.round(damage)} CRIT` : (isKill ? `${Math.round(damage)} KILL` : Math.round(damage));
+    el.style.display = 'block';
+    el.style.opacity = '1';
     this.damageNumberContainer.appendChild(el);
 
-    this.damageNumbers.push({
-      el,
-      worldPos: worldPos.clone(),
-      life: 1.0,
-      offsetY: 0,
-      velocity: -80 - Math.random() * 40, // pixels per second upward
-    });
+    let entry;
+    if (this.damageNumbers.length < 60) {
+      entry = { el, worldPos: worldPos.clone(), life: 1.0, offsetY: 0, velocity: -80 - Math.random() * 40 };
+    } else {
+      entry = this.damageNumbers[this.damageNumbers.length - 1];
+      entry.el = el;
+      entry.worldPos.copy(worldPos);
+      entry.life = 1.0;
+      entry.offsetY = 0;
+      entry.velocity = -80 - Math.random() * 40;
+    }
+    this.damageNumbers.push(entry);
   }
 
   _updateDamageNumbers(delta) {
@@ -160,12 +174,10 @@ export class VFXManager {
       dn.life -= delta;
       dn.offsetY += dn.velocity * delta;
 
-      // Project to screen
-      const screenPos = dn.worldPos.clone().project(this.camera);
+      const screenPos = this._tmpScreenPos.copy(dn.worldPos).project(this.camera);
       const x = (screenPos.x * 0.5 + 0.5) * window.innerWidth;
       const y = (-screenPos.y * 0.5 + 0.5) * window.innerHeight + dn.offsetY;
 
-      // Only show if in front of camera
       if (screenPos.z < 1) {
         dn.el.style.left = x + 'px';
         dn.el.style.top = y + 'px';
@@ -176,7 +188,9 @@ export class VFXManager {
       }
 
       if (dn.life <= 0) {
-        dn.el.remove();
+        dn.el.style.display = 'none';
+        this.damageNumberContainer.removeChild(dn.el);
+        this._dmgPool.push(dn.el);
         this.damageNumbers.splice(i, 1);
       }
     }
@@ -1255,8 +1269,10 @@ export class VFXManager {
 
     // Clear DOM elements
     for (const dn of this.damageNumbers) dn.el.remove();
+    for (const el of this._dmgPool) el.remove();
     for (const kf of this.killFeed) kf.el.remove();
     this.damageNumbers = [];
+    this._dmgPool = [];
     this.killFeed = [];
     this.hitMarkerTimer = 0;
     this.hitMarkerEl.className = '';

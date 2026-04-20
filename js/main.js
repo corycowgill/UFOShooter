@@ -30,6 +30,29 @@ let scene, camera, renderer;
 let composer, renderPass, bloomPass;
 let controls, audio, particles, weapons, waveManager, player, hud, helpGuide, vfx;
 
+// Cached DOM refs — populated once to avoid per-frame getElementById
+let _domCache = {};
+function _cacheDom() {
+  _domCache = {
+    crosshair: document.getElementById('crosshair'),
+    speedLines: document.getElementById('speed-lines'),
+    killStreak: document.getElementById('kill-streak'),
+    healthBarContainer: document.getElementById('health-bar-container'),
+    enemyCallout: document.getElementById('enemy-callout'),
+    waveCountdown: document.getElementById('wave-countdown'),
+    reloadBarContainer: document.getElementById('reload-bar-container'),
+    reloadBar: document.getElementById('reload-bar'),
+    bossHealth: document.getElementById('boss-health'),
+    bossBarFill: document.getElementById('boss-bar-fill'),
+    bossName: document.getElementById('boss-name'),
+    damageFlash: document.getElementById('damage-flash'),
+    dmgDirN: document.querySelector('.dmg-dir-n'),
+    dmgDirS: document.querySelector('.dmg-dir-s'),
+    dmgDirE: document.querySelector('.dmg-dir-e'),
+    dmgDirW: document.querySelector('.dmg-dir-w'),
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Health pickups — dropped by enemies on death. A glowing green orb floats
 // at the kill site, pulses, and is collected when the player walks near it.
@@ -86,7 +109,7 @@ function _updatePickups(delta, playerPos) {
         if (vfx) vfx.showHealFlash();
       } else if (p.type === 'shield') {
         player.addShield(PICKUP_SHIELD);
-        const flash = document.getElementById('damage-flash');
+        const flash = _domCache.damageFlash;
         if (flash) {
           flash.style.background = 'rgba(0, 100, 255, 0.25)';
           flash.style.opacity = '1';
@@ -252,6 +275,9 @@ function _init() {
 
   // Hide loading
   document.getElementById('loading').style.display = 'none';
+
+  // Cache frequently-accessed DOM elements
+  _cacheDom();
 
   // Start loop
   animate();
@@ -781,16 +807,15 @@ function _hideOverlays() {
 }
 
 function _showDamageDirection(enemyPos) {
-  const forward = new THREE.Vector3();
-  camera.getWorldDirection(forward);
-  forward.y = 0;
-  forward.normalize();
-  const right = new THREE.Vector3().crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
-  const toEnemy = new THREE.Vector3().subVectors(enemyPos, camera.position);
-  toEnemy.y = 0;
-  toEnemy.normalize();
-  const dotFwd = forward.dot(toEnemy);
-  const dotRight = right.dot(toEnemy);
+  camera.getWorldDirection(_tmpFwd);
+  _tmpFwd.y = 0;
+  _tmpFwd.normalize();
+  const right = _tmpRight.crossVectors(_tmpFwd, _UP).normalize();
+  _tmpToE.subVectors(enemyPos, camera.position);
+  _tmpToE.y = 0;
+  _tmpToE.normalize();
+  const dotFwd = _tmpFwd.dot(_tmpToE);
+  const dotRight = right.dot(_tmpToE);
   let dir;
   if (Math.abs(dotFwd) > Math.abs(dotRight)) {
     dir = dotFwd > 0 ? 'n' : 's';
@@ -800,12 +825,12 @@ function _showDamageDirection(enemyPos) {
   // Map: 'n' = front (from ahead), 's' = behind, 'e' = right, 'w' = left
   // Show the indicator on the side the damage came FROM
   _dmgDirTimers[dir] = 0.5;
-  const el = document.querySelector(`.dmg-dir-${dir}`);
-  if (el) el.classList.add('active');
+  const dirEls = { n: _domCache.dmgDirN, s: _domCache.dmgDirS, e: _domCache.dmgDirE, w: _domCache.dmgDirW };
+  if (dirEls[dir]) dirEls[dir].classList.add('active');
 }
 
 function _updateBossHealthBar(enemies) {
-  const bossEl = document.getElementById('boss-health');
+  const bossEl = _domCache.bossHealth;
   if (!bossEl) return;
   let boss = null;
   for (const e of enemies) {
@@ -814,10 +839,8 @@ function _updateBossHealthBar(enemies) {
   if (boss) {
     bossEl.classList.add('active');
     const pct = Math.max(0, boss.hp / boss.maxHp * 100);
-    const fill = document.getElementById('boss-bar-fill');
-    if (fill) fill.style.width = pct + '%';
-    const nameEl = document.getElementById('boss-name');
-    if (nameEl) nameEl.textContent = boss.isElite ? '◆ ELITE OVERLORD' : '◆ OVERLORD';
+    if (_domCache.bossBarFill) _domCache.bossBarFill.style.width = pct + '%';
+    if (_domCache.bossName) _domCache.bossName.textContent = boss.isElite ? '◆ ELITE OVERLORD' : '◆ OVERLORD';
     if (pct < 30) {
       bossEl.classList.add('enraged');
     } else {
@@ -829,16 +852,14 @@ function _updateBossHealthBar(enemies) {
 }
 
 function _crosshairFire() {
-  const ch = document.getElementById('crosshair');
-  if (ch) {
-    ch.classList.add('firing');
+  if (_domCache.crosshair) {
+    _domCache.crosshair.classList.add('firing');
     _crosshairFireTimer = 0.12;
   }
 }
 function _crosshairHit() {
-  const ch = document.getElementById('crosshair');
-  if (ch) {
-    ch.classList.add('hit');
+  if (_domCache.crosshair) {
+    _domCache.crosshair.classList.add('hit');
     _crosshairHitTimer = 0.15;
   }
 }
@@ -913,13 +934,12 @@ function processHit(hit) {
       audio.playMultiKill();
       const streakName = KILL_STREAK_NAMES[Math.min(_recentKills, KILL_STREAK_NAMES.length - 1)];
       if (streakName) {
-        const ksEl = document.getElementById('kill-streak');
-        if (ksEl) {
-          ksEl.textContent = streakName;
-          ksEl.classList.remove('active', 'mega');
-          void ksEl.offsetWidth;
-          ksEl.classList.add('active');
-          if (_recentKills >= 6) ksEl.classList.add('mega');
+        if (_domCache.killStreak) {
+          _domCache.killStreak.textContent = streakName;
+          _domCache.killStreak.classList.remove('active', 'mega');
+          void _domCache.killStreak.offsetWidth;
+          _domCache.killStreak.classList.add('active');
+          if (_recentKills >= 6) _domCache.killStreak.classList.add('mega');
           _killStreakTimer = 1.5;
         }
       }
@@ -1035,6 +1055,10 @@ let lastWaveState = '';
 // Reusable vectors for animate() loop - avoid per-frame allocations
 const _minimapDir = new THREE.Vector3();
 const _dmgNumPos = new THREE.Vector3();
+const _tmpFwd = new THREE.Vector3();
+const _tmpRight = new THREE.Vector3();
+const _tmpToE = new THREE.Vector3();
+const _UP = new THREE.Vector3(0, 1, 0);
 
 function animate() {
   requestAnimationFrame(animate);
@@ -1104,21 +1128,19 @@ function animate() {
   if (_crosshairFireTimer > 0) {
     _crosshairFireTimer -= delta;
     if (_crosshairFireTimer <= 0) {
-      const ch = document.getElementById('crosshair');
-      if (ch) ch.classList.remove('firing');
+      if (_domCache.crosshair) _domCache.crosshair.classList.remove('firing');
     }
   }
   if (_crosshairHitTimer > 0) {
     _crosshairHitTimer -= delta;
     if (_crosshairHitTimer <= 0) {
-      const ch = document.getElementById('crosshair');
-      if (ch) ch.classList.remove('hit');
+      if (_domCache.crosshair) _domCache.crosshair.classList.remove('hit');
     }
   }
 
   // Health bar damage flash
   if (player.hp < _lastHp) {
-    const hbc = document.getElementById('health-bar-container');
+    const hbc = _domCache.healthBarContainer;
     if (hbc) {
       hbc.classList.remove('damage-flash');
       void hbc.offsetWidth;
@@ -1145,8 +1167,7 @@ function animate() {
   if (_killStreakTimer > 0) {
     _killStreakTimer -= delta;
     if (_killStreakTimer <= 0) {
-      const ksEl = document.getElementById('kill-streak');
-      if (ksEl) ksEl.classList.remove('active', 'mega');
+      if (_domCache.killStreak) _domCache.killStreak.classList.remove('active', 'mega');
     }
   }
   if (vfx) {
@@ -1265,11 +1286,10 @@ function animate() {
     const t = performance.now() * 0.001;
     for (const sl of currentLevelData.streetLights) {
       const ud = sl.userData;
-      if (!ud._streetLight) continue;
+      if (!ud._streetHalo) continue;
       const flicker = Math.random() < ud._streetFlickerChance;
       const pulse = 0.85 + 0.15 * Math.sin(t * 1.2 + ud._streetPhase);
       const intensity = flicker ? 0.2 : pulse;
-      ud._streetLight.intensity = 2.0 * intensity;
       ud._streetHalo.opacity = 0.55 * intensity;
       ud._streetCone.opacity = 0.045 * intensity;
       ud._streetConeInner.opacity = 0.03 * intensity;
@@ -1281,22 +1301,21 @@ function animate() {
   _updateBossHealthBar(waveManager.enemies);
 
   // Speed lines on dash
-  const slEl = document.getElementById('speed-lines');
-  if (slEl) {
+  if (_domCache.speedLines) {
     if (controls && controls.dashTimer > 0) {
-      slEl.classList.add('active');
+      _domCache.speedLines.classList.add('active');
     } else {
-      slEl.classList.remove('active');
+      _domCache.speedLines.classList.remove('active');
     }
   }
 
   // Damage direction timers
+  const _dmgDirEls = { n: _domCache.dmgDirN, s: _domCache.dmgDirS, e: _domCache.dmgDirE, w: _domCache.dmgDirW };
   for (const dir of ['n', 's', 'e', 'w']) {
     if (_dmgDirTimers[dir] > 0) {
       _dmgDirTimers[dir] -= delta;
       if (_dmgDirTimers[dir] <= 0) {
-        const el = document.querySelector(`.dmg-dir-${dir}`);
-        if (el) el.classList.remove('active');
+        if (_dmgDirEls[dir]) _dmgDirEls[dir].classList.remove('active');
       }
     }
   }
@@ -1305,25 +1324,23 @@ function animate() {
   if (_calloutTimer > 0) {
     _calloutTimer -= delta;
     if (_calloutTimer <= 0) {
-      const ecEl = document.getElementById('enemy-callout');
-      if (ecEl) ecEl.classList.remove('active');
+      if (_domCache.enemyCallout) _domCache.enemyCallout.classList.remove('active');
     }
   }
   for (const enemy of waveManager.enemies) {
     if (!enemy.dead && !_seenEnemyTypes.has(enemy.type)) {
       _seenEnemyTypes.add(enemy.type);
       const alienData = ALIEN_TYPES[enemy.type];
-      const ecEl = document.getElementById('enemy-callout');
-      if (ecEl && alienData) {
-        ecEl.textContent = `▸ NEW THREAT: ${alienData.name.toUpperCase()}`;
-        ecEl.classList.add('active');
+      if (_domCache.enemyCallout && alienData) {
+        _domCache.enemyCallout.textContent = `▸ NEW THREAT: ${alienData.name.toUpperCase()}`;
+        _domCache.enemyCallout.classList.add('active');
         _calloutTimer = 3;
       }
     }
   }
 
   // Wave countdown between waves
-  const wcEl = document.getElementById('wave-countdown');
+  const wcEl = _domCache.waveCountdown;
   if (wcEl) {
     if (waveManager.state === 'complete') {
       const t = Math.ceil(waveManager.stateTimer);
@@ -1349,16 +1366,16 @@ function animate() {
   }
 
   // Update HUD
-  hud.update(player, waveManager, weapons.getWeaponData(), LEVELS[currentLevelIndex].name, controls);
+  const _wd = weapons.getWeaponData();
+  hud.update(player, waveManager, _wd, LEVELS[currentLevelIndex].name, controls);
 
   // Reload bar
-  const reloadBarC = document.getElementById('reload-bar-container');
-  const reloadBar = document.getElementById('reload-bar');
+  const reloadBarC = _domCache.reloadBarContainer;
+  const reloadBar = _domCache.reloadBar;
   if (reloadBarC && reloadBar) {
-    const wd = weapons.getWeaponData();
-    if (wd.isReloading) {
+    if (_wd.isReloading) {
       reloadBarC.style.display = 'block';
-      reloadBar.style.width = Math.round(wd.reloadPct * 100) + '%';
+      reloadBar.style.width = Math.round(_wd.reloadPct * 100) + '%';
     } else {
       reloadBarC.style.display = 'none';
     }
