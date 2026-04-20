@@ -2990,7 +2990,6 @@ export function createAlienModel(type) {
     bottomVortex2.position.y = -0.2;
     bottomVortex2.rotation.x = Math.PI / 2;
     group.add(bottomVortex2);
-  }
 
   } else if (type === 'boss') {
     // === BOSS: Massive alien overlord — towering armored commander ===
