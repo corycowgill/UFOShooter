@@ -516,7 +516,7 @@ function makeStreetLight(x, z) {
   const cone = new THREE.Mesh(
     new THREE.CylinderGeometry(0.15, 2.2, coneH, 12, 1, true),
     new THREE.MeshBasicMaterial({
-      color: 0xffdd88, transparent: true, opacity: 0.045,
+      color: 0xffdd88, transparent: true, opacity: 0.08,
       blending: THREE.AdditiveBlending, depthWrite: false,
       side: THREE.DoubleSide, toneMapped: false,
     })
@@ -527,18 +527,18 @@ function makeStreetLight(x, z) {
   const coneInner = new THREE.Mesh(
     new THREE.CylinderGeometry(0.08, 1.0, coneH, 8, 1, true),
     new THREE.MeshBasicMaterial({
-      color: 0xffeebb, transparent: true, opacity: 0.03,
+      color: 0xffeebb, transparent: true, opacity: 0.05,
       blending: THREE.AdditiveBlending, depthWrite: false,
       side: THREE.DoubleSide, toneMapped: false,
     })
   );
   coneInner.position.set(1.2, 4.5 - coneH / 2, 0);
   group.add(coneInner);
-  // Ground light pool — bright circle on the ground
+  // Ground light pool — bright circle on the ground (replaces PointLight illumination)
   const pool = new THREE.Mesh(
-    new THREE.CircleGeometry(2.0, 16),
+    new THREE.CircleGeometry(3.5, 16),
     new THREE.MeshBasicMaterial({
-      color: 0xffdd88, transparent: true, opacity: 0.06,
+      color: 0xffdd88, transparent: true, opacity: 0.18,
       blending: THREE.AdditiveBlending, depthWrite: false,
       toneMapped: false,
     })
@@ -546,6 +546,18 @@ function makeStreetLight(x, z) {
   pool.rotation.x = -Math.PI / 2;
   pool.position.set(1.2, 0.02, 0);
   group.add(pool);
+  // Wider soft outer glow on ground
+  const poolOuter = new THREE.Mesh(
+    new THREE.CircleGeometry(6.0, 16),
+    new THREE.MeshBasicMaterial({
+      color: 0xffdd88, transparent: true, opacity: 0.06,
+      blending: THREE.AdditiveBlending, depthWrite: false,
+      toneMapped: false,
+    })
+  );
+  poolOuter.rotation.x = -Math.PI / 2;
+  poolOuter.position.set(1.2, 0.01, 0);
+  group.add(poolOuter);
   group.position.set(x, 0, z);
   group.userData._streetLight = light;
   group.userData._streetHalo = halo.material;
@@ -1502,7 +1514,7 @@ function addGround(group, size, color = 0x333333) {
   // Main ground
   const ground = new THREE.Mesh(
     new THREE.PlaneGeometry(size * 2, size * 2, 1, 1),
-    makeMaterial(color, 0x111111)
+    makeMaterial(color, 0x1a1a1a)
   );
   ground.rotation.x = -Math.PI / 2;
   ground.receiveShadow = true;
