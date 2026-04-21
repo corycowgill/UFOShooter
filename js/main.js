@@ -1260,8 +1260,6 @@ function animate() {
     if (ud._beamMat) {
       const pulse = 0.03 + 0.015 * Math.sin(bt * 1.5) + 0.008 * Math.sin(bt * 3.7);
       ud._beamMat.opacity = pulse;
-      ud._innerBeamMat.opacity = pulse * 0.6;
-      ud._beamGroundGlowMat.opacity = 0.03 + 0.02 * Math.sin(bt * 2.0 + 1.0);
     }
   }
 
@@ -1282,7 +1280,6 @@ function animate() {
       const pulse = 0.7 + 0.3 * Math.sin(t * ud._neonSpeed + ud._neonPhase);
       const alpha = flicker ? 0.1 : pulse;
       ud._neonMat.opacity = alpha * 0.9;
-      ud._neonGlowMat.opacity = alpha * 0.15;
     }
   }
 
@@ -1297,7 +1294,6 @@ function animate() {
       const intensity = flicker ? 0.2 : pulse;
       ud._streetHalo.opacity = 0.55 * intensity;
       ud._streetCone.opacity = 0.045 * intensity;
-      ud._streetConeInner.opacity = 0.03 * intensity;
       ud._streetPool.opacity = 0.06 * intensity;
     }
   }

@@ -482,16 +482,6 @@ function makeStreetLight(x, z) {
   );
   fixture.position.set(1.2, 4.7, 0);
   group.add(fixture);
-  // Glass envelope
-  const glass = new THREE.Mesh(
-    new THREE.SphereGeometry(0.13, 8, 6),
-    new THREE.MeshPhongMaterial({
-      color: 0xffeecc, transparent: true, opacity: 0.35,
-      shininess: 140, emissive: 0x553311,
-    })
-  );
-  glass.position.set(1.2, 4.52, 0);
-  group.add(glass);
   // Bulb — HDR boost for bloom halo
   const bulb = new THREE.Mesh(
     new THREE.SphereGeometry(0.08, 8, 8),
@@ -510,33 +500,21 @@ function makeStreetLight(x, z) {
   );
   halo.position.set(1.2, 4.55, 0);
   group.add(halo);
-  const light = null;
-  // Volumetric light cone — visible beam of light falling from the fixture
+  // Single volumetric light cone (merged outer+inner for fewer draw calls)
   const coneH = 4.4;
   const cone = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.15, 2.2, coneH, 12, 1, true),
+    new THREE.CylinderGeometry(0.12, 2.0, coneH, 8, 1, true),
     new THREE.MeshBasicMaterial({
-      color: 0xffdd88, transparent: true, opacity: 0.08,
+      color: 0xffeebb, transparent: true, opacity: 0.07,
       blending: THREE.AdditiveBlending, depthWrite: false,
       side: THREE.DoubleSide, toneMapped: false,
     })
   );
   cone.position.set(1.2, 4.5 - coneH / 2, 0);
   group.add(cone);
-  // Inner brighter core cone
-  const coneInner = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.08, 1.0, coneH, 8, 1, true),
-    new THREE.MeshBasicMaterial({
-      color: 0xffeebb, transparent: true, opacity: 0.05,
-      blending: THREE.AdditiveBlending, depthWrite: false,
-      side: THREE.DoubleSide, toneMapped: false,
-    })
-  );
-  coneInner.position.set(1.2, 4.5 - coneH / 2, 0);
-  group.add(coneInner);
-  // Ground light pool — bright circle on the ground (replaces PointLight illumination)
+  // Ground light pool
   const pool = new THREE.Mesh(
-    new THREE.CircleGeometry(3.5, 16),
+    new THREE.CircleGeometry(5.0, 10),
     new THREE.MeshBasicMaterial({
       color: 0xffdd88, transparent: true, opacity: 0.18,
       blending: THREE.AdditiveBlending, depthWrite: false,
@@ -547,10 +525,8 @@ function makeStreetLight(x, z) {
   pool.position.set(1.2, 0.02, 0);
   group.add(pool);
   group.position.set(x, 0, z);
-  group.userData._streetLight = light;
   group.userData._streetHalo = halo.material;
   group.userData._streetCone = cone.material;
-  group.userData._streetConeInner = coneInner.material;
   group.userData._streetPool = pool.material;
   group.userData._streetPhase = Math.random() * Math.PI * 2;
   group.userData._streetFlickerChance = 0.003 + Math.random() * 0.004;
@@ -566,15 +542,6 @@ function makeNeonSign(x, y, z, rotY, color, width, height) {
   mat.color.multiplyScalar(2.5);
   const sign = new THREE.Mesh(new THREE.PlaneGeometry(width, height), mat);
   group.add(sign);
-  const glowMat = new THREE.MeshBasicMaterial({
-    color, transparent: true, opacity: 0.15,
-    toneMapped: false, blending: THREE.AdditiveBlending,
-    depthWrite: false, side: THREE.DoubleSide,
-  });
-  glowMat.color.multiplyScalar(1.5);
-  const glow = new THREE.Mesh(new THREE.PlaneGeometry(width * 1.4, height * 1.6), glowMat);
-  glow.position.z = -0.05;
-  group.add(glow);
   // Frame outline
   const frameMat = new THREE.MeshBasicMaterial({ color: 0x333333 });
   const top = new THREE.Mesh(new THREE.BoxGeometry(width + 0.1, 0.04, 0.04), frameMat);
@@ -586,7 +553,6 @@ function makeNeonSign(x, y, z, rotY, color, width, height) {
   group.position.set(x, y, z);
   group.rotation.y = rotY;
   group.userData._neonMat = mat;
-  group.userData._neonGlowMat = glowMat;
   group.userData._neonPhase = Math.random() * Math.PI * 2;
   group.userData._neonSpeed = 0.5 + Math.random() * 2;
   group.userData._neonFlickerChance = 0.002 + Math.random() * 0.005;
@@ -1569,11 +1535,6 @@ function addGround(group, size, color = 0x333333) {
     shininess: 200, specular: 0x667788, reflectivity: 1,
   });
   puddleMat.__shared = true;
-  const puddleGlowMat = new THREE.MeshBasicMaterial({
-    color: 0x223344, transparent: true, opacity: 0.06,
-    blending: THREE.AdditiveBlending, depthWrite: false,
-  });
-  puddleGlowMat.__shared = true;
   for (let i = 0; i < 12; i++) {
     const px = (Math.random() - 0.5) * size * 1.2;
     const pz = (Math.random() - 0.5) * size * 1.2;
@@ -1583,11 +1544,6 @@ function addGround(group, size, color = 0x333333) {
     puddle.position.set(px, 0.009, pz);
     puddle.scale.set(1 + Math.random() * 0.8, 1, 1 + Math.random() * 0.3);
     group.add(puddle);
-    // Subtle glow reflection in puddle
-    const glow = new THREE.Mesh(new THREE.CircleGeometry(ps * 0.6, 8), puddleGlowMat);
-    glow.rotation.x = -Math.PI / 2;
-    glow.position.set(px, 0.01, pz);
-    group.add(glow);
   }
 }
 
@@ -1766,13 +1722,11 @@ function addSky(scene) {
   const brightStarPoints = new THREE.Points(brightStarGeo, brightStarMat);
   scene.add(brightStarPoints);
 
-  // Nebula patches (soft colored cloud patches in the sky)
+  // Nebula patches (reduced for performance — 3 without halos)
   const nebulaData = [
     { x: 150, y: 300, z: -200, color: 0x220044, scale: 80, opacity: 0.06 },
     { x: -200, y: 350, z: -100, color: 0x001133, scale: 100, opacity: 0.05 },
     { x: 100, y: 280, z: 200, color: 0x110022, scale: 70, opacity: 0.04 },
-    { x: -100, y: 320, z: -250, color: 0x002244, scale: 90, opacity: 0.05 },
-    { x: 250, y: 350, z: 50, color: 0x180030, scale: 60, opacity: 0.04 },
   ];
   for (const nd of nebulaData) {
     const nebula = new THREE.Mesh(
@@ -1782,37 +1736,6 @@ function addSky(scene) {
     nebula.position.set(nd.x, nd.y, nd.z);
     nebula.scale.set(1.5, 0.6, 1.2);
     scene.add(nebula);
-    // Secondary softer halo
-    const halo = new THREE.Mesh(
-      new THREE.SphereGeometry(nd.scale * 1.4, 6, 4),
-      new THREE.MeshBasicMaterial({ color: nd.color, transparent: true, opacity: nd.opacity * 0.4 })
-    );
-    halo.position.copy(nebula.position);
-    halo.scale.set(2, 0.8, 1.5);
-    scene.add(halo);
-  }
-
-  // Aurora-like streaks (elongated glowing bands)
-  for (let i = 0; i < 4; i++) {
-    const auroraGeo = new THREE.PlaneGeometry(120 + Math.random() * 80, 8 + Math.random() * 6);
-    const auroraMat = new THREE.MeshBasicMaterial({
-      color: i < 2 ? 0x00ff66 : 0x4400ff,
-      transparent: true,
-      opacity: 0.015 + Math.random() * 0.01,
-      side: THREE.DoubleSide,
-    });
-    const aurora = new THREE.Mesh(auroraGeo, auroraMat);
-    aurora.position.set(
-      (Math.random() - 0.5) * 300,
-      200 + Math.random() * 150,
-      -150 + Math.random() * 100
-    );
-    aurora.rotation.set(
-      0.3 + Math.random() * 0.3,
-      Math.random() * Math.PI,
-      Math.random() * 0.3
-    );
-    scene.add(aurora);
   }
 
   // Moon
@@ -1828,13 +1751,8 @@ function addSky(scene) {
     new THREE.MeshBasicMaterial({ color: 0xddddaa, transparent: true, opacity: 0.08 })
   );
   moonGroup.add(moonGlow);
-  const moonGlow2 = new THREE.Mesh(
-    new THREE.SphereGeometry(28, 8, 8),
-    new THREE.MeshBasicMaterial({ color: 0xccccaa, transparent: true, opacity: 0.03 })
-  );
-  moonGroup.add(moonGlow2);
-  // Craters
-  for (let i = 0; i < 8; i++) {
+  // Craters (reduced from 8 to 3)
+  for (let i = 0; i < 3; i++) {
     const crater = new THREE.Mesh(
       new THREE.CircleGeometry(1.5 + Math.random() * 2, 8),
       new THREE.MeshBasicMaterial({ color: 0xbbbb99, transparent: true, opacity: 0.3 })
@@ -1849,18 +1767,6 @@ function addSky(scene) {
     crater.lookAt(0, 0, 0);
     moonGroup.add(crater);
   }
-  // Moon maria (dark patches)
-  for (let i = 0; i < 3; i++) {
-    const maria = new THREE.Mesh(
-      new THREE.CircleGeometry(4 + Math.random() * 3, 8),
-      new THREE.MeshBasicMaterial({ color: 0x999977, transparent: true, opacity: 0.15 })
-    );
-    const ma1 = 0.2 + Math.random() * 0.4;
-    const ma2 = -0.3 + Math.random() * 0.6;
-    maria.position.set(Math.sin(ma1) * 14, Math.cos(ma1) * Math.sin(ma2) * 14, Math.cos(ma1) * Math.cos(ma2) * 14);
-    maria.lookAt(0, 0, 0);
-    moonGroup.add(maria);
-  }
   moonGroup.position.set(200, 250, -300);
   scene.add(moonGroup);
   // Moonlight
@@ -1868,10 +1774,10 @@ function addSky(scene) {
   moonLight.position.set(200, 250, -300);
   scene.add(moonLight);
 
-  // Wispy clouds (semi-transparent volumes)
-  for (let i = 0; i < 15; i++) {
+  // Wispy clouds (reduced for performance)
+  for (let i = 0; i < 6; i++) {
     const cloudGroup = new THREE.Group();
-    const cloudCount = 3 + Math.floor(Math.random() * 5);
+    const cloudCount = 2 + Math.floor(Math.random() * 3);
     for (let j = 0; j < cloudCount; j++) {
       const cloud = new THREE.Mesh(
         new THREE.SphereGeometry(8 + Math.random() * 12, 6, 4),
@@ -2012,23 +1918,10 @@ function addSky(scene) {
   const beam = new THREE.Mesh(beamGeo, beamMeshMat);
   beam.position.y = -42;
   ufoGroup.add(beam);
-  // Inner beam (brighter core)
-  const innerBeamGeo = new THREE.CylinderGeometry(0.5, 5, 80, 8, 1, true);
-  const innerBeamMat = new THREE.MeshBasicMaterial({ color: 0x88ffbb, transparent: true, opacity: 0.025, side: THREE.DoubleSide });
-  const innerBeam = new THREE.Mesh(innerBeamGeo, innerBeamMat);
-  innerBeam.position.y = -42;
-  ufoGroup.add(innerBeam);
-  // Beam ground glow ring
-  const beamGroundGlow = new THREE.Mesh(
-    new THREE.RingGeometry(8, 16, 16),
-    new THREE.MeshBasicMaterial({ color: 0x00ff88, transparent: true, opacity: 0.04, side: THREE.DoubleSide })
-  );
-  beamGroundGlow.rotation.x = -Math.PI / 2;
-  beamGroundGlow.position.y = -79;
-  ufoGroup.add(beamGroundGlow);
-  // Running lights (alternating green/cyan with glow halos)
-  for (let i = 0; i < 16; i++) {
-    const angle = (i / 16) * Math.PI * 2;
+  // (inner beam and ground glow removed for performance)
+  // Running lights (reduced from 16 to 8, halos removed)
+  for (let i = 0; i < 8; i++) {
+    const angle = (i / 8) * Math.PI * 2;
     const lightColor = i % 2 === 0 ? 0x00ff88 : 0x00ffcc;
     const rl = new THREE.Mesh(
       new THREE.SphereGeometry(0.3, 6, 6),
@@ -2036,15 +1929,6 @@ function addSky(scene) {
     );
     rl.position.set(Math.cos(angle) * 10.5, -1, Math.sin(angle) * 10.5);
     ufoGroup.add(rl);
-    // Light halo
-    if (i % 4 === 0) {
-      const rlHalo = new THREE.Mesh(
-        new THREE.SphereGeometry(0.6, 4, 4),
-        new THREE.MeshBasicMaterial({ color: lightColor, transparent: true, opacity: 0.15 })
-      );
-      rlHalo.position.copy(rl.position);
-      ufoGroup.add(rlHalo);
-    }
   }
   // Top antenna/sensor array
   const antenna = new THREE.Mesh(
@@ -2059,9 +1943,9 @@ function addSky(scene) {
   );
   antennaTip.position.y = 5.5;
   ufoGroup.add(antennaTip);
-  // Window ports with glow backing
-  for (let i = 0; i < 16; i++) {
-    const angle = (i / 16) * Math.PI * 2;
+  // Window ports with glow backing (reduced from 16 to 8)
+  for (let i = 0; i < 8; i++) {
+    const angle = (i / 8) * Math.PI * 2;
     const port = new THREE.Mesh(
       new THREE.CircleGeometry(0.35, 8),
       new THREE.MeshBasicMaterial({ color: 0x88ffbb, transparent: true, opacity: 0.5 })
@@ -2079,20 +1963,8 @@ function addSky(scene) {
     ufoGroup.add(frame);
   }
   ufoGroup.userData._beamMat = beamMeshMat;
-  ufoGroup.userData._innerBeamMat = innerBeamMat;
-  ufoGroup.userData._beamGroundGlowMat = beamGroundGlow.material;
   ufoGroup.position.set(0, 80, -30);
   scene.add(ufoGroup);
-
-  // Atmospheric light pillars (subtle vertical glow from UFO)
-  for (let i = 0; i < 3; i++) {
-    const pillar = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.5, 2, 40, 6, 1, true),
-      new THREE.MeshBasicMaterial({ color: 0x00ff88, transparent: true, opacity: 0.012, side: THREE.DoubleSide })
-    );
-    pillar.position.set((i - 1) * 12, 40, -30);
-    scene.add(pillar);
-  }
 
   // Enhanced fog with better density
   scene.fog = new THREE.FogExp2(0x0e0e2a, 0.0035);
@@ -2881,7 +2753,7 @@ function buildDowntownChicago(scene) {
   for (const bd of eastBldgData) addBuilding(bd, -1);
 
   // === STREET LIGHTS along Michigan Ave ===
-  for (let z = -80; z < 80; z += 15) {
+  for (let z = -80; z < 80; z += 30) {
     // Skip river zone (-7 to 7)
     if (z > -8 && z < 8) continue;
     const sl1 = makeStreetLight(8, z); group.add(sl1); streetLights.push(sl1);
@@ -3320,7 +3192,7 @@ function buildLincolnParkZoo(scene) {
 
   // Lamp posts
   const streetLights = [];
-  for (let z = -40; z < 50; z += 12) {
+  for (let z = -40; z < 50; z += 24) {
     const sl1 = makeStreetLight(2.5, z); group.add(sl1); streetLights.push(sl1);
     const sl2 = makeStreetLight(-2.5, z); group.add(sl2); streetLights.push(sl2);
   }
@@ -3716,7 +3588,7 @@ function buildRavenswood(scene) {
 
   // Street lights
   const streetLights = [];
-  for (let z = -60; z < 60; z += 15) {
+  for (let z = -60; z < 60; z += 30) {
     const sl1 = makeStreetLight(-7, z); group.add(sl1); streetLights.push(sl1);
     const sl2 = makeStreetLight(7, z); group.add(sl2); streetLights.push(sl2);
   }
