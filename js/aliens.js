@@ -3122,6 +3122,7 @@ export class Alien {
 
     // Reusable temp vector to avoid per-frame allocations
     this._tmpVec = new THREE.Vector3();
+    this._tmpVec2 = new THREE.Vector3();
 
     // Ambient VFX state
     this.hitFlashTimer = 0;
@@ -3594,12 +3595,15 @@ export class Alien {
     this.mesh.position.x += toPlayer.x * moveSpeed + this._tmpVec.x;
     this.mesh.position.z += toPlayer.z * moveSpeed + this._tmpVec.z;
 
-    // Cloaking effect - use cached materials (no traverse)
+    // Cloaking effect — only write materials when opacity tier changes
     const cloakOpacity = dist < 8 ? 0.8 : dist < 20 ? 0.3 : 0.1;
-    for (let i = 0, len = this._allMaterials.length; i < len; i++) {
-      const mat = this._allMaterials[i];
-      mat.transparent = true;
-      mat.opacity = cloakOpacity;
+    if (cloakOpacity !== this._lastCloakOpacity) {
+      this._lastCloakOpacity = cloakOpacity;
+      for (let i = 0, len = this._allMaterials.length; i < len; i++) {
+        const mat = this._allMaterials[i];
+        mat.transparent = true;
+        mat.opacity = cloakOpacity;
+      }
     }
   }
 
@@ -3702,16 +3706,17 @@ export class Alien {
         this.attackCooldown = this.data.attackRate * 2;
       } else {
         // Summon — spawn extra bolts in all directions
+        const from = this._tmpVec;
         for (let a = 0; a < 8; a++) {
           const angle = (a / 8) * Math.PI * 2;
-          const from = new THREE.Vector3().copy(this.mesh.position);
+          from.copy(this.mesh.position);
           from.y += 2;
-          const target = new THREE.Vector3(
+          this._tmpVec2.set(
             this.mesh.position.x + Math.sin(angle) * 20,
             1,
             this.mesh.position.z + Math.cos(angle) * 20
           );
-          const bolt = this.particles.createAlienBolt(from, target, 25, 'boss');
+          const bolt = this.particles.createAlienBolt(from, this._tmpVec2, 25, 'boss');
           this.projectiles.push(bolt);
         }
         this.audio.playAlienShoot();
@@ -3817,11 +3822,11 @@ export class Alien {
       bolt.mesh.position.x += bolt.direction.x * bSpd;
       bolt.mesh.position.y += bolt.direction.y * bSpd;
       bolt.mesh.position.z += bolt.direction.z * bSpd;
-      if (bolt.gravity) bolt.mesh.lookAt(
-        bolt.mesh.position.x + bolt.direction.x,
-        bolt.mesh.position.y + bolt.direction.y,
-        bolt.mesh.position.z + bolt.direction.z
-      );
+      if (bolt.gravity) {
+        const d = bolt.direction;
+        bolt.mesh.rotation.x = Math.atan2(-d.y, Math.sqrt(d.x * d.x + d.z * d.z));
+        bolt.mesh.rotation.y = Math.atan2(d.x, d.z);
+      }
       bolt.life -= delta;
 
       // Spitter acid hits the ground → acid pool

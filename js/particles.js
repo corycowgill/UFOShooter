@@ -279,8 +279,9 @@ class PointField {
       alphas[write] = al;
       write++;
     }
+    const prevRange = this.geo.drawRange.count;
     this.geo.setDrawRange(0, write);
-    if (write > 0) {
+    if (write > 0 || prevRange > 0) {
       this.geo.attributes.position.needsUpdate = true;
       this.geo.attributes.aColor.needsUpdate = true;
       this.geo.attributes.aSize.needsUpdate = true;

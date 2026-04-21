@@ -2,6 +2,7 @@
 import { disposeTree } from './particles.js';
 
 const _UP = new THREE.Vector3(0, 1, 0);
+let _weaponKeys = [];
 
 export const WEAPONS = {
   laserRifle: {
@@ -59,6 +60,7 @@ export const WEAPONS = {
     key: '4',
   },
 };
+_weaponKeys = Object.keys(WEAPONS);
 
 // Fresnel rim-light shader patch for weapon viewmodels. Gives the hero's
 // gun a subtle glowing edge that reads against any background.
@@ -172,9 +174,9 @@ export class WeaponManager {
   _initWeaponView() {
     const canvas = document.getElementById('weapon-canvas');
     if (!canvas) return;
-    this.weaponRenderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
+    this.weaponRenderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: false });
     this.weaponRenderer.setSize(500, 400);
-    this.weaponRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.weaponRenderer.setPixelRatio(1);
     this.weaponRenderer.setClearColor(0x000000, 0);
 
     this.weaponScene = new THREE.Scene();
@@ -2000,7 +2002,7 @@ export class WeaponManager {
       velocity: dir.clone().multiplyScalar(weapon.projectileSpeed),
       damage: Math.floor(weapon.damage * (this.player ? this.player.damageMultiplier : 1)),
       radius: weapon.explosionRadius * (this.player ? this.player.explosionRadiusMultiplier : 1),
-      range: weapon.range,
+      rangeSq: weapon.range * weapon.range,
       distanceTraveled: 0,
       age: 0,
       weapon,
@@ -2020,7 +2022,7 @@ export class WeaponManager {
       p.position.x += stepX;
       p.position.y += stepY;
       p.position.z += stepZ;
-      p.distanceTraveled += Math.sqrt(stepX * stepX + stepY * stepY + stepZ * stepZ);
+      p.distanceTraveled += stepX * stepX + stepY * stepY + stepZ * stepZ;
       p.mesh.position.copy(p.position);
 
       // Animate core/halo pulsing
@@ -2050,7 +2052,7 @@ export class WeaponManager {
 
       // Detonate on enemy hit, ground hit, or max range
       const hitGround = p.position.y <= 0.3;
-      const outOfRange = p.distanceTraveled >= p.range;
+      const outOfRange = p.distanceTraveled >= p.rangeSq;
       if (hitEnemy || hitGround || outOfRange) {
         this._detonateRocket(p, enemies);
         this.scene.remove(p.mesh);
@@ -2209,7 +2211,7 @@ export class WeaponManager {
     if (this.grenadeCooldown > 0) this.grenadeCooldown -= delta;
 
     // Reload timers
-    for (const key of Object.keys(this.reloading)) {
+    for (const key of _weaponKeys) {
       if (this.reloading[key]) {
         this.reloadTimer[key] -= delta;
         if (this.reloadTimer[key] <= 0) {
@@ -2223,13 +2225,13 @@ export class WeaponManager {
     if (enemies) this._updateProjectiles(delta, enemies);
     this._updateGrenades(delta, enemies);
 
-    // Recoil recovery
+    // Recoil recovery — exp decay via multiply (cheaper than Math.pow)
     if (this.recoilOffset > 0) {
-      this.recoilOffset *= Math.pow(0.02, delta); // Exponential decay
+      this.recoilOffset *= 1 - delta * 55;
       if (this.recoilOffset < 0.001) this.recoilOffset = 0;
     }
     if (this.recoilRotX > 0) {
-      this.recoilRotX *= Math.pow(0.02, delta);
+      this.recoilRotX *= 1 - delta * 55;
       if (this.recoilRotX < 0.001) this.recoilRotX = 0;
     }
 

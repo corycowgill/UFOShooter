@@ -1,4 +1,9 @@
 // hud.js - HUD rendering and minimap
+const _MINIMAP_COLORS = {
+  grunt: '#0c4', swarmer: '#90f', bloater: '#f40',
+  stalker: '#088', spitter: '#8c0', drone: '#48f', boss: '#f60',
+};
+
 export class HUD {
   constructor() {
     this.elements = {
@@ -17,6 +22,7 @@ export class HUD {
     };
     this.minimapCanvas = document.getElementById('minimap');
     this.minimapCtx = this.minimapCanvas ? this.minimapCanvas.getContext('2d') : null;
+    this._minimapGridCache = null;
     this.announceTimer = 0;
     this.comboEl = document.getElementById('combo-display');
     this._last = {
@@ -208,18 +214,26 @@ export class HUD {
     const w = 150, h = 150;
     const scale = w / (mapSize * 2);
 
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
-    ctx.fillRect(0, 0, w, h);
-
-    // Grid
-    ctx.strokeStyle = 'rgba(0, 255, 0, 0.1)';
-    ctx.lineWidth = 0.5;
-    for (let i = 0; i <= w; i += 15) {
-      ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, h); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(w, i); ctx.stroke();
+    // Build static grid + border once as an offscreen image
+    if (!this._minimapGridCache) {
+      const off = document.createElement('canvas');
+      off.width = w; off.height = h;
+      const oc = off.getContext('2d');
+      oc.fillStyle = 'rgba(0, 0, 0, 0.8)';
+      oc.fillRect(0, 0, w, h);
+      oc.strokeStyle = 'rgba(0, 255, 0, 0.1)';
+      oc.lineWidth = 0.5;
+      for (let i = 0; i <= w; i += 15) {
+        oc.beginPath(); oc.moveTo(i, 0); oc.lineTo(i, h); oc.stroke();
+        oc.beginPath(); oc.moveTo(0, i); oc.lineTo(w, i); oc.stroke();
+      }
+      oc.strokeStyle = '#0f0';
+      oc.lineWidth = 1;
+      oc.strokeRect(0, 0, w, h);
+      this._minimapGridCache = off;
     }
+    ctx.drawImage(this._minimapGridCache, 0, 0);
 
-    // Player position (center of minimap)
     const cx = w / 2;
     const cy = h / 2;
 
@@ -239,10 +253,6 @@ export class HUD {
 
     // Enemies
     const time = performance.now() * 0.001;
-    const typeColors = {
-      grunt: '#0c4', swarmer: '#90f', bloater: '#f40',
-      stalker: '#088', spitter: '#8c0', drone: '#48f', boss: '#f60',
-    };
     for (const enemy of enemies) {
       if (enemy.dead) continue;
       const dx = (enemy.mesh.position.x - playerPos.x) * scale;
@@ -251,8 +261,6 @@ export class HUD {
       const ey = cy - dz;
 
       if (ex < 0 || ex > w || ey < 0 || ey > h) continue;
-
-      ctx.fillStyle = typeColors[enemy.type] || '#f22';
 
       if (enemy.isBoss) {
         const pulse = 4 + Math.sin(time * 4) * 1.5;
@@ -266,6 +274,7 @@ export class HUD {
         ctx.arc(ex, ey, pulse + 2, 0, Math.PI * 2);
         ctx.stroke();
       } else if (enemy.isElite) {
+        ctx.fillStyle = _MINIMAP_COLORS[enemy.type] || '#f22';
         ctx.beginPath();
         ctx.arc(ex, ey, 3, 0, Math.PI * 2);
         ctx.fill();
@@ -275,15 +284,11 @@ export class HUD {
         ctx.arc(ex, ey, 4, 0, Math.PI * 2);
         ctx.stroke();
       } else {
+        ctx.fillStyle = _MINIMAP_COLORS[enemy.type] || '#f22';
         ctx.beginPath();
         ctx.arc(ex, ey, 2, 0, Math.PI * 2);
         ctx.fill();
       }
     }
-
-    // Border
-    ctx.strokeStyle = '#0f0';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(0, 0, w, h);
   }
 }
