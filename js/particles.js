@@ -328,6 +328,21 @@ function clearParticleFields() {
   if (_normalField) _normalField.clear();
 }
 
+export function getActiveLightCount() {
+  let count = 0;
+  for (let i = 0; i < _poolSlots.length; i++) {
+    if (_poolSlots[i].inUse) count++;
+  }
+  return count;
+}
+
+export function getActiveParticleCount() {
+  let count = 0;
+  if (_additiveField) count += _additiveField.geo.drawRange.count;
+  if (_normalField) count += _normalField.geo.drawRange.count;
+  return count;
+}
+
 // ---------------------------------------------------------------------------
 // Shared unit primitives for per-shot visuals.
 //

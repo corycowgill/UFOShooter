@@ -10,7 +10,10 @@ import { HelpGuide } from './help.js';
 import { VFXManager } from './vfx.js';
 import { LEVELS } from './levels.js';
 import { ALIEN_TYPES } from './aliens.js';
-import { disposeTree, initLightPool, initParticleFields } from './particles.js';
+import { disposeTree, initLightPool, initParticleFields, getActiveParticleCount, getActiveLightCount } from './particles.js';
+import { PerfProfiler } from './perf.js';
+
+const perf = new PerfProfiler();
 
 // Dispose a rocket projectile mesh + its GPU buffers.
 function _disposeProjectile(mesh) {
@@ -495,6 +498,9 @@ function setupEventListeners() {
     if (e.code === 'Escape' && helpGuide.isOpen) {
       helpGuide.close();
     }
+    // Performance profiler
+    if (e.code === 'F3') { e.preventDefault(); perf.toggle(); }
+    if (e.code === 'F4') { e.preventDefault(); perf.dumpReport(); }
   });
 
   // Mouse
@@ -1124,10 +1130,18 @@ function animate() {
   }
   delta *= _killTimeScale;
 
+  perf.frameBegin();
+
   // Update systems
+  perf.sectionBegin('controls');
   controls.update(delta, currentLevelData ? currentLevelData.colliders : []);
+  perf.sectionEnd('controls');
+  perf.sectionBegin('player');
   player.update(delta);
+  perf.sectionEnd('player');
+  perf.sectionBegin('particles');
   particles.update(delta);
+  perf.sectionEnd('particles');
 
   // Feed movement direction to weapon for tilt
   if (weapons && controls) {
@@ -1139,7 +1153,9 @@ function animate() {
     weapons._moveTiltX = (weapons._moveTiltX || 0) + (sideSpeed - (weapons._moveTiltX || 0)) * Math.min(1, 8 * delta);
     weapons._moveTiltZ = (weapons._moveTiltZ || 0) + (fwdSpeed - (weapons._moveTiltZ || 0)) * Math.min(1, 8 * delta);
   }
+  perf.sectionBegin('weapons');
   weapons.update(delta, waveManager ? waveManager.enemies : null);
+  perf.sectionEnd('weapons');
   hud.updateAnnouncement(delta);
 
   // Footsteps
@@ -1207,16 +1223,20 @@ function animate() {
       if (_domCache.killStreak) _domCache.killStreak.classList.remove('active', 'mega');
     }
   }
+  perf.sectionBegin('vfx');
   if (vfx) {
     vfx.update(delta, player.hp / player.maxHp, camera.position);
     if (vfx.lastAcidDamage && !player.dead && !(controls && controls.dashTimer > 0)) {
       player.takeDamage(vfx.lastAcidDamage, audio);
     }
   }
+  perf.sectionEnd('vfx');
 
   // Wave management
+  perf.sectionBegin('waves');
   const prevState = waveManager.state;
   waveManager.update(delta, camera.position);
+  perf.sectionEnd('waves');
 
   if (waveManager.state === 'complete' && prevState !== 'complete') {
     audio.playWaveComplete();
@@ -1254,6 +1274,7 @@ function animate() {
   _updatePickups(delta, camera.position);
 
   // Check enemy collisions with player (dash = i-frames)
+  perf.sectionBegin('collision');
   const dashing = controls && controls.dashTimer > 0;
   for (const enemy of waveManager.enemies) {
     const result = enemy.checkPlayerCollision(camera.position, delta);
@@ -1274,6 +1295,8 @@ function animate() {
     }
   }
 
+  perf.sectionEnd('collision');
+
   // Check player death
   if (player.dead) {
     gameOver();
@@ -1281,6 +1304,7 @@ function animate() {
   }
 
   // Animate UFO mothership
+  perf.sectionBegin('worldAnim');
   if (currentLevelData && currentLevelData.ufo) {
     const ufo = currentLevelData.ufo;
     ufo.rotation.y += delta * 0.1;
@@ -1330,7 +1354,10 @@ function animate() {
     }
   }
 
+  perf.sectionEnd('worldAnim');
+
   // Boss health bar
+  perf.sectionBegin('hud');
   _updateBossHealthBar(waveManager.enemies);
 
   // Speed lines on dash
@@ -1418,9 +1445,12 @@ function animate() {
   camera.getWorldDirection(_minimapDir);
   hud.drawMinimap(camera.position, _minimapDir, waveManager.enemies);
 
+  perf.sectionEnd('hud');
+
   // Render — routed through the postprocessing composer so UnrealBloom
   // picks up the additive laser/VFX glow. Falls back to direct render if
   // the postprocessing addons failed to load.
+  perf.sectionBegin('render');
   if (composer) {
     renderPass.scene = scene;
     renderPass.camera = camera;
@@ -1428,6 +1458,20 @@ function animate() {
   } else {
     renderer.render(scene, camera);
   }
+  perf.sectionEnd('render');
+
+  // Update profiler counters and finalize frame
+  if (perf.enabled) {
+    const ri = renderer.info;
+    perf.counters.enemies = waveManager ? waveManager.enemies.filter(e => !e.dead).length : 0;
+    perf.counters.particles = getActiveParticleCount();
+    perf.counters.drawCalls = ri.render.calls;
+    perf.counters.triangles = ri.render.triangles;
+    perf.counters.damageNumbers = vfx ? (vfx.damageNumbers ? vfx.damageNumbers.length : 0) : 0;
+    perf.counters.pickups = _pickups.length;
+    perf.counters.lights = getActiveLightCount();
+  }
+  perf.frameEnd();
 }
 
 function updateMenu(delta) {
