@@ -867,6 +867,11 @@ function _showDamageDirection(enemyPos) {
   if (dirEls[dir]) dirEls[dir].classList.add('active');
 }
 
+let _lastBossActive = false;
+let _lastBossPct = -1;
+let _lastBossEnraged = false;
+let _lastBossName = '';
+
 function _updateBossHealthBar(enemies) {
   const bossEl = _domCache.bossHealth;
   if (!bossEl) return;
@@ -875,17 +880,32 @@ function _updateBossHealthBar(enemies) {
     if (e.isBoss && !e.dead) { boss = e; break; }
   }
   if (boss) {
-    bossEl.classList.add('active');
-    const pct = Math.max(0, boss.hp / boss.maxHp * 100);
-    if (_domCache.bossBarFill) _domCache.bossBarFill.style.width = pct + '%';
-    if (_domCache.bossName) _domCache.bossName.textContent = boss.isElite ? '◆ ELITE OVERLORD' : '◆ OVERLORD';
-    if (pct < 30) {
-      bossEl.classList.add('enraged');
-    } else {
-      bossEl.classList.remove('enraged');
+    if (!_lastBossActive) {
+      bossEl.classList.add('active');
+      _lastBossActive = true;
     }
-  } else {
+    const pct = Math.round(Math.max(0, boss.hp / boss.maxHp * 100));
+    if (pct !== _lastBossPct) {
+      if (_domCache.bossBarFill) _domCache.bossBarFill.style.width = pct + '%';
+      _lastBossPct = pct;
+    }
+    const name = boss.isElite ? '◆ ELITE OVERLORD' : '◆ OVERLORD';
+    if (name !== _lastBossName) {
+      if (_domCache.bossName) _domCache.bossName.textContent = name;
+      _lastBossName = name;
+    }
+    const enraged = pct < 30;
+    if (enraged !== _lastBossEnraged) {
+      if (enraged) bossEl.classList.add('enraged');
+      else bossEl.classList.remove('enraged');
+      _lastBossEnraged = enraged;
+    }
+  } else if (_lastBossActive) {
     bossEl.classList.remove('active', 'enraged');
+    _lastBossActive = false;
+    _lastBossPct = -1;
+    _lastBossEnraged = false;
+    _lastBossName = '';
   }
 }
 

@@ -137,18 +137,21 @@ export class WaveManager {
       }
     }
 
-    // Update all enemies
+    // Update all enemies and recompute alive count in the same pass
+    this._aliveCount = 0;
     for (let i = this.enemies.length - 1; i >= 0; i--) {
       const enemy = this.enemies[i];
       const shouldRemove = enemy.update(delta, playerPos);
       if (shouldRemove) {
         enemy.cleanup();
         this.enemies.splice(i, 1);
+      } else if (!enemy.dead) {
+        this._aliveCount++;
       }
     }
 
     // Check if wave complete
-    if (this.state === 'active' && this.getAliveCount() === 0) {
+    if (this.state === 'active' && this._aliveCount === 0) {
       this.state = 'complete';
       this.stateTimer = 3;
     }
@@ -213,7 +216,7 @@ export class WaveManager {
   }
 
   getAliveCount() {
-    return this.enemies.filter(e => !e.dead).length;
+    return this._aliveCount || 0;
   }
 
   getTotalCount() {

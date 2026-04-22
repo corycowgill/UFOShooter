@@ -51,6 +51,138 @@ function cGeom(Ctor, ...args) {
 }
 
 // ---------------------------------------------------------------------------
+// Material cache for MeshPhongMaterial — keyed by alien type + param hash.
+//
+// Every alien spawn used to create ~15 new MeshPhongMaterial instances, each
+// patched with onBeforeCompile for rim lighting. That forced WebGL to
+// recompile shaders for every material on first use — getProgramInfoLog
+// alone consumed 39% of total CPU in profiling (36,912ms / 93,735ms).
+//
+// This cache creates each unique material ONCE, applies the rim-light shader
+// patch once, and reuses it across all instances of that alien type.
+// Structural Phong materials (skin, armor, metal) are never mutated at
+// runtime — only MeshBasicMaterial glow accents animate opacity.
+// ---------------------------------------------------------------------------
+const _alienMatCache = new Map();
+
+// Per-type rim light colors (must match the map formerly at end of createAlienModel)
+const _rimColors = {
+  grunt:   0x22ff66,
+  swarmer: 0xbb44ff,
+  bloater: 0xff6622,
+  stalker: 0x00ffff,
+  spitter: 0xaaff00,
+  drone:   0x66bbff,
+  boss:    0xff6600,
+};
+
+function cMat(type, params) {
+  const key = type + '|' + JSON.stringify(params);
+  let m = _alienMatCache.get(key);
+  if (!m) {
+    m = new THREE.MeshPhongMaterial(params);
+    m.__shared = true;
+    // Apply rim-light shader patch once at creation
+    const rimHex = _rimColors[type] || 0x00ff00;
+    applyRimLight(m, rimHex, 1.0, 2.0);
+    _alienMatCache.set(key, m);
+  }
+  return m;
+}
+
+// ---------------------------------------------------------------------------
+// Merge an alien group's meshes by shared material to cut draw calls.
+//
+// Alien models are built from 40-65 tiny meshes (rivets, fingers, armor
+// plates). Most share a cached __shared material via cMat(). This function
+// groups meshes by material, merges their geometry in local space, and
+// replaces them with one mesh per material — cutting draw calls ~80%.
+//
+// Non-mergeable meshes (per-instance glow materials for animation, child
+// groups) are left untouched so runtime opacity animations work correctly.
+// ---------------------------------------------------------------------------
+const _tmpV = new THREE.Vector3();
+const _tmpN = new THREE.Vector3();
+const _tmpNormalMat = new THREE.Matrix3();
+
+function _mergeAlienGroup(group) {
+  group.updateMatrixWorld(true);
+  const buckets = new Map();
+  const toRemove = [];
+
+  for (let ci = 0; ci < group.children.length; ci++) {
+    const child = group.children[ci];
+    if (!child.isMesh) continue;
+    const mat = child.material;
+    if (!mat || Array.isArray(mat)) continue;
+    // Only merge __shared (cached) materials. Per-instance aGlow materials
+    // animate opacity at runtime and must stay as individual meshes.
+    if (!mat.__shared) continue;
+    const geo = child.geometry;
+    if (!geo || !geo.attributes || !geo.attributes.position) continue;
+
+    const key = mat.uuid;
+    let bucket = buckets.get(key);
+    if (!bucket) {
+      bucket = { material: mat, items: [] };
+      buckets.set(key, bucket);
+    }
+    // Use local matrix relative to the group
+    child.updateMatrix();
+    bucket.items.push({ geo, matrix: child.matrix.clone() });
+    toRemove.push(child);
+  }
+
+  for (const bucket of buckets.values()) {
+    if (bucket.items.length < 2) continue;
+
+    let total = 0;
+    for (const it of bucket.items) {
+      let g = it.geo;
+      if (g.index) g = g.toNonIndexed();
+      total += g.getAttribute('position').count;
+    }
+
+    const positions = new Float32Array(total * 3);
+    const normals = new Float32Array(total * 3);
+    let pIdx = 0;
+
+    for (const it of bucket.items) {
+      let g = it.geo;
+      if (g.index) g = g.toNonIndexed();
+      const pos = g.getAttribute('position');
+      const nrm = g.getAttribute('normal');
+      _tmpNormalMat.getNormalMatrix(it.matrix);
+      const count = pos.count;
+      for (let i = 0; i < count; i++) {
+        _tmpV.fromBufferAttribute(pos, i).applyMatrix4(it.matrix);
+        positions[pIdx] = _tmpV.x;
+        positions[pIdx + 1] = _tmpV.y;
+        positions[pIdx + 2] = _tmpV.z;
+        if (nrm) {
+          _tmpN.fromBufferAttribute(nrm, i).applyMatrix3(_tmpNormalMat).normalize();
+          normals[pIdx] = _tmpN.x;
+          normals[pIdx + 1] = _tmpN.y;
+          normals[pIdx + 2] = _tmpN.z;
+        }
+        pIdx += 3;
+      }
+    }
+
+    const merged = new THREE.BufferGeometry();
+    merged.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    merged.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
+    merged.computeBoundingSphere();
+    const mergedMesh = new THREE.Mesh(merged, bucket.material);
+    group.add(mergedMesh);
+  }
+
+  for (const m of toRemove) {
+    group.remove(m);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // HDR glow material factory for alien eyes / insignia / glowing accents.
 //
 // Previously every alien-model build used a local `glowMat` arrow factory
@@ -223,16 +355,16 @@ export function createAlienModel(type) {
 
   if (type === 'grunt') {
     // === GRUNT: Tall humanoid alien soldier ===
-    const skinMat = new THREE.MeshPhongMaterial({ color: 0x00cc44, emissive: 0x003311, shininess: 25 });
-    const armorMat = new THREE.MeshPhongMaterial({ color: 0x336633, emissive: 0x002200, shininess: 80 });
-    const darkArmorMat = new THREE.MeshPhongMaterial({ color: 0x1a331a, emissive: 0x001100, shininess: 90 });
-    const metalMat = new THREE.MeshPhongMaterial({ color: 0x555555, shininess: 60 });
-    const darkMetal = new THREE.MeshPhongMaterial({ color: 0x333333, shininess: 70 });
+    const skinMat = cMat(type,{ color: 0x00cc44, emissive: 0x003311, shininess: 25 });
+    const armorMat = cMat(type,{ color: 0x336633, emissive: 0x002200, shininess: 80 });
+    const darkArmorMat = cMat(type,{ color: 0x1a331a, emissive: 0x001100, shininess: 90 });
+    const metalMat = cMat(type,{ color: 0x555555, shininess: 60 });
+    const darkMetal = cMat(type,{ color: 0x333333, shininess: 70 });
 
     // Torso - segmented armor
     const torso = new THREE.Mesh(
       cGeom(THREE.CylinderGeometry, 0.32, 0.28, 1.0, 8),
-      new THREE.MeshPhongMaterial({ color: 0x009933, emissive: 0x003311, shininess: 40 })
+      cMat(type,{ color: 0x009933, emissive: 0x003311, shininess: 40 })
     );
     torso.position.y = 1.1;
     group.add(torso);
@@ -273,7 +405,7 @@ export function createAlienModel(type) {
     for (let i = 0; i < 4; i++) {
       const seam = new THREE.Mesh(
         cGeom(THREE.BoxGeometry, 0.52, 0.008, 0.42),
-        new THREE.MeshPhongMaterial({ color: 0x224422, shininess: 30 })
+        cMat(type,{ color: 0x224422, shininess: 30 })
       );
       seam.position.set(0, 0.75 + i * 0.22, 0);
       group.add(seam);
@@ -318,7 +450,7 @@ export function createAlienModel(type) {
     for (const side of [-1, 1]) {
       const tendon = new THREE.Mesh(
         cGeom(THREE.CylinderGeometry, 0.015, 0.02, 0.22, 4),
-        new THREE.MeshPhongMaterial({ color: 0x009930, emissive: 0x003310 })
+        cMat(type,{ color: 0x009930, emissive: 0x003310 })
       );
       tendon.position.set(side * 0.08, 1.72, 0.04);
       group.add(tendon);
@@ -327,7 +459,7 @@ export function createAlienModel(type) {
     // Head - large elongated cranium with more detail
     const head = new THREE.Mesh(
       cGeom(THREE.SphereGeometry, 0.35, 12, 12),
-      new THREE.MeshPhongMaterial({ color: 0x00ee55, emissive: 0x004422 })
+      cMat(type,{ color: 0x00ee55, emissive: 0x004422 })
     );
     head.scale.set(1, 1.4, 0.95);
     head.position.y = 2.05;
@@ -335,7 +467,7 @@ export function createAlienModel(type) {
     // Cranium ridge - multiple
     const ridge = new THREE.Mesh(
       cGeom(THREE.BoxGeometry, 0.06, 0.3, 0.5),
-      new THREE.MeshPhongMaterial({ color: 0x007733, emissive: 0x003311 })
+      cMat(type,{ color: 0x007733, emissive: 0x003311 })
     );
     ridge.position.set(0, 2.3, -0.05);
     group.add(ridge);
@@ -343,7 +475,7 @@ export function createAlienModel(type) {
     for (const side of [-1, 1]) {
       const sideRidge = new THREE.Mesh(
         cGeom(THREE.BoxGeometry, 0.04, 0.18, 0.35),
-        new THREE.MeshPhongMaterial({ color: 0x007733, emissive: 0x003311 })
+        cMat(type,{ color: 0x007733, emissive: 0x003311 })
       );
       sideRidge.position.set(side * 0.15, 2.22, -0.08);
       group.add(sideRidge);
@@ -351,7 +483,7 @@ export function createAlienModel(type) {
     // Brow ridge
     const browRidge = new THREE.Mesh(
       cGeom(THREE.BoxGeometry, 0.42, 0.04, 0.08),
-      new THREE.MeshPhongMaterial({ color: 0x00aa44, emissive: 0x003311 })
+      cMat(type,{ color: 0x00aa44, emissive: 0x003311 })
     );
     browRidge.position.set(0, 2.15, 0.26);
     group.add(browRidge);
@@ -359,7 +491,7 @@ export function createAlienModel(type) {
     for (const side of [-1, 1]) {
       const cheek = new THREE.Mesh(
         cGeom(THREE.SphereGeometry, 0.06, 6, 6),
-        new THREE.MeshPhongMaterial({ color: 0x00dd44, emissive: 0x004422 })
+        cMat(type,{ color: 0x00dd44, emissive: 0x004422 })
       );
       cheek.scale.set(1.3, 0.7, 0.8);
       cheek.position.set(side * 0.2, 1.98, 0.22);
@@ -369,7 +501,7 @@ export function createAlienModel(type) {
     for (const side of [-1, 1]) {
       const earFin = new THREE.Mesh(
         cGeom(THREE.BoxGeometry, 0.03, 0.18, 0.12),
-        new THREE.MeshPhongMaterial({ color: 0x00bb44, emissive: 0x003311 })
+        cMat(type,{ color: 0x00bb44, emissive: 0x003311 })
       );
       earFin.position.set(side * 0.32, 2.05, -0.05);
       earFin.rotation.z = side * 0.2;
@@ -381,7 +513,7 @@ export function createAlienModel(type) {
       // Eye socket recess
       const socket = new THREE.Mesh(
         cGeom(THREE.SphereGeometry, 0.11, 8, 8),
-        new THREE.MeshPhongMaterial({ color: 0x005522, emissive: 0x001100 })
+        cMat(type,{ color: 0x005522, emissive: 0x001100 })
       );
       socket.scale.set(1.3, 0.7, 0.3);
       socket.position.set(side * 0.16, 2.08, 0.27);
@@ -421,14 +553,14 @@ export function createAlienModel(type) {
     // Chin
     const chin = new THREE.Mesh(
       cGeom(THREE.SphereGeometry, 0.06, 6, 6),
-      new THREE.MeshPhongMaterial({ color: 0x00dd44, emissive: 0x004422 })
+      cMat(type,{ color: 0x00dd44, emissive: 0x004422 })
     );
     chin.scale.set(1.2, 0.6, 0.8);
     chin.position.set(0, 1.82, 0.28);
     group.add(chin);
 
     // Arms with elbow joints and wrist guards
-    const armMat = new THREE.MeshPhongMaterial({ color: data.color, emissive: 0x002211 });
+    const armMat = cMat(type,{ color: data.color, emissive: 0x002211 });
     for (const side of [-1, 1]) {
       // Upper arm
       const upper = new THREE.Mesh(cGeom(THREE.CylinderGeometry, 0.07, 0.06, 0.5, 6), armMat);
@@ -503,7 +635,7 @@ export function createAlienModel(type) {
     // Blaster grip
     const blasterGrip = new THREE.Mesh(
       cGeom(THREE.BoxGeometry, 0.04, 0.08, 0.05),
-      new THREE.MeshPhongMaterial({ color: 0x222222, shininess: 10 })
+      cMat(type,{ color: 0x222222, shininess: 10 })
     );
     blasterGrip.position.set(0.58, 0.62, 0.42);
     group.add(blasterGrip);
@@ -524,7 +656,7 @@ export function createAlienModel(type) {
     group.add(blasterScope);
 
     // Legs with knee pads
-    const legMat = new THREE.MeshPhongMaterial({ color: 0x008833, emissive: 0x002211 });
+    const legMat = cMat(type,{ color: 0x008833, emissive: 0x002211 });
     for (const side of [-1, 1]) {
       const thigh = new THREE.Mesh(cGeom(THREE.CylinderGeometry, 0.09, 0.07, 0.45, 6), legMat);
       thigh.position.set(side * 0.15, 0.55, 0);
@@ -557,7 +689,7 @@ export function createAlienModel(type) {
       // Boot sole
       const sole = new THREE.Mesh(
         cGeom(THREE.BoxGeometry, 0.11, 0.02, 0.2),
-        new THREE.MeshPhongMaterial({ color: 0x222222, shininess: 10 })
+        cMat(type,{ color: 0x222222, shininess: 10 })
       );
       sole.position.set(side * 0.15, 0.01, 0.03);
       group.add(sole);
@@ -566,7 +698,7 @@ export function createAlienModel(type) {
     // Belt with pouches
     const belt = new THREE.Mesh(
       cGeom(THREE.TorusGeometry, 0.28, 0.03, 6, 12),
-      new THREE.MeshPhongMaterial({ color: 0x444444, shininess: 60 })
+      cMat(type,{ color: 0x444444, shininess: 60 })
     );
     belt.position.y = 0.7;
     belt.rotation.x = Math.PI / 2;
@@ -772,10 +904,10 @@ export function createAlienModel(type) {
 
   } else if (type === 'swarmer') {
     // === SWARMER: Fast insectoid alien ===
-    const chitin = new THREE.MeshPhongMaterial({ color: 0x7700cc, emissive: 0x220044, shininess: 60 });
-    const darkChitin = new THREE.MeshPhongMaterial({ color: 0x440077, emissive: 0x110022, shininess: 70 });
-    const brightChitin = new THREE.MeshPhongMaterial({ color: 0xbb44ff, emissive: 0x330066, shininess: 50 });
-    const clawMat = new THREE.MeshPhongMaterial({ color: 0xff44ff, emissive: 0x660044, shininess: 80 });
+    const chitin = cMat(type,{ color: 0x7700cc, emissive: 0x220044, shininess: 60 });
+    const darkChitin = cMat(type,{ color: 0x440077, emissive: 0x110022, shininess: 70 });
+    const brightChitin = cMat(type,{ color: 0xbb44ff, emissive: 0x330066, shininess: 50 });
+    const clawMat = cMat(type,{ color: 0xff44ff, emissive: 0x660044, shininess: 80 });
 
     // Abdomen - segmented
     const abdomen = new THREE.Mesh(
@@ -814,7 +946,7 @@ export function createAlienModel(type) {
     // Thorax - more detailed
     const thorax = new THREE.Mesh(
       cGeom(THREE.SphereGeometry, 0.22, 10, 10),
-      new THREE.MeshPhongMaterial({ color: data.color, emissive: 0x330066, shininess: 55 })
+      cMat(type,{ color: data.color, emissive: 0x330066, shininess: 55 })
     );
     thorax.scale.set(1, 0.7, 1.1);
     thorax.position.set(0, 0.48, 0.15);
@@ -901,7 +1033,7 @@ export function createAlienModel(type) {
       // Inner mandible tooth
       const tooth = new THREE.Mesh(
         cGeom(THREE.ConeGeometry, 0.008, 0.06, 3),
-        new THREE.MeshPhongMaterial({ color: 0xffaaff, shininess: 100 })
+        cMat(type,{ color: 0xffaaff, shininess: 100 })
       );
       tooth.position.set(side * 0.05, 0.49, 0.5);
       tooth.rotation.x = -1.0;
@@ -935,7 +1067,7 @@ export function createAlienModel(type) {
     }
 
     // Dorsal spines - more varied
-    const spineMat = new THREE.MeshPhongMaterial({ color: 0xff00ff, emissive: 0x660066, shininess: 70 });
+    const spineMat = cMat(type,{ color: 0xff00ff, emissive: 0x660066, shininess: 70 });
     for (let i = 0; i < 7; i++) {
       const spine = new THREE.Mesh(
         new THREE.ConeGeometry(0.02 + (i % 2) * 0.01, 0.15 + i * 0.025, 4),
@@ -950,7 +1082,7 @@ export function createAlienModel(type) {
     for (const side of [-1, 1]) {
       const wingBase = new THREE.Mesh(
         cGeom(THREE.BoxGeometry, 0.15, 0.005, 0.12),
-        new THREE.MeshPhongMaterial({ color: 0x9944dd, emissive: 0x330066, shininess: 90 })
+        cMat(type,{ color: 0x9944dd, emissive: 0x330066, shininess: 90 })
       );
       wingBase.position.set(side * 0.2, 0.52, 0.0);
       wingBase.rotation.z = side * 0.5;
@@ -976,7 +1108,7 @@ export function createAlienModel(type) {
     }
 
     // 6 insect legs (3 per side) - with joints
-    const legMat = new THREE.MeshPhongMaterial({ color: 0x7700aa, emissive: 0x220044, shininess: 50 });
+    const legMat = cMat(type,{ color: 0x7700aa, emissive: 0x220044, shininess: 50 });
     for (let i = 0; i < 6; i++) {
       const side = i < 3 ? -1 : 1;
       const idx = i % 3;
@@ -1136,7 +1268,7 @@ export function createAlienModel(type) {
     // Pulsating egg sac on underside of abdomen
     const eggSac = new THREE.Mesh(
       cGeom(THREE.SphereGeometry, 0.12, 8, 6),
-      new THREE.MeshPhongMaterial({
+      cMat(type,{
         color: 0x662288, emissive: 0x330044,
         transparent: true, opacity: 0.75, shininess: 60
       })
@@ -1173,13 +1305,13 @@ export function createAlienModel(type) {
 
   } else if (type === 'bloater') {
     // === BLOATER: Massive volatile alien ===
-    const fleshMat = new THREE.MeshPhongMaterial({ color: 0xaa1100, emissive: 0x330000, shininess: 20 });
-    const darkFlesh = new THREE.MeshPhongMaterial({ color: 0x771100, emissive: 0x220000, shininess: 15 });
+    const fleshMat = cMat(type,{ color: 0xaa1100, emissive: 0x330000, shininess: 20 });
+    const darkFlesh = cMat(type,{ color: 0x771100, emissive: 0x220000, shininess: 15 });
 
     // Main body - large pulsating sphere
     const body = new THREE.Mesh(
       cGeom(THREE.SphereGeometry, 0.95, 16, 16),
-      new THREE.MeshPhongMaterial({
+      cMat(type,{
         color: 0xcc2200, emissive: 0x661100, emissiveIntensity: 0.8,
         transparent: true, opacity: 0.85, shininess: 30,
       })
@@ -1262,7 +1394,7 @@ export function createAlienModel(type) {
     // Small angry head - more detailed
     const head = new THREE.Mesh(
       cGeom(THREE.SphereGeometry, 0.28, 10, 10),
-      new THREE.MeshPhongMaterial({ color: 0xdd3300, emissive: 0x441100 })
+      cMat(type,{ color: 0xdd3300, emissive: 0x441100 })
     );
     head.scale.set(1, 0.85, 0.9);
     head.position.y = 2.15;
@@ -1282,7 +1414,7 @@ export function createAlienModel(type) {
       // Eye socket
       const socket = new THREE.Mesh(
         cGeom(THREE.SphereGeometry, 0.08, 6, 6),
-        new THREE.MeshPhongMaterial({ color: 0x551100, emissive: 0x110000 })
+        cMat(type,{ color: 0x551100, emissive: 0x110000 })
       );
       socket.position.set(side * 0.12, 2.18, 0.2);
       group.add(socket);
@@ -1305,7 +1437,7 @@ export function createAlienModel(type) {
     for (const side of [-1, 1]) {
       const brow = new THREE.Mesh(
         cGeom(THREE.BoxGeometry, 0.15, 0.05, 0.1),
-        new THREE.MeshPhongMaterial({ color: 0x881100 })
+        cMat(type,{ color: 0x881100 })
       );
       brow.position.set(side * 0.1, 2.28, 0.2);
       brow.rotation.z = side * -0.3;
@@ -1323,7 +1455,7 @@ export function createAlienModel(type) {
     for (let i = -2; i <= 2; i++) {
       const tooth = new THREE.Mesh(
         cGeom(THREE.ConeGeometry, 0.012, 0.05, 3),
-        new THREE.MeshPhongMaterial({ color: 0xddcc88, shininess: 80 })
+        cMat(type,{ color: 0xddcc88, shininess: 80 })
       );
       tooth.position.set(i * 0.035, 2.04, 0.27);
       tooth.rotation.x = Math.PI + 0.2;
@@ -1365,7 +1497,7 @@ export function createAlienModel(type) {
       for (let f = -1; f <= 1; f++) {
         const claw = new THREE.Mesh(
           cGeom(THREE.ConeGeometry, 0.015, 0.06, 3),
-          new THREE.MeshPhongMaterial({ color: 0x442200, shininess: 60 })
+          cMat(type,{ color: 0x442200, shininess: 60 })
         );
         claw.position.set(side * 0.72 + f * 0.03, 0.76, 0.45);
         claw.rotation.x = -0.5;
@@ -1395,7 +1527,7 @@ export function createAlienModel(type) {
       for (let t = -1; t <= 1; t++) {
         const toenail = new THREE.Mesh(
           cGeom(THREE.ConeGeometry, 0.015, 0.04, 3),
-          new THREE.MeshPhongMaterial({ color: 0x442200 })
+          cMat(type,{ color: 0x442200 })
         );
         toenail.position.set(side * 0.45 + t * 0.06, 0.02, 0.2);
         toenail.rotation.x = -Math.PI / 2;
@@ -1410,7 +1542,7 @@ export function createAlienModel(type) {
       const color = pustuleColors[Math.floor(Math.random() * pustuleColors.length)];
       const bump = new THREE.Mesh(
         cGeom(THREE.SphereGeometry, size, 8, 8),
-        new THREE.MeshPhongMaterial({ color, emissive: 0x663300, shininess: 40 })
+        cMat(type,{ color, emissive: 0x663300, shininess: 40 })
       );
       const theta = Math.random() * Math.PI * 2;
       const phi = Math.random() * Math.PI * 0.7 + 0.15;
@@ -1435,7 +1567,7 @@ export function createAlienModel(type) {
     // Belly button / navel scar
     const navel = new THREE.Mesh(
       cGeom(THREE.SphereGeometry, 0.06, 6, 6),
-      new THREE.MeshPhongMaterial({ color: 0x551100 })
+      cMat(type,{ color: 0x551100 })
     );
     navel.scale.set(1, 1, 0.3);
     navel.position.set(0, 0.8, 0.92);
@@ -1487,7 +1619,7 @@ export function createAlienModel(type) {
       const rad = 1.1;
       const pustule = new THREE.Mesh(
         new THREE.SphereGeometry(0.07 + Math.random() * 0.05, 5, 5),
-        new THREE.MeshPhongMaterial({
+        cMat(type,{
           color: 0xff6633, emissive: 0x441100,
           shininess: 60, transparent: true, opacity: 0.85
         })
@@ -1532,7 +1664,7 @@ export function createAlienModel(type) {
     // Gaping maw - large mouth with inner glow
     const gapingMaw = new THREE.Mesh(
       cGeom(THREE.SphereGeometry, 0.25, 10, 8, 0, Math.PI * 2, 0, Math.PI / 2),
-      new THREE.MeshPhongMaterial({
+      cMat(type,{
         color: 0x330000, emissive: 0x220000, side: THREE.DoubleSide
       })
     );
@@ -1551,7 +1683,7 @@ export function createAlienModel(type) {
       const ang = (t / 10) * Math.PI * 2;
       const tooth = new THREE.Mesh(
         cGeom(THREE.ConeGeometry, 0.018, 0.07, 4),
-        new THREE.MeshPhongMaterial({ color: 0xddccaa, shininess: 80 })
+        cMat(type,{ color: 0xddccaa, shininess: 80 })
       );
       tooth.position.set(
         Math.cos(ang) * 0.22,
@@ -1582,7 +1714,7 @@ export function createAlienModel(type) {
     for (let f = 0; f < 6; f++) {
       const fin = new THREE.Mesh(
         cGeom(THREE.ConeGeometry, 0.1 - f * 0.008, 0.15, 4),
-        new THREE.MeshPhongMaterial({ color: 0x552200, emissive: 0x220800, shininess: 40 })
+        cMat(type,{ color: 0x552200, emissive: 0x220800, shininess: 40 })
       );
       fin.position.set(0, 2.3 - f * 0.15, -0.2 - f * 0.12);
       fin.rotation.x = -0.3 - f * 0.1;
@@ -1593,7 +1725,7 @@ export function createAlienModel(type) {
   } else if (type === 'stalker') {
     // === STALKER: Semi-invisible predator ===
     const stealthMat = (color, emissive = 0x000000) =>
-      new THREE.MeshPhongMaterial({ color, emissive, transparent: true, opacity: 0.4, shininess: 80 });
+      cMat(type,{ color, emissive, transparent: true, opacity: 0.4, shininess: 80 });
 
     // Lean torso - muscular definition
     const torso = new THREE.Mesh(
@@ -1759,7 +1891,7 @@ export function createAlienModel(type) {
     for (const side of [-1, 1]) {
       const fang = new THREE.Mesh(
         cGeom(THREE.ConeGeometry, 0.008, 0.06, 3),
-        new THREE.MeshPhongMaterial({ color: 0xaaffff, transparent: true, opacity: 0.6, shininess: 100 })
+        cMat(type,{ color: 0xaaffff, transparent: true, opacity: 0.6, shininess: 100 })
       );
       fang.position.set(side * 0.04, 1.95, 0.33);
       fang.rotation.x = Math.PI;
@@ -1798,7 +1930,7 @@ export function createAlienModel(type) {
       // Wrist blade
       const wristBlade = new THREE.Mesh(
         cGeom(THREE.BoxGeometry, 0.008, 0.02, 0.2),
-        new THREE.MeshPhongMaterial({ color: 0x00ffff, emissive: 0x008888, transparent: true, opacity: 0.5, shininess: 100 })
+        cMat(type,{ color: 0x00ffff, emissive: 0x008888, transparent: true, opacity: 0.5, shininess: 100 })
       );
       wristBlade.position.set(side * 0.48, 0.8, 0.0);
       group.add(wristBlade);
@@ -1806,7 +1938,7 @@ export function createAlienModel(type) {
       for (let f = -1; f <= 1; f++) {
         const claw = new THREE.Mesh(
           cGeom(THREE.ConeGeometry, 0.015, 0.28, 4),
-          new THREE.MeshPhongMaterial({ color: 0x00ffff, emissive: 0x006666, transparent: true, opacity: 0.7, shininess: 90 })
+          cMat(type,{ color: 0x00ffff, emissive: 0x006666, transparent: true, opacity: 0.7, shininess: 90 })
         );
         claw.position.set(side * 0.5 + f * 0.025, 0.6, 0.15);
         claw.rotation.x = -0.5;
@@ -1864,7 +1996,7 @@ export function createAlienModel(type) {
       for (let t = -1; t <= 1; t++) {
         const toeClaw = new THREE.Mesh(
           cGeom(THREE.ConeGeometry, 0.01, 0.06, 3),
-          new THREE.MeshPhongMaterial({ color: 0x00cccc, transparent: true, opacity: 0.5, shininess: 90 })
+          cMat(type,{ color: 0x00cccc, transparent: true, opacity: 0.5, shininess: 90 })
         );
         toeClaw.position.set(side * 0.15 + t * 0.03, 0.01, 0.22);
         toeClaw.rotation.x = -Math.PI / 3;
@@ -1885,7 +2017,7 @@ export function createAlienModel(type) {
     // Tail blade
     const tailBlade = new THREE.Mesh(
       cGeom(THREE.ConeGeometry, 0.025, 0.15, 4),
-      new THREE.MeshPhongMaterial({ color: 0x00ffff, emissive: 0x008888, transparent: true, opacity: 0.5, shininess: 100 })
+      cMat(type,{ color: 0x00ffff, emissive: 0x008888, transparent: true, opacity: 0.5, shininess: 100 })
     );
     tailBlade.position.set(0, 0.58, -0.9);
     tailBlade.rotation.x = Math.PI / 2 + 0.5;
@@ -1938,7 +2070,7 @@ export function createAlienModel(type) {
     for (const side of [-1, 1]) {
       const blade = new THREE.Mesh(
         cGeom(THREE.ConeGeometry, 0.025, 0.35, 4),
-        new THREE.MeshPhongMaterial({ color: 0x223344, emissive: 0x001122, shininess: 100 })
+        cMat(type,{ color: 0x223344, emissive: 0x001122, shininess: 100 })
       );
       blade.position.set(side * 0.45, 0.85, 0.3);
       blade.rotation.x = -Math.PI / 2;
@@ -1955,7 +2087,7 @@ export function createAlienModel(type) {
       // Wrist housing
       const wrist = new THREE.Mesh(
         cGeom(THREE.CylinderGeometry, 0.05, 0.045, 0.08, 6),
-        new THREE.MeshPhongMaterial({ color: 0x334455, shininess: 70 })
+        cMat(type,{ color: 0x334455, shininess: 70 })
       );
       wrist.position.set(side * 0.45, 0.85, 0.18);
       wrist.rotation.x = Math.PI / 2;
@@ -1965,7 +2097,7 @@ export function createAlienModel(type) {
     // Predator scanner visor - horizontal band across eyes
     const visor = new THREE.Mesh(
       cGeom(THREE.BoxGeometry, 0.28, 0.04, 0.08),
-      new THREE.MeshPhongMaterial({ color: 0x112233, shininess: 90 })
+      cMat(type,{ color: 0x112233, shininess: 90 })
     );
     visor.position.set(0, 1.72, 0.18);
     group.add(visor);
@@ -1990,7 +2122,7 @@ export function createAlienModel(type) {
     for (let s = 0; s < 5; s++) {
       const spine = new THREE.Mesh(
         cGeom(THREE.ConeGeometry, 0.025, 0.1, 4),
-        new THREE.MeshPhongMaterial({ color: 0x334455, emissive: 0x112233, shininess: 80 })
+        cMat(type,{ color: 0x334455, emissive: 0x112233, shininess: 80 })
       );
       spine.position.set(0, 1.55 - s * 0.18, -0.22);
       spine.rotation.x = 0.3;
@@ -2001,7 +2133,7 @@ export function createAlienModel(type) {
     for (let t = 0; t < 6; t++) {
       const segment = new THREE.Mesh(
         cGeom(THREE.SphereGeometry, 0.055 - t * 0.006, 5, 5),
-        new THREE.MeshPhongMaterial({ color: 0x2a3540, emissive: 0x0a1520, shininess: 60 })
+        cMat(type,{ color: 0x2a3540, emissive: 0x0a1520, shininess: 60 })
       );
       segment.position.set(Math.sin(t * 0.5) * 0.08, 0.3, -0.25 - t * 0.15);
       group.add(segment);
@@ -2009,7 +2141,7 @@ export function createAlienModel(type) {
     // Tail blade tip
     const tailBladeTip = new THREE.Mesh(
       cGeom(THREE.ConeGeometry, 0.04, 0.15, 4),
-      new THREE.MeshPhongMaterial({ color: 0x112233, shininess: 100 })
+      cMat(type,{ color: 0x112233, shininess: 100 })
     );
     tailBladeTip.position.set(Math.sin(3) * 0.08, 0.3, -1.2);
     tailBladeTip.rotation.x = -Math.PI / 2;
@@ -2036,9 +2168,9 @@ export function createAlienModel(type) {
 
   } else if (type === 'spitter') {
     // === SPITTER: Hunched reptilian acid alien ===
-    const scaleMat = new THREE.MeshPhongMaterial({ color: 0x669900, emissive: 0x334400, shininess: 30 });
-    const darkScale = new THREE.MeshPhongMaterial({ color: 0x446600, emissive: 0x223300, shininess: 25 });
-    const bellyMat = new THREE.MeshPhongMaterial({ color: 0x88aa44, emissive: 0x445522, shininess: 15 });
+    const scaleMat = cMat(type,{ color: 0x669900, emissive: 0x334400, shininess: 30 });
+    const darkScale = cMat(type,{ color: 0x446600, emissive: 0x223300, shininess: 25 });
+    const bellyMat = cMat(type,{ color: 0x88aa44, emissive: 0x445522, shininess: 15 });
 
     // Hunched body - with belly detail
     const body = new THREE.Mesh(
@@ -2061,7 +2193,7 @@ export function createAlienModel(type) {
       for (let col = -2; col <= 2; col++) {
         const s = new THREE.Mesh(
           cGeom(THREE.CircleGeometry, 0.025, 4),
-          new THREE.MeshPhongMaterial({ color: 0x99bb55, emissive: 0x334411, shininess: 40 })
+          cMat(type,{ color: 0x99bb55, emissive: 0x334411, shininess: 40 })
         );
         s.position.set(col * 0.055, 0.78 + row * 0.08, 0.35);
         s.rotation.y = 0.1;
@@ -2088,7 +2220,7 @@ export function createAlienModel(type) {
     for (const side of [-1, 1]) {
       const hood = new THREE.Mesh(
         cGeom(THREE.PlaneGeometry, 0.25, 0.3),
-        new THREE.MeshPhongMaterial({
+        cMat(type,{
           color: 0x88aa00, emissive: 0x445500,
           side: THREE.DoubleSide, shininess: 30
         })
@@ -2111,7 +2243,7 @@ export function createAlienModel(type) {
     // Hood edge markings
     const hoodEdge = new THREE.Mesh(
       cGeom(THREE.TorusGeometry, 0.2, 0.01, 4, 10, Math.PI),
-      new THREE.MeshPhongMaterial({ color: 0xaacc00, emissive: 0x556600 })
+      cMat(type,{ color: 0xaacc00, emissive: 0x556600 })
     );
     hoodEdge.position.set(0, 1.42, 0.15);
     hoodEdge.rotation.x = -Math.PI / 2;
@@ -2120,7 +2252,7 @@ export function createAlienModel(type) {
     // Head - wide jaw with more detail
     const head = new THREE.Mesh(
       cGeom(THREE.SphereGeometry, 0.3, 10, 10),
-      new THREE.MeshPhongMaterial({ color: 0x88aa00, emissive: 0x334400 })
+      cMat(type,{ color: 0x88aa00, emissive: 0x334400 })
     );
     head.scale.set(1.1, 0.9, 1);
     head.position.set(0, 1.55, 0.2);
@@ -2139,7 +2271,7 @@ export function createAlienModel(type) {
     // Wide jaw/mandible with more detail
     const jaw = new THREE.Mesh(
       cGeom(THREE.BoxGeometry, 0.3, 0.1, 0.25),
-      new THREE.MeshPhongMaterial({ color: 0x99bb00, emissive: 0x445500 })
+      cMat(type,{ color: 0x99bb00, emissive: 0x445500 })
     );
     jaw.position.set(0, 1.35, 0.35);
     group.add(jaw);
@@ -2157,7 +2289,7 @@ export function createAlienModel(type) {
       // Upper teeth
       const uTooth = new THREE.Mesh(
         cGeom(THREE.ConeGeometry, 0.015, 0.08, 4),
-        new THREE.MeshPhongMaterial({ color: 0xcccc66, shininess: 80 })
+        cMat(type,{ color: 0xcccc66, shininess: 80 })
       );
       uTooth.position.set(i * 0.06, 1.32, 0.42);
       uTooth.rotation.x = Math.PI;
@@ -2165,7 +2297,7 @@ export function createAlienModel(type) {
       // Lower teeth (shorter)
       const lTooth = new THREE.Mesh(
         cGeom(THREE.ConeGeometry, 0.012, 0.05, 4),
-        new THREE.MeshPhongMaterial({ color: 0xbbbb55, shininess: 70 })
+        cMat(type,{ color: 0xbbbb55, shininess: 70 })
       );
       lTooth.position.set(i * 0.06 + 0.03, 1.38, 0.42);
       group.add(lTooth);
@@ -2225,7 +2357,7 @@ export function createAlienModel(type) {
     }
 
     // Acid sacs on back - more detailed with tubes connecting them
-    const sacMat = new THREE.MeshPhongMaterial({
+    const sacMat = cMat(type,{
       color: 0xaaee00, emissive: 0x668800,
       transparent: true, opacity: 0.7, shininess: 60,
     });
@@ -2255,7 +2387,7 @@ export function createAlienModel(type) {
     }
 
     // Arms - shorter, hunched with wrist spurs
-    const armMat = new THREE.MeshPhongMaterial({ color: 0x669900, emissive: 0x223300 });
+    const armMat = cMat(type,{ color: 0x669900, emissive: 0x223300 });
     for (const side of [-1, 1]) {
       const arm = new THREE.Mesh(cGeom(THREE.CylinderGeometry, 0.06, 0.05, 0.45, 6), armMat);
       arm.position.set(side * 0.35, 0.95, 0.15);
@@ -2288,7 +2420,7 @@ export function createAlienModel(type) {
       for (let f = -1; f <= 1; f++) {
         const claw = new THREE.Mesh(
           cGeom(THREE.ConeGeometry, 0.012, 0.1, 4),
-          new THREE.MeshPhongMaterial({ color: 0xaaaa33, shininess: 70 })
+          cMat(type,{ color: 0xaaaa33, shininess: 70 })
         );
         claw.position.set(side * 0.45 + f * 0.02, 0.7, 0.25);
         claw.rotation.x = -0.4;
@@ -2297,7 +2429,7 @@ export function createAlienModel(type) {
     }
 
     // Thick legs - wide stance with scale detail
-    const legMat = new THREE.MeshPhongMaterial({ color: 0x557700, emissive: 0x223300 });
+    const legMat = cMat(type,{ color: 0x557700, emissive: 0x223300 });
     for (const side of [-1, 1]) {
       const thigh = new THREE.Mesh(cGeom(THREE.CylinderGeometry, 0.1, 0.08, 0.4, 6), legMat);
       thigh.position.set(side * 0.2, 0.45, 0);
@@ -2317,7 +2449,7 @@ export function createAlienModel(type) {
       // Foot with toe claws
       const foot = new THREE.Mesh(
         cGeom(THREE.BoxGeometry, 0.14, 0.06, 0.22),
-        new THREE.MeshPhongMaterial({ color: 0x445500 })
+        cMat(type,{ color: 0x445500 })
       );
       foot.position.set(side * 0.2, 0.03, 0.06);
       group.add(foot);
@@ -2325,7 +2457,7 @@ export function createAlienModel(type) {
       for (let t = -1; t <= 1; t++) {
         const toeClaw = new THREE.Mesh(
           cGeom(THREE.ConeGeometry, 0.012, 0.06, 3),
-          new THREE.MeshPhongMaterial({ color: 0x887744, shininess: 60 })
+          cMat(type,{ color: 0x887744, shininess: 60 })
         );
         toeClaw.position.set(side * 0.2 + t * 0.04, 0.01, 0.18);
         toeClaw.rotation.x = -Math.PI / 3;
@@ -2366,7 +2498,7 @@ export function createAlienModel(type) {
     for (let i = 0; i < 7; i++) {
       const plate = new THREE.Mesh(
         new THREE.BoxGeometry(0.12 + (i % 2) * 0.04, 0.035 + (i % 3) * 0.01, 0.06),
-        new THREE.MeshPhongMaterial({ color: 0x778800, emissive: 0x223300 })
+        cMat(type,{ color: 0x778800, emissive: 0x223300 })
       );
       plate.position.set(0, 0.85 + i * 0.1, -0.38);
       plate.rotation.x = 0.3;
@@ -2387,7 +2519,7 @@ export function createAlienModel(type) {
     for (const side of [-1, 1]) {
       const sac = new THREE.Mesh(
         cGeom(THREE.SphereGeometry, 0.12, 8, 8),
-        new THREE.MeshPhongMaterial({
+        cMat(type,{
           color: 0x88cc00, emissive: 0x334400,
           transparent: true, opacity: 0.7, shininess: 80
         })
@@ -2421,7 +2553,7 @@ export function createAlienModel(type) {
     // Large throat pouch (expandable sac)
     const throatPouch = new THREE.Mesh(
       cGeom(THREE.SphereGeometry, 0.17, 10, 8),
-      new THREE.MeshPhongMaterial({
+      cMat(type,{
         color: 0x556600, emissive: 0x223300,
         shininess: 30, transparent: true, opacity: 0.85
       })
@@ -2446,7 +2578,7 @@ export function createAlienModel(type) {
       const ang = (f / 4 - 0.375) * 0.7;
       const fang = new THREE.Mesh(
         cGeom(THREE.ConeGeometry, 0.018, 0.08, 4),
-        new THREE.MeshPhongMaterial({ color: 0xeeddaa, emissive: 0x221100, shininess: 80 })
+        cMat(type,{ color: 0xeeddaa, emissive: 0x221100, shininess: 80 })
       );
       fang.position.set(Math.sin(ang) * 0.1, 0.92, 0.32);
       fang.rotation.x = Math.PI;
@@ -2464,7 +2596,7 @@ export function createAlienModel(type) {
     // Forked tongue extending out
     const forkedTongue = new THREE.Mesh(
       cGeom(THREE.CylinderGeometry, 0.01, 0.008, 0.18, 4),
-      new THREE.MeshPhongMaterial({ color: 0x882244, emissive: 0x220011, shininess: 60 })
+      cMat(type,{ color: 0x882244, emissive: 0x220011, shininess: 60 })
     );
     forkedTongue.position.set(0, 0.9, 0.42);
     forkedTongue.rotation.x = Math.PI / 2;
@@ -2472,7 +2604,7 @@ export function createAlienModel(type) {
     for (const fs of [-1, 1]) {
       const forkBit = new THREE.Mesh(
         cGeom(THREE.CylinderGeometry, 0.008, 0.003, 0.06, 4),
-        new THREE.MeshPhongMaterial({ color: 0x882244, emissive: 0x220011 })
+        cMat(type,{ color: 0x882244, emissive: 0x220011 })
       );
       forkBit.position.set(fs * 0.015, 0.9, 0.52);
       forkBit.rotation.x = Math.PI / 2;
@@ -2485,7 +2617,7 @@ export function createAlienModel(type) {
       for (let g = 0; g < 3; g++) {
         const gill = new THREE.Mesh(
           cGeom(THREE.BoxGeometry, 0.04, 0.01, 0.06),
-          new THREE.MeshPhongMaterial({ color: 0x334400, emissive: 0x221100, shininess: 40 })
+          cMat(type,{ color: 0x334400, emissive: 0x221100, shininess: 40 })
         );
         gill.position.set(side * 0.16, 0.88 - g * 0.035, 0.06);
         gill.rotation.z = side * 0.3;
@@ -2506,10 +2638,10 @@ export function createAlienModel(type) {
 
   } else if (type === 'drone') {
     // === DRONE: Floating alien drone ===
-    const hullMat = new THREE.MeshPhongMaterial({ color: 0x335588, emissive: 0x112244, shininess: 70 });
-    const darkHull = new THREE.MeshPhongMaterial({ color: 0x223355, emissive: 0x0a1122, shininess: 80 });
-    const lightHull = new THREE.MeshPhongMaterial({ color: 0x4466aa, emissive: 0x223366, shininess: 80 });
-    const metalMat = new THREE.MeshPhongMaterial({ color: 0x667788, shininess: 90 });
+    const hullMat = cMat(type,{ color: 0x335588, emissive: 0x112244, shininess: 70 });
+    const darkHull = cMat(type,{ color: 0x223355, emissive: 0x0a1122, shininess: 80 });
+    const lightHull = cMat(type,{ color: 0x4466aa, emissive: 0x223366, shininess: 80 });
+    const metalMat = cMat(type,{ color: 0x667788, shininess: 90 });
 
     // Central disc body - layered construction
     const disc = new THREE.Mesh(
@@ -2560,7 +2692,7 @@ export function createAlienModel(type) {
     // Dome glass overlay
     const domeGlass = new THREE.Mesh(
       cGeom(THREE.SphereGeometry, 0.33, 10, 10, 0, Math.PI * 2, 0, Math.PI / 2),
-      new THREE.MeshPhongMaterial({
+      cMat(type,{
         color: 0x6688bb, emissive: 0x223344,
         transparent: true, opacity: 0.3, shininess: 100
       })
@@ -2619,7 +2751,7 @@ export function createAlienModel(type) {
     // Eye ring
     const eyeRing = new THREE.Mesh(
       cGeom(THREE.TorusGeometry, 0.17, 0.02, 6, 12),
-      new THREE.MeshPhongMaterial({ color: 0x6688cc, emissive: 0x334466, shininess: 90 })
+      cMat(type,{ color: 0x6688cc, emissive: 0x334466, shininess: 90 })
     );
     eyeRing.position.set(0, 0.05, 0.42);
     eyeRing.rotation.x = Math.PI / 2;
@@ -2697,7 +2829,7 @@ export function createAlienModel(type) {
       // Engine body
       const pod = new THREE.Mesh(
         cGeom(THREE.CylinderGeometry, 0.08, 0.1, 0.15, 8),
-        new THREE.MeshPhongMaterial({ color: 0x445566, emissive: 0x112233, shininess: 60 })
+        cMat(type,{ color: 0x445566, emissive: 0x112233, shininess: 60 })
       );
       engineGroup.add(pod);
       // Engine fins
@@ -2776,7 +2908,7 @@ export function createAlienModel(type) {
       const angle = (i / 6) * Math.PI * 2;
       const panel = new THREE.Mesh(
         cGeom(THREE.BoxGeometry, 0.15, 0.08, 0.04),
-        new THREE.MeshPhongMaterial({ color: 0x556688, emissive: 0x112233, shininess: 60 })
+        cMat(type,{ color: 0x556688, emissive: 0x112233, shininess: 60 })
       );
       panel.position.set(Math.cos(angle) * 0.55, 0, Math.sin(angle) * 0.55);
       panel.rotation.y = -angle;
@@ -2810,7 +2942,7 @@ export function createAlienModel(type) {
     group.add(sensorMount);
     const sensor = new THREE.Mesh(
       cGeom(THREE.ConeGeometry, 0.08, 0.15, 6),
-      new THREE.MeshPhongMaterial({ color: 0x334466, emissive: 0x112244, shininess: 70 })
+      cMat(type,{ color: 0x334466, emissive: 0x112244, shininess: 70 })
     );
     sensor.position.y = -0.25;
     sensor.rotation.x = Math.PI;
@@ -2843,7 +2975,7 @@ export function createAlienModel(type) {
       const ang = (h / 6) * Math.PI * 2;
       const panel = new THREE.Mesh(
         cGeom(THREE.BoxGeometry, 0.18, 0.04, 0.12),
-        new THREE.MeshPhongMaterial({ color: 0x2a4466, emissive: 0x081022, shininess: 85 })
+        cMat(type,{ color: 0x2a4466, emissive: 0x081022, shininess: 85 })
       );
       panel.position.set(Math.cos(ang) * 0.3, 0.12, Math.sin(ang) * 0.3);
       panel.rotation.y = ang;
@@ -2853,7 +2985,7 @@ export function createAlienModel(type) {
       for (let rv = 0; rv < 2; rv++) {
         const rivet = new THREE.Mesh(
           cGeom(THREE.SphereGeometry, 0.01, 4, 4),
-          new THREE.MeshPhongMaterial({ color: 0x88aacc, shininess: 90 })
+          cMat(type,{ color: 0x88aacc, shininess: 90 })
         );
         rivet.position.set(
           Math.cos(ang) * 0.3 + Math.cos(ang + Math.PI / 2) * (rv * 0.05 - 0.025),
@@ -2869,7 +3001,7 @@ export function createAlienModel(type) {
       const ang = (w / 3 - 0.5) * 0.8;
       const pod = new THREE.Mesh(
         cGeom(THREE.CylinderGeometry, 0.04, 0.05, 0.08, 6),
-        new THREE.MeshPhongMaterial({ color: 0x223344, emissive: 0x000811, shininess: 85 })
+        cMat(type,{ color: 0x223344, emissive: 0x000811, shininess: 85 })
       );
       pod.position.set(Math.sin(ang) * 0.22, -0.1, Math.cos(ang) * 0.3);
       pod.rotation.x = Math.PI / 2;
@@ -2877,7 +3009,7 @@ export function createAlienModel(type) {
       // Pod barrel
       const barrel = new THREE.Mesh(
         cGeom(THREE.CylinderGeometry, 0.012, 0.014, 0.15, 5),
-        new THREE.MeshPhongMaterial({ color: 0x111122, shininess: 95 })
+        cMat(type,{ color: 0x111122, shininess: 95 })
       );
       barrel.position.set(Math.sin(ang) * 0.22, -0.1, Math.cos(ang) * 0.42);
       barrel.rotation.x = Math.PI / 2;
@@ -2894,13 +3026,13 @@ export function createAlienModel(type) {
     // Antenna array on top (radio mast + dish)
     const antennaBase = new THREE.Mesh(
       cGeom(THREE.CylinderGeometry, 0.025, 0.035, 0.06, 6),
-      new THREE.MeshPhongMaterial({ color: 0x334455, shininess: 80 })
+      cMat(type,{ color: 0x334455, shininess: 80 })
     );
     antennaBase.position.y = 0.2;
     group.add(antennaBase);
     const antennaMast = new THREE.Mesh(
       cGeom(THREE.CylinderGeometry, 0.005, 0.005, 0.25, 4),
-      new THREE.MeshPhongMaterial({ color: 0xaabbcc, shininess: 90 })
+      cMat(type,{ color: 0xaabbcc, shininess: 90 })
     );
     antennaMast.position.y = 0.35;
     group.add(antennaMast);
@@ -2914,7 +3046,7 @@ export function createAlienModel(type) {
     // Parabolic comms dish
     const dish = new THREE.Mesh(
       cGeom(THREE.CylinderGeometry, 0.06, 0.03, 0.03, 8, 1, true),
-      new THREE.MeshPhongMaterial({
+      cMat(type,{
         color: 0x99aacc, shininess: 100, side: THREE.DoubleSide
       })
     );
@@ -2925,7 +3057,7 @@ export function createAlienModel(type) {
     // Dish receiver stub
     const dishStub = new THREE.Mesh(
       cGeom(THREE.CylinderGeometry, 0.005, 0.005, 0.04, 4),
-      new THREE.MeshPhongMaterial({ color: 0x556677 })
+      cMat(type,{ color: 0x556677 })
     );
     dishStub.position.set(0.09, 0.3, 0.06);
     group.add(dishStub);
@@ -2946,7 +3078,7 @@ export function createAlienModel(type) {
       const ang = (t / 4) * Math.PI * 2 + Math.PI / 4;
       const vent = new THREE.Mesh(
         cGeom(THREE.BoxGeometry, 0.1, 0.06, 0.03),
-        new THREE.MeshPhongMaterial({ color: 0x1a2233, emissive: 0x000811, shininess: 70 })
+        cMat(type,{ color: 0x1a2233, emissive: 0x000811, shininess: 70 })
       );
       vent.position.set(Math.cos(ang) * 0.4, -0.05, Math.sin(ang) * 0.4);
       vent.rotation.y = ang + Math.PI / 2;
@@ -2955,7 +3087,7 @@ export function createAlienModel(type) {
       for (let lv = 0; lv < 3; lv++) {
         const louver = new THREE.Mesh(
           cGeom(THREE.BoxGeometry, 0.09, 0.006, 0.008),
-          new THREE.MeshPhongMaterial({ color: 0x334455 })
+          cMat(type,{ color: 0x334455 })
         );
         louver.position.set(
           Math.cos(ang) * 0.415,
@@ -2993,8 +3125,8 @@ export function createAlienModel(type) {
 
   } else if (type === 'boss') {
     // === BOSS: Massive alien overlord — towering armored commander ===
-    const coreMat = new THREE.MeshPhongMaterial({ color: 0x882200, emissive: 0x330800, shininess: 60 });
-    const armorMat = new THREE.MeshPhongMaterial({ color: 0x442211, emissive: 0x110500, shininess: 80 });
+    const coreMat = cMat(type,{ color: 0x882200, emissive: 0x330800, shininess: 60 });
+    const armorMat = cMat(type,{ color: 0x442211, emissive: 0x110500, shininess: 80 });
     const glowCoreMat = aGlow(0xff4400, 0.9, 3.0);
     // Massive torso
     const torso = new THREE.Mesh(cGeom(THREE.CylinderGeometry, 0.8, 0.6, 2.0, 10), coreMat);
@@ -3073,18 +3205,16 @@ export function createAlienModel(type) {
     group.scale.set(2.0, 2.0, 2.0);
   }
 
-  // Per-type rim light color: pulls from the alien's signature color, but
-  // boosted toward saturated hues so silhouettes pop against dark levels.
-  const rimColorMap = {
-    grunt:   0x22ff66,
-    swarmer: 0xbb44ff,
-    bloater: 0xff6622,
-    stalker: 0x00ffff,
-    spitter: 0xaaff00,
-    drone:   0x66bbff,
-    boss:    0xff6600,
-  };
-  rimLightGroup(group, rimColorMap[type] || data.color, 1.0, 2.0);
+  // Rim lighting is now baked into materials via cMat() cache — no need for
+  // the per-spawn rimLightGroup traversal that was triggering shader recompiles.
+
+  // Merge meshes sharing the same material into combined geometries.
+  // Reduces 40-65 draw calls per alien down to ~3-8 by batching geometry
+  // that shares a material into a single buffer. Only merges __shared
+  // materials (the cached Phong/Basic structural parts); per-instance glow
+  // materials whose opacity is animated at runtime are left as individual
+  // meshes so they can be mutated without bleeding across aliens.
+  _mergeAlienGroup(group);
 
   return group;
 }

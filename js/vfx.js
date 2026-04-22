@@ -3,6 +3,15 @@
 
 import { disposeTree, borrowLight, spawnParticle } from './particles.js';
 
+// Shared geometries for spawn effects — same params every call, so allocate
+// once and reuse. Marked __shared so disposeTree skips them.
+const _spawnBeamGeo = new THREE.CylinderGeometry(0.15, 0.5, 12, 8, 1, true);
+_spawnBeamGeo.__shared = true;
+const _spawnInnerBeamGeo = new THREE.CylinderGeometry(0.05, 0.2, 12, 8, 1, true);
+_spawnInnerBeamGeo.__shared = true;
+const _spawnRingGeo = new THREE.TorusGeometry(0.8, 0.06, 6, 16);
+_spawnRingGeo.__shared = true;
+
 export class VFXManager {
   constructor(camera, scene) {
     this.camera = camera;
@@ -349,9 +358,9 @@ export class VFXManager {
     const group = new THREE.Group();
     group.position.copy(position);
 
-    // Teleport beam (vertical column of light)
+    // Teleport beam (vertical column of light) — shared geometry
     const beam = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.15, 0.5, 12, 8, 1, true),
+      _spawnBeamGeo,
       new THREE.MeshBasicMaterial({
         color: 0x00ff88,
         transparent: true,
@@ -362,9 +371,9 @@ export class VFXManager {
     beam.position.y = 6;
     group.add(beam);
 
-    // Inner beam (brighter)
+    // Inner beam (brighter) — shared geometry
     const innerBeam = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.05, 0.2, 12, 8, 1, true),
+      _spawnInnerBeamGeo,
       new THREE.MeshBasicMaterial({
         color: 0xaaffcc,
         transparent: true,
@@ -374,9 +383,9 @@ export class VFXManager {
     innerBeam.position.y = 6;
     group.add(innerBeam);
 
-    // Ground ring
+    // Ground ring — shared geometry
     const groundRing = new THREE.Mesh(
-      new THREE.TorusGeometry(0.8, 0.06, 6, 16),
+      _spawnRingGeo,
       new THREE.MeshBasicMaterial({ color: 0x00ff88, transparent: true, opacity: 0.8 })
     );
     groundRing.rotation.x = -Math.PI / 2;
