@@ -4,6 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>UFO Invasion</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=Rajdhani:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <style>
 :root {
   --c-primary:   #00ffcc;
@@ -15,7 +18,9 @@
   --c-bg-panel:  rgba(2, 14, 24, 0.78);
   --c-line:      rgba(0, 255, 204, 0.55);
   --c-line-dim:  rgba(0, 255, 204, 0.2);
-  --font-mono:   'Courier New', 'Consolas', monospace;
+  --font-hud:    'Orbitron', 'Rajdhani', 'Courier New', monospace;
+  --font-body:   'Rajdhani', 'Courier New', monospace;
+  --font-mono:   'Orbitron', 'Courier New', 'Consolas', monospace;
   --grid-bg:
     linear-gradient(rgba(0,255,204,0.05) 1px, transparent 1px) 0 0 / 20px 20px,
     linear-gradient(90deg, rgba(0,255,204,0.05) 1px, transparent 1px) 0 0 / 20px 20px;
@@ -25,7 +30,7 @@
 body {
   overflow: hidden;
   background: #000;
-  font-family: var(--font-mono);
+  font-family: var(--font-hud);
   color: var(--c-primary);
   text-rendering: geometricPrecision;
 }
@@ -84,7 +89,8 @@ canvas#gameCanvas { display: block; width: 100vw; height: 100vh; }
 /* Top status strip - hologram readout */
 #hud-top {
   text-align: center; padding: 14px 20px 18px;
-  font-size: 14px; letter-spacing: 2px; text-transform: uppercase;
+  font-size: 16px; letter-spacing: 2px; text-transform: uppercase;
+  font-family: var(--font-hud);
   color: var(--c-primary);
   text-shadow: 0 0 10px var(--c-primary), 0 1px 2px rgba(0,0,0,0.9);
   background:
@@ -103,22 +109,34 @@ canvas#gameCanvas { display: block; width: 100vw; height: 100vh; }
   0% { left: -40%; } 100% { left: 100%; }
 }
 #hud-top .wave {
-  font-size: 26px; font-weight: bold; letter-spacing: 6px;
+  font-size: 28px; font-weight: 700; letter-spacing: 6px;
+  font-family: var(--font-hud);
   color: var(--c-primary);
   text-shadow: 0 0 14px var(--c-primary), 0 0 28px rgba(0,255,204,0.4);
 }
 #hud-top .wave::before { content: '[ '; opacity: 0.6; }
 #hud-top .wave::after  { content: ' ]'; opacity: 0.6; }
 #hud-top .enemies {
-  color: var(--c-danger); margin-left: 24px;
+  color: var(--c-danger); margin-left: 24px; font-size: 16px;
   text-shadow: 0 0 10px rgba(255,34,68,0.7);
 }
+#hud-top .enemies::before {
+  content: ''; display: inline-block; width: 18px; height: 18px; vertical-align: -3px; margin-right: 6px;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff2244' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='M12 2C7 2 3 6 3 10c0 2 1 4 2 5l-1 5h2l1-3h10l1 3h2l-1-5c1-1 2-3 2-5 0-4-4-8-9-8z'/%3E%3Ccircle cx='8' cy='10' r='2' fill='%23ff2244'/%3E%3Ccircle cx='16' cy='10' r='2' fill='%23ff2244'/%3E%3Cpath d='M6 2L3 0M18 2L21 0'/%3E%3C/svg%3E") center/contain no-repeat;
+  filter: drop-shadow(0 0 4px rgba(255,34,68,0.6));
+}
 #hud-top .score {
-  color: var(--c-warn); margin-left: 24px;
+  color: var(--c-warn); margin-left: 24px; font-size: 16px;
   text-shadow: 0 0 10px rgba(255,204,0,0.5);
 }
+#hud-top .score::before {
+  content: ''; display: inline-block; width: 18px; height: 18px; vertical-align: -3px; margin-right: 6px;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23ffcc00'%3E%3Cpath d='M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z'/%3E%3C/svg%3E") center/contain no-repeat;
+  filter: drop-shadow(0 0 4px rgba(255,204,0,0.5));
+}
 #hud-top .level-name {
-  color: var(--c-secondary); font-size: 11px; letter-spacing: 6px;
+  color: var(--c-secondary); font-size: 13px; letter-spacing: 6px;
+  font-family: var(--font-body); font-weight: 500;
   text-transform: uppercase; opacity: 0.9; margin-bottom: 4px;
   text-shadow: 0 0 8px rgba(0,170,255,0.5);
 }
@@ -134,7 +152,7 @@ canvas#gameCanvas { display: block; width: 100vw; height: 100vh; }
 
 /* Health / integrity meter */
 #health-bar-container {
-  width: 300px; height: 22px;
+  width: 320px; height: 24px;
   border: 1px solid var(--c-line);
   background: rgba(0,10,20,0.85);
   position: relative;
@@ -154,7 +172,13 @@ canvas#gameCanvas { display: block; width: 100vw; height: 100vh; }
   box-shadow:
     inset 0 -2px 4px rgba(0,0,0,0.4),
     inset 0 1px 2px rgba(255,255,255,0.25),
-    0 0 8px rgba(0,255,204,0.4);
+    0 0 10px rgba(0,255,204,0.4);
+  position: relative;
+}
+#health-bar::after {
+  content: ''; position: absolute; inset: 0;
+  background: linear-gradient(180deg, rgba(255,255,255,0.15) 0%, transparent 50%, rgba(0,0,0,0.1) 100%);
+  pointer-events: none;
 }
 #health-bar-container.damage-flash {
   animation: hbFlash 0.2s ease-out;
@@ -182,17 +206,23 @@ canvas#gameCanvas { display: block; width: 100vw; height: 100vh; }
   filter: drop-shadow(0 0 4px var(--c-primary));
 }
 #health-text {
-  position: absolute; top: -22px; left: 0;
-  font-size: 11px; letter-spacing: 3px; text-transform: uppercase;
+  position: absolute; top: -26px; left: 0;
+  font-size: 14px; letter-spacing: 3px; text-transform: uppercase;
+  font-family: var(--font-hud); font-weight: 600;
   color: var(--c-primary);
   text-shadow: 0 0 8px var(--c-primary), 0 1px 2px #000;
 }
-#health-text::before { content: '▸ HULL · '; opacity: 0.75; }
+#health-text::before {
+  content: ''; display: inline-block; width: 16px; height: 16px; vertical-align: -2px; margin-right: 6px;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%2300ffcc'%3E%3Cpath d='M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z'/%3E%3C/svg%3E") center/contain no-repeat;
+  filter: drop-shadow(0 0 4px rgba(0,255,204,0.6));
+}
 
 /* Weapon loadout readout */
 #weapon-info {
-  text-align: center; font-size: 13px; letter-spacing: 2px;
-  padding: 10px 24px 12px;
+  text-align: center; font-size: 15px; letter-spacing: 2px;
+  font-family: var(--font-hud);
+  padding: 12px 28px 14px;
   background: rgba(2,14,24,0.75);
   border: 1px solid var(--c-line);
   box-shadow:
@@ -206,27 +236,41 @@ canvas#gameCanvas { display: block; width: 100vw; height: 100vh; }
   position: relative;
 }
 #weapon-info::before {
-  content: '◈ LOADOUT'; position: absolute; top: -9px; left: 50%;
+  content: '◈ LOADOUT'; position: absolute; top: -10px; left: 50%;
   transform: translateX(-50%); background: var(--c-bg-deep);
-  padding: 0 10px; font-size: 9px; letter-spacing: 3px;
+  padding: 0 10px; font-size: 11px; letter-spacing: 3px;
+  font-family: var(--font-hud); font-weight: 600;
   color: var(--c-secondary);
   text-shadow: 0 0 6px rgba(0,170,255,0.6);
 }
 #weapon-info .weapon-name {
-  font-size: 18px; color: var(--c-primary); font-weight: bold;
+  font-size: 20px; color: var(--c-primary); font-weight: 700;
+  font-family: var(--font-hud);
   letter-spacing: 4px;
   text-shadow: 0 0 12px var(--c-primary), 0 0 24px rgba(0,255,204,0.4);
 }
+#weapon-info .weapon-name::before {
+  content: ''; display: inline-block; width: 18px; height: 18px; vertical-align: -2px; margin-right: 8px;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2300ffcc' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='M22 12h-4l-3 9L9 3l-3 9H2'/%3E%3C/svg%3E") center/contain no-repeat;
+  filter: drop-shadow(0 0 4px rgba(0,255,204,0.5));
+}
 #weapon-info .ammo {
-  color: var(--c-warn); font-size: 12px;
+  color: var(--c-warn); font-size: 15px;
+  font-family: var(--font-hud); font-weight: 500;
   text-shadow: 0 0 8px rgba(255,204,0,0.4);
 }
+#weapon-info .ammo::before {
+  content: ''; display: inline-block; width: 14px; height: 14px; vertical-align: -2px; margin-right: 6px;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23ffcc00'%3E%3Crect x='8' y='2' width='8' height='20' rx='1'/%3E%3Crect x='6' y='6' width='12' height='4' rx='1'/%3E%3C/svg%3E") center/contain no-repeat;
+  filter: drop-shadow(0 0 3px rgba(255,204,0,0.4));
+}
 #weapon-info .cooldown-bar {
-  width: 170px; height: 3px;
+  width: 180px; height: 4px;
   background: rgba(0,40,60,0.8);
   border: 1px solid var(--c-line-dim);
   margin: 8px auto 0;
   position: relative;
+  border-radius: 2px;
 }
 #weapon-info .cooldown-fill {
   height: 100%;
@@ -251,9 +295,10 @@ canvas#gameCanvas { display: block; width: 100vw; height: 100vh; }
   );
 }
 #minimap-container::before {
-  content: '◉ RADAR'; position: absolute; top: -8px; left: 50%;
+  content: '◉ RADAR'; position: absolute; top: -10px; left: 50%;
   transform: translateX(-50%); background: var(--c-bg-deep);
-  padding: 0 10px; font-size: 9px; letter-spacing: 3px;
+  padding: 0 10px; font-size: 11px; letter-spacing: 3px;
+  font-family: var(--font-hud); font-weight: 600;
   color: var(--c-secondary); z-index: 2;
   text-shadow: 0 0 6px rgba(0,170,255,0.6);
 }
@@ -302,7 +347,8 @@ canvas#gameCanvas { display: block; width: 100vw; height: 100vh; }
 /* Wave announcement - holographic banner */
 #wave-announce {
   position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%);
-  font-size: 56px; text-align: center; z-index: 25;
+  font-size: 60px; text-align: center; z-index: 25;
+  font-family: var(--font-hud); font-weight: 900;
   color: var(--c-primary);
   text-shadow:
     0 0 30px var(--c-primary),
@@ -310,9 +356,7 @@ canvas#gameCanvas { display: block; width: 100vw; height: 100vh; }
     0 0 120px rgba(0,255,204,0.3);
   display: none; pointer-events: none;
   letter-spacing: 10px; text-transform: uppercase;
-  font-weight: bold;
   padding: 40px 80px;
-  position: fixed;
 }
 #wave-announce::before, #wave-announce::after {
   content: ''; position: absolute; left: 50%; transform: translateX(-50%);
@@ -323,7 +367,8 @@ canvas#gameCanvas { display: block; width: 100vw; height: 100vh; }
 #wave-announce::before { top: 0; }
 #wave-announce::after  { bottom: 0; }
 #wave-announce .sub {
-  font-size: 18px; color: var(--c-secondary); margin-top: 16px;
+  font-size: 20px; color: var(--c-secondary); margin-top: 16px;
+  font-family: var(--font-body); font-weight: 500;
   letter-spacing: 6px;
   text-shadow: 0 0 16px rgba(0,170,255,0.6);
 }
@@ -354,7 +399,7 @@ canvas#gameCanvas { display: block; width: 100vw; height: 100vh; }
 }
 #main-menu > * { position: relative; z-index: 2; }
 #main-menu h1 {
-  font-size: 84px; color: var(--c-primary);
+  font-size: 84px; color: var(--c-primary); font-family: var(--font-hud);
   text-shadow:
     0 0 20px var(--c-primary),
     0 0 40px var(--c-primary),
@@ -374,7 +419,8 @@ canvas#gameCanvas { display: block; width: 100vw; height: 100vh; }
   pointer-events: none;
 }
 #main-menu .subtitle {
-  font-size: 13px; color: var(--c-secondary); margin-bottom: 16px;
+  font-size: 14px; color: var(--c-secondary); margin-bottom: 16px;
+  font-family: var(--font-body); font-weight: 500;
   letter-spacing: 8px; opacity: 0.9;
   text-shadow: 0 0 12px rgba(0,170,255,0.6);
   text-transform: uppercase;
@@ -382,7 +428,8 @@ canvas#gameCanvas { display: block; width: 100vw; height: 100vh; }
 #main-menu .subtitle::before { content: '◂ '; }
 #main-menu .subtitle::after  { content: ' ▸'; }
 #main-menu .system-status {
-  font-size: 10px; color: var(--c-primary); opacity: 0.65;
+  font-size: 11px; color: var(--c-primary); opacity: 0.65;
+  font-family: var(--font-body); font-weight: 400;
   letter-spacing: 4px; margin-bottom: 40px; text-transform: uppercase;
 }
 #main-menu .system-status .ok { color: var(--c-primary); }
@@ -408,7 +455,7 @@ canvas#gameCanvas { display: block; width: 100vw; height: 100vh; }
   border: 1px solid var(--c-line);
   color: var(--c-primary);
   padding: 16px 60px 16px 70px; font-size: 18px;
-  font-family: var(--font-mono); font-weight: bold;
+  font-family: var(--font-hud); font-weight: 700;
   cursor: pointer; margin: 6px; letter-spacing: 5px;
   transition: all 0.25s ease; pointer-events: all;
   text-transform: uppercase;
@@ -509,7 +556,7 @@ canvas#gameCanvas { display: block; width: 100vw; height: 100vh; }
 }
 #level-select > * { position: relative; z-index: 2; }
 #level-select h2 {
-  font-size: 42px; color: var(--c-primary);
+  font-size: 42px; color: var(--c-primary); font-family: var(--font-hud);
   text-shadow:
     0 0 16px var(--c-primary),
     0 0 32px var(--c-secondary),
@@ -520,7 +567,8 @@ canvas#gameCanvas { display: block; width: 100vw; height: 100vh; }
 #level-select h2::before { content: '⟦ '; color: var(--c-secondary); opacity: 0.85; }
 #level-select h2::after  { content: ' ⟧'; color: var(--c-secondary); opacity: 0.85; }
 #level-select .subtitle-line {
-  font-size: 12px; color: var(--c-secondary);
+  font-size: 14px; color: var(--c-secondary);
+  font-family: var(--font-body); font-weight: 500;
   letter-spacing: 6px; margin-bottom: 40px; opacity: 0.85;
   text-shadow: 0 0 10px rgba(0,170,255,0.55);
   text-transform: uppercase;
@@ -543,7 +591,7 @@ canvas#gameCanvas { display: block; width: 100vw; height: 100vh; }
 }
 #game-over > * { position: relative; }
 #game-over h1 {
-  font-size: 72px; color: var(--c-danger);
+  font-size: 72px; color: var(--c-danger); font-family: var(--font-hud);
   text-shadow:
     0 0 30px var(--c-danger),
     0 0 60px rgba(255,34,68,0.5),
@@ -565,14 +613,16 @@ canvas#gameCanvas { display: block; width: 100vw; height: 100vh; }
   }
 }
 #game-over .fail-sub {
-  color: var(--c-danger); font-size: 12px; letter-spacing: 6px;
+  color: var(--c-danger); font-size: 14px; letter-spacing: 6px;
+  font-family: var(--font-body); font-weight: 500;
   text-transform: uppercase; opacity: 0.75;
   margin-bottom: 36px;
 }
 #game-over .fail-sub::before { content: '// '; }
 #game-over .fail-sub::after  { content: ' //'; }
 #game-over .stats {
-  font-size: 15px; margin: 6px 0; letter-spacing: 3px;
+  font-size: 17px; margin: 8px 0; letter-spacing: 3px;
+  font-family: var(--font-hud); font-weight: 500;
   color: var(--c-primary);
   text-transform: uppercase;
   text-shadow: 0 0 8px rgba(0,255,204,0.4);
@@ -609,7 +659,8 @@ canvas#gameCanvas { display: block; width: 100vw; height: 100vh; }
 #help-guide > * { position: relative; }
 #help-guide h1 {
   text-align: center; font-size: 38px;
-  color: var(--c-primary); font-weight: bold;
+  font-family: var(--font-hud);
+  color: var(--c-primary); font-weight: 700;
   text-shadow: 0 0 24px var(--c-primary), 0 0 48px rgba(0,255,204,0.3);
   margin-bottom: 32px;
   letter-spacing: 8px; text-transform: uppercase;
@@ -617,7 +668,7 @@ canvas#gameCanvas { display: block; width: 100vw; height: 100vh; }
 #help-guide h1::before { content: '⟦ '; color: var(--c-secondary); }
 #help-guide h1::after  { content: ' ⟧'; color: var(--c-secondary); }
 #help-guide h2 {
-  font-size: 20px; color: var(--c-secondary);
+  font-size: 20px; color: var(--c-secondary); font-family: var(--font-hud);
   padding: 10px 18px;
   margin: 28px 0 18px;
   letter-spacing: 4px;
@@ -685,18 +736,21 @@ canvas#gameCanvas { display: block; width: 100vw; height: 100vh; }
 }
 .alien-card h3 {
   color: var(--c-primary); font-size: 16px; margin-bottom: 10px;
+  font-family: var(--font-hud); font-weight: 600;
   letter-spacing: 3px; text-transform: uppercase;
   text-shadow: 0 0 10px rgba(0,255,204,0.5);
 }
 .alien-card h3::before { content: '◆ '; color: var(--c-secondary); }
 .weapon-card h3 {
   color: var(--c-secondary); font-size: 16px; margin-bottom: 10px;
+  font-family: var(--font-hud); font-weight: 600;
   letter-spacing: 3px; text-transform: uppercase;
   text-shadow: 0 0 10px rgba(0,170,255,0.5);
 }
 .weapon-card h3::before { content: '◆ '; color: var(--c-primary); }
 .alien-card .stat, .weapon-card .stat {
-  font-size: 12px; margin: 4px 0; letter-spacing: 1px;
+  font-size: 13px; margin: 4px 0; letter-spacing: 1px;
+  font-family: var(--font-body); font-weight: 500;
   color: rgba(0,255,204,0.7);
 }
 .alien-card .stat span, .weapon-card .stat span {
@@ -704,7 +758,8 @@ canvas#gameCanvas { display: block; width: 100vw; height: 100vh; }
   text-shadow: 0 0 6px rgba(255,204,0,0.4);
 }
 .controls-list {
-  columns: 2; font-size: 13px;
+  columns: 2; font-size: 14px;
+  font-family: var(--font-body); font-weight: 500;
   padding: 16px 20px;
   background: rgba(0,20,30,0.55);
   border: 1px solid var(--c-line-dim);
@@ -811,26 +866,26 @@ canvas#gameCanvas { display: block; width: 100vw; height: 100vh; }
   pointer-events: none; z-index: 17; overflow: hidden;
 }
 .dmg-num {
-  position: absolute; color: #ffdd00; font-family: 'Courier New', monospace;
-  font-size: 16px; font-weight: bold;
-  text-shadow: 0 0 4px #ff8800, 1px 1px 2px rgba(0,0,0,0.8);
+  position: absolute; color: #ffdd00; font-family: var(--font-hud);
+  font-size: 18px; font-weight: 700;
+  text-shadow: 0 0 6px #ff8800, 1px 1px 2px rgba(0,0,0,0.8);
   transform: translate(-50%, -50%);
   pointer-events: none; white-space: nowrap;
 }
 .dmg-num.kill {
-  color: #ff4444; font-size: 22px;
+  color: #ff4444; font-size: 24px;
   text-shadow: 0 0 8px #ff0000, 0 0 16px #ff0000, 0 0 24px rgba(255,0,0,0.3);
 }
 .dmg-num.crit {
-  color: #ffaa00; font-size: 20px;
+  color: #ffaa00; font-size: 22px;
   text-shadow: 0 0 8px #ff6600, 0 0 16px #ff4400, 0 0 24px rgba(255,100,0,0.4);
 }
 
 /* Kill Feed */
 #kill-feed {
   position: fixed; top: 80px; right: 215px;
-  width: 260px; pointer-events: none; z-index: 18;
-  font-family: var(--font-mono); font-size: 11px;
+  width: 280px; pointer-events: none; z-index: 18;
+  font-family: var(--font-body); font-size: 13px; font-weight: 500;
   letter-spacing: 1px; text-transform: uppercase;
 }
 .kill-entry {
@@ -895,8 +950,8 @@ canvas#gameCanvas { display: block; width: 100vw; height: 100vh; }
   background: rgba(0,20,30,0.55);
   border: 2px solid var(--c-line);
   color: var(--c-primary);
-  font-family: var(--font-mono);
-  font-size: 13px; font-weight: bold;
+  font-family: var(--font-hud);
+  font-size: 14px; font-weight: 700;
   letter-spacing: 3px;
   text-shadow: 0 0 8px var(--c-primary);
   display: flex; align-items: center; justify-content: center;
@@ -946,10 +1001,10 @@ canvas#gameCanvas { display: block; width: 100vw; height: 100vh; }
     radial-gradient(ellipse at center, #020814 0%, #000 70%);
   display: flex; flex-direction: column;
   align-items: center; justify-content: center;
-  z-index: 300; font-size: 16px; color: var(--c-primary);
+  z-index: 300; font-size: 18px; color: var(--c-primary);
   letter-spacing: 5px; text-transform: uppercase;
   text-shadow: 0 0 14px var(--c-primary), 0 0 30px rgba(0,255,204,0.3);
-  font-family: var(--font-mono);
+  font-family: var(--font-hud);
 }
 #loading::before {
   content: ''; position: absolute; inset: 0;
@@ -971,34 +1026,37 @@ canvas#gameCanvas { display: block; width: 100vw; height: 100vh; }
   50% { opacity: 1.0; }
 }
 .perk-title {
-  font-family: var(--font); color: #0ff; font-size: 24px; letter-spacing: 3px;
+  font-family: var(--font-hud); color: #0ff; font-size: 26px; font-weight: 700; letter-spacing: 4px;
   margin-bottom: 24px; text-shadow: 0 0 12px #0ff;
 }
 .perk-cards { display: flex; gap: 16px; }
 .perk-card {
   background: rgba(0,40,40,0.9); border: 1px solid #0aa; border-radius: 6px;
-  padding: 20px 24px; cursor: pointer; width: 180px; text-align: center;
-  font-family: var(--font); color: #eee; transition: all 0.15s;
+  padding: 20px 24px; cursor: pointer; width: 200px; text-align: center;
+  font-family: var(--font-body); color: #eee; transition: all 0.15s;
 }
 .perk-card:hover {
   border-color: #0ff; background: rgba(0,80,80,0.95);
   box-shadow: 0 0 20px rgba(0,255,255,0.3); transform: scale(1.05);
 }
 .perk-name {
-  font-size: 16px; color: #0ff; font-weight: bold; letter-spacing: 2px;
+  font-family: var(--font-hud); font-size: 16px; color: #0ff; font-weight: 700; letter-spacing: 2px;
   margin-bottom: 8px;
 }
-.perk-desc { font-size: 12px; color: #aaa; line-height: 1.4; }
+.perk-desc { font-family: var(--font-body); font-size: 14px; color: #bbb; line-height: 1.4; }
 .perk-tag {
-  font-family: var(--font); font-size: 9px; color: #0ff;
-  background: rgba(0,60,60,0.7); border: 1px solid #066;
-  padding: 2px 5px; border-radius: 3px; letter-spacing: 1px;
+  font-family: var(--font-hud); font-size: 11px; font-weight: 600; color: #0ff;
+  background: linear-gradient(135deg, rgba(0,60,60,0.8), rgba(0,30,50,0.9));
+  border: 1px solid #088;
+  padding: 3px 8px; border-radius: 3px; letter-spacing: 2px;
+  text-shadow: 0 0 6px rgba(0,255,255,0.5);
+  box-shadow: 0 0 8px rgba(0,255,255,0.15), inset 0 0 6px rgba(0,100,100,0.3);
 }
 
 /* Kill streak announcement */
 #kill-streak {
   position: fixed; top: 35%; left: 50%; transform: translate(-50%, -50%) scale(0.8);
-  font-family: var(--font-mono); font-size: 36px; font-weight: bold;
+  font-family: var(--font-hud); font-size: 40px; font-weight: 800;
   letter-spacing: 8px; text-transform: uppercase;
   color: var(--c-warn); pointer-events: none; z-index: 26;
   text-shadow: 0 0 20px var(--c-warn), 0 0 40px rgba(255,200,0,0.5), 0 0 80px rgba(255,200,0,0.2);
@@ -1018,10 +1076,15 @@ canvas#gameCanvas { display: block; width: 100vw; height: 100vh; }
 }
 #boss-health.active { opacity: 1; }
 #boss-health .boss-name {
-  font-family: var(--font-mono); font-size: 14px; font-weight: bold;
+  font-family: var(--font-hud); font-size: 16px; font-weight: 700;
   letter-spacing: 4px; text-transform: uppercase;
   color: #ff6600; margin-bottom: 6px;
   text-shadow: 0 0 12px rgba(255,102,0,0.6), 0 0 24px rgba(255,102,0,0.3);
+}
+#boss-health .boss-name::before {
+  content: ''; display: inline-block; width: 20px; height: 20px; vertical-align: -3px; margin-right: 8px;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23ff6600'%3E%3Cpath d='M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z'/%3E%3C/svg%3E") center/contain no-repeat;
+  filter: drop-shadow(0 0 4px rgba(255,102,0,0.6));
 }
 #boss-health .boss-bar-bg {
   width: 100%; height: 14px;
@@ -1072,7 +1135,7 @@ canvas#gameCanvas { display: block; width: 100vw; height: 100vh; }
 /* Wave countdown */
 #wave-countdown {
   position: fixed; bottom: 140px; left: 50%; transform: translateX(-50%);
-  font-family: var(--font-mono); font-size: 13px; letter-spacing: 3px;
+  font-family: var(--font-hud); font-size: 16px; font-weight: 600; letter-spacing: 3px;
   color: var(--c-secondary); text-transform: uppercase;
   pointer-events: none; z-index: 22; opacity: 0;
   text-shadow: 0 0 8px rgba(0,170,255,0.5);
@@ -1097,45 +1160,49 @@ canvas#gameCanvas { display: block; width: 100vw; height: 100vh; }
 /* Enemy type callout */
 #enemy-callout {
   position: fixed; bottom: 180px; left: 50%; transform: translateX(-50%);
-  font-family: var(--font-mono); font-size: 12px; letter-spacing: 3px;
+  font-family: var(--font-hud); font-size: 14px; font-weight: 600; letter-spacing: 3px;
   color: var(--c-primary); text-transform: uppercase;
   pointer-events: none; z-index: 22;
   opacity: 0; transition: opacity 0.3s;
   text-shadow: 0 0 8px var(--c-primary);
   background: rgba(0,10,20,0.6);
-  padding: 4px 16px;
+  padding: 6px 18px;
   border: 1px solid var(--c-line-dim);
 }
 #enemy-callout.active { opacity: 1; }
 
 /* Shield bar */
 #shield-bar-container {
-  display: none; width: 100%; height: 4px; margin-top: 3px;
+  display: none; width: 100%; height: 6px; margin-top: 4px;
   background: rgba(0, 50, 120, 0.3); border: 1px solid rgba(0, 136, 255, 0.4);
   border-radius: 2px; overflow: hidden;
+  position: relative;
 }
 #shield-bar {
   width: 0%; height: 100%;
   background: linear-gradient(90deg, #0066ff, #00ccff);
   transition: width 0.15s;
+  box-shadow: 0 0 6px rgba(0,136,255,0.4);
 }
 
 /* Grenade counter */
 #grenade-count {
   position: absolute; bottom: 96px; left: 50%; transform: translateX(40px);
-  font-size: 11px; color: #4f4; letter-spacing: 1px;
+  font-size: 14px; font-family: var(--font-hud); font-weight: 600;
+  color: #4f4; letter-spacing: 2px;
   text-shadow: 0 0 6px rgba(68,255,68,0.5);
   pointer-events: none;
+  display: flex; align-items: center; gap: 5px;
 }
 
 /* Reload bar overlay */
 #reload-bar-container {
   display: none; position: fixed; bottom: 200px; left: 50%; transform: translateX(-50%);
-  width: 80px; height: 6px; background: rgba(0,0,0,0.5);
+  width: 100px; height: 8px; background: rgba(0,0,0,0.5);
   border: 1px solid rgba(255,170,0,0.6); border-radius: 3px; overflow: hidden;
   z-index: 30;
 }
-#reload-bar { width: 0%; height: 100%; background: #ffaa00; transition: width 0.1s; }
+#reload-bar { width: 0%; height: 100%; background: linear-gradient(90deg, #ff8800, #ffcc00); transition: width 0.1s; box-shadow: 0 0 6px rgba(255,170,0,0.4); }
 
 /* Film grain overlay for cinematic look */
 #film-grain {
@@ -1232,7 +1299,7 @@ canvas#gameCanvas { display: block; width: 100vw; height: 100vh; }
   </div>
   <div id="combo-display" style="
     position:absolute; right:20px; top:80px;
-    font-size:28px; font-weight:bold; color:var(--c-warn);
+    font-family:'Orbitron',monospace; font-size:30px; font-weight:800; color:var(--c-warn);
     text-shadow:0 0 12px var(--c-warn), 0 0 24px rgba(255,200,0,0.4);
     opacity:0; transition:opacity 0.15s, transform 0.15s;
     transform:scale(1); pointer-events:none;
@@ -1252,9 +1319,10 @@ canvas#gameCanvas { display: block; width: 100vw; height: 100vh; }
   </div>
   <div id="dash-indicator" style="
     position:absolute; bottom:90px; left:50%; transform:translateX(-50%);
-    width:60px; height:4px; background:rgba(0,0,0,0.5); border:1px solid #0aa;
-    border-radius:2px; overflow:hidden;
-  "><div id="dash-fill" style="width:100%; height:100%; background:#0ff; transition:width 0.1s;"></div></div>
+    width:80px; height:6px; background:rgba(0,0,0,0.5); border:1px solid #0aa;
+    border-radius:3px; overflow:hidden;
+    box-shadow:0 0 8px rgba(0,255,255,0.15);
+  "><div id="dash-fill" style="width:100%; height:100%; background:linear-gradient(90deg,#088,#0ff); transition:width 0.1s; box-shadow:0 0 4px rgba(0,255,255,0.4);"></div></div>
   <div id="grenade-count">G: 3</div>
   <div id="reload-bar-container"><div id="reload-bar"></div></div>
   <div id="active-perks" style="

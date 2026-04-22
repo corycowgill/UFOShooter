@@ -106,11 +106,11 @@ export class HUD {
     // Grenade counter
     const grenadeEl = document.getElementById('grenade-count');
     if (grenadeEl) {
-      const gt = `G: ${weaponData.grenadeCount}`;
-      if (gt !== last.grenadeText) {
-        grenadeEl.textContent = gt;
-        grenadeEl.style.opacity = weaponData.grenadeCount > 0 ? '1' : '0.4';
-        last.grenadeText = gt;
+      const gt = weaponData.grenadeCount;
+      if (gt !== last.grenadeCount) {
+        grenadeEl.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="#4f4" style="filter:drop-shadow(0 0 3px rgba(68,255,68,0.5))"><circle cx="12" cy="14" r="8"/><path d="M10 6h4v2h-4z"/><path d="M12 2v4" stroke="#4f4" stroke-width="2" fill="none"/><path d="M9 2h6" stroke="#4f4" stroke-width="2" fill="none"/></svg> ${gt}`;
+        grenadeEl.style.opacity = gt > 0 ? '1' : '0.4';
+        last.grenadeCount = gt;
       }
     }
 
@@ -181,13 +181,21 @@ export class HUD {
     if (!this.perksEl) return;
     const counts = {};
     for (const id of perkIds) counts[id] = (counts[id] || 0) + 1;
-    const names = {
-      rapidFire: 'RAPID', toughSkin: 'TOUGH', quickFeet: 'SPEED',
-      vampire: 'VAMP', blastRadius: 'BLAST', sharpshooter: 'SHARP',
-      comboMaster: 'COMBO', scavenger: 'SCAV',
+    const perkData = {
+      rapidFire:    { name: 'RAPID',  icon: '⚡' },
+      toughSkin:    { name: 'TOUGH',  icon: '🛡' },
+      quickFeet:    { name: 'SPEED',  icon: '💨' },
+      vampire:      { name: 'VAMP',   icon: '🩸' },
+      blastRadius:  { name: 'BLAST',  icon: '💥' },
+      sharpshooter: { name: 'SHARP',  icon: '🎯' },
+      comboMaster:  { name: 'COMBO',  icon: '🔥' },
+      scavenger:    { name: 'SCAV',   icon: '🔧' },
     };
     this.perksEl.innerHTML = Object.entries(counts)
-      .map(([id, n]) => `<span class="perk-tag">${names[id] || id}${n > 1 ? ' x' + n : ''}</span>`)
+      .map(([id, n]) => {
+        const p = perkData[id] || { name: id, icon: '◆' };
+        return `<span class="perk-tag">${p.icon} ${p.name}${n > 1 ? ' x' + n : ''}</span>`;
+      })
       .join('');
   }
 
