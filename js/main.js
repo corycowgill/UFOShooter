@@ -9,7 +9,7 @@ import { HUD } from './hud.js';
 import { HelpGuide } from './help.js';
 import { VFXManager } from './vfx.js';
 import { LEVELS } from './levels.js';
-import { ALIEN_TYPES } from './aliens.js';
+import { ALIEN_TYPES, createAlienModel } from './aliens.js';
 import { disposeTree, initLightPool, initParticleFields, getActiveParticleCount, getActiveLightCount } from './particles.js';
 import { PerfProfiler } from './perf.js';
 
@@ -712,6 +712,14 @@ function startGame() {
   // Wave manager
   waveManager = new WaveManager(scene, particles, audio);
   waveManager.vfx = vfx;
+
+  // Pre-warm alien geometry, material, and shader caches so the first spawn
+  // of each type doesn't stall. Creates one throwaway model per type —
+  // cGeom/cMat caches persist, merged geometry is discarded.
+  for (const type of Object.keys(ALIEN_TYPES)) {
+    const tmp = createAlienModel(type);
+    disposeTree(tmp);
+  }
 
   // Load selected level
   loadLevel(currentLevelIndex);
