@@ -259,7 +259,16 @@ function _init() {
 
   // Audio
   audio = new AudioManager();
-  audio.startMenuMusic();
+
+  // Browsers require a user gesture before AudioContext can play.
+  // Start menu music on the first click/tap anywhere on the page.
+  const _startMenuMusicOnGesture = () => {
+    audio.startMenuMusic();
+    document.removeEventListener('click', _startMenuMusicOnGesture);
+    document.removeEventListener('touchstart', _startMenuMusicOnGesture);
+  };
+  document.addEventListener('click', _startMenuMusicOnGesture);
+  document.addEventListener('touchstart', _startMenuMusicOnGesture);
 
   // HUD
   hud = new HUD();
