@@ -1164,9 +1164,26 @@ canvas#gameCanvas { display: block; width: 100vw; height: 100vh; }
 </head>
 <body>
 <div id="loading">
-  <div style="font-size:11px;color:var(--c-secondary);letter-spacing:4px;margin-bottom:10px;opacity:0.8;">// SYSTEM BOOT</div>
-  <div style="font-size:22px;font-weight:bold;">LOADING UFO INVASION</div>
-  <div style="font-size:10px;color:var(--c-line);letter-spacing:3px;margin-top:12px;opacity:0.65;">ESTABLISHING UPLINK · CALIBRATING WEAPONS · SCANNING THREATS</div>
+  <div id="load-status">
+    <div style="font-size:11px;color:var(--c-secondary);letter-spacing:4px;margin-bottom:10px;opacity:0.8;">// SYSTEM BOOT</div>
+    <div style="font-size:22px;font-weight:bold;">LOADING UFO INVASION</div>
+    <div style="font-size:10px;color:var(--c-line);letter-spacing:3px;margin-top:12px;opacity:0.65;">ESTABLISHING UPLINK · CALIBRATING WEAPONS · SCANNING THREATS</div>
+  </div>
+  <div id="load-ready" style="display:none;text-align:center;cursor:pointer;">
+    <div style="font-size:11px;color:var(--c-secondary);letter-spacing:4px;margin-bottom:10px;opacity:0.8;">// ALL SYSTEMS NOMINAL</div>
+    <div style="font-size:28px;font-weight:bold;letter-spacing:8px;margin-bottom:6px;">UPLINK ESTABLISHED</div>
+    <div style="font-size:14px;color:var(--c-warn);letter-spacing:4px;margin-bottom:24px;text-shadow:0 0 12px rgba(255,204,0,0.5);">ALIEN THREAT DETECTED · DEFENSE GRID ONLINE</div>
+    <div id="load-enter-btn" style="
+      display:inline-block;font-size:18px;font-weight:bold;letter-spacing:6px;
+      padding:16px 60px;border:1px solid var(--c-primary);cursor:pointer;
+      background:linear-gradient(90deg,rgba(0,255,204,0.08),rgba(0,40,60,0.35),rgba(0,255,204,0.04));
+      text-shadow:0 0 10px rgba(0,255,204,0.5);
+      box-shadow:0 0 12px rgba(0,255,204,0.15),inset 0 0 12px rgba(0,40,60,0.4);
+      clip-path:polygon(14px 0,100% 0,100% calc(100% - 14px),calc(100% - 14px) 100%,0 100%,0 14px);
+      animation:titlePulse 2.8s ease-in-out infinite;
+    ">ENTER COMMAND</div>
+    <div style="font-size:10px;color:var(--c-line);letter-spacing:3px;margin-top:16px;opacity:0.5;">CLICK OR PRESS ENTER TO CONTINUE</div>
+  </div>
 </div>
 
 <canvas id="gameCanvas"></canvas>

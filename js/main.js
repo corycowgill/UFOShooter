@@ -260,16 +260,6 @@ function _init() {
   // Audio
   audio = new AudioManager();
 
-  // Browsers require a user gesture before AudioContext can play.
-  // Start menu music on the first click/tap anywhere on the page.
-  const _startMenuMusicOnGesture = () => {
-    audio.startMenuMusic();
-    document.removeEventListener('click', _startMenuMusicOnGesture);
-    document.removeEventListener('touchstart', _startMenuMusicOnGesture);
-  };
-  document.addEventListener('click', _startMenuMusicOnGesture);
-  document.addEventListener('touchstart', _startMenuMusicOnGesture);
-
   // HUD
   hud = new HUD();
 
@@ -283,8 +273,27 @@ function _init() {
   // Event listeners
   setupEventListeners();
 
-  // Hide loading
-  document.getElementById('loading').style.display = 'none';
+  // Show "ready" splash — the click serves as the user gesture for audio
+  const loadStatus = document.getElementById('load-status');
+  const loadReady = document.getElementById('load-ready');
+  const loadingEl = document.getElementById('loading');
+  if (loadStatus) loadStatus.style.display = 'none';
+  if (loadReady) loadReady.style.display = 'block';
+
+  const _enterGame = () => {
+    loadingEl.style.display = 'none';
+    audio.startMenuMusic();
+    loadingEl.removeEventListener('click', _enterGame);
+    document.removeEventListener('keydown', _enterKeyHandler);
+  };
+  const _enterKeyHandler = (e) => {
+    if (e.code === 'Enter' || e.code === 'Space') {
+      e.preventDefault();
+      _enterGame();
+    }
+  };
+  loadingEl.addEventListener('click', _enterGame);
+  document.addEventListener('keydown', _enterKeyHandler);
 
   // Cache frequently-accessed DOM elements
   _cacheDom();
