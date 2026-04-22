@@ -142,8 +142,10 @@ export class VFXManager {
   // DAMAGE NUMBERS
   // ========================
   showDamageNumber(worldPos, damage, isKill = false, isCrit = false) {
-    // Cap active damage numbers to avoid DOM/CPU blowup during multi-kills
-    if (this.damageNumbers.length >= 60) return;
+    // Cap active damage numbers to avoid DOM/CPU blowup during multi-kills.
+    // 40 is enough for rocket AOE bursts while keeping per-frame style writes
+    // bounded.
+    if (this.damageNumbers.length >= 40) return;
     let el;
     if (this._dmgPool.length > 0) {
       el = this._dmgPool.pop();
@@ -162,26 +164,57 @@ export class VFXManager {
       life: 1.0,
       offsetY: 0,
       velocity: -80 - Math.random() * 40,
+      _lastX: -9999,
+      _lastY: -9999,
+      _lastOp: -1,
+      _hidden: false,
     });
   }
 
   _updateDamageNumbers(delta) {
+    if (this.damageNumbers.length === 0) return;
+    const camera = this.camera;
+    const screenPos = this._tmpScreenPos;
+    const winW = window.innerWidth;
+    const winH = window.innerHeight;
     for (let i = this.damageNumbers.length - 1; i >= 0; i--) {
       const dn = this.damageNumbers[i];
       dn.life -= delta;
       dn.offsetY += dn.velocity * delta;
 
-      const screenPos = this._tmpScreenPos.copy(dn.worldPos).project(this.camera);
-      const x = (screenPos.x * 0.5 + 0.5) * window.innerWidth;
-      const y = (-screenPos.y * 0.5 + 0.5) * window.innerHeight + dn.offsetY;
+      screenPos.copy(dn.worldPos).project(camera);
 
       if (screenPos.z < 1) {
-        dn.el.style.left = x + 'px';
-        dn.el.style.top = y + 'px';
-        dn.el.style.opacity = Math.max(0, dn.life);
-        dn.el.style.display = 'block';
-      } else {
+        const x = (screenPos.x * 0.5 + 0.5) * winW;
+        const y = (-screenPos.y * 0.5 + 0.5) * winH + dn.offsetY;
+        // Round to whole pixels so we can short-circuit identical updates and
+        // avoid sub-pixel style thrash during slow-moving numbers.
+        const xi = x | 0;
+        const yi = y | 0;
+        const style = dn.el.style;
+        if (dn._hidden) {
+          style.display = 'block';
+          dn._hidden = false;
+        }
+        if (xi !== dn._lastX) {
+          style.left = xi + 'px';
+          dn._lastX = xi;
+        }
+        if (yi !== dn._lastY) {
+          style.top = yi + 'px';
+          dn._lastY = yi;
+        }
+        // Quantize opacity to 0.05 steps — the eye can't tell and it cuts
+        // most frames' opacity writes to zero.
+        const op = Math.max(0, dn.life);
+        const opq = Math.round(op * 20);
+        if (opq !== dn._lastOp) {
+          style.opacity = opq * 0.05;
+          dn._lastOp = opq;
+        }
+      } else if (!dn._hidden) {
         dn.el.style.display = 'none';
+        dn._hidden = true;
       }
 
       if (dn.life <= 0) {
@@ -526,6 +559,12 @@ export class VFXManager {
 
   _updateEnvironmentParticles(delta) {
     if (!this.envParticles) return;
+    // Drifting dust/embers are low-frequency motion — update every other frame
+    // with a doubled delta. Halves the per-frame iteration + GPU buffer upload
+    // cost (350+120 = 470 particles) with no perceptible difference.
+    this._envFrame = (this._envFrame || 0) + 1;
+    if ((this._envFrame & 1) !== 0) return;
+    delta *= 2;
 
     const positions = this.envParticles.geometry.attributes.position.array;
     const velocities = this.envParticles.geometry.userData.velocities;
@@ -661,6 +700,13 @@ export class VFXManager {
 
   _updateRain(delta) {
     if (!this._rain) return;
+    // 800 rain streaks * 6 floats/streak is the heaviest per-frame buffer
+    // upload in the game. Running at 30Hz with doubled delta keeps rain
+    // visually identical (streaks travel 12+ units/sec — 33ms frames still
+    // drop them faster than the eye can track) and halves GPU bandwidth.
+    this._rainFrame = (this._rainFrame || 0) + 1;
+    if ((this._rainFrame & 1) !== 0) return;
+    delta *= 2;
     const positions = this._rain.geometry.attributes.position.array;
     const velocities = this._rain.geometry.userData.velocities;
     const count = this._rain.geometry.userData.count;
@@ -899,6 +945,11 @@ export class VFXManager {
 
   _updateSmokeWisps(delta) {
     if (!this._smokeWisps) return;
+    // Smoke drifts at <0.01 units/frame — every 3rd frame is imperceptible
+    // and triples the budget available for ~90 trig calls/update.
+    this._smokeFrame = (this._smokeFrame || 0) + 1;
+    if ((this._smokeFrame % 3) !== 0) return;
+    delta *= 3;
     const pos = this._smokeWisps.geometry.attributes.position.array;
     const phases = this._smokeWisps.geometry.userData.phases;
     const count = this._smokeWisps.geometry.userData.count;

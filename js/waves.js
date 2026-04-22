@@ -23,6 +23,7 @@ export class WaveManager {
     this.spawnQueue = [];
     this.spawnTimer = 0;
     this.waveTheme = null;
+    this._aliveCount = 0;
   }
 
   setSpawnPoints(points) {
@@ -137,18 +138,23 @@ export class WaveManager {
       }
     }
 
-    // Update all enemies
+    // Update all enemies — count alive ones inline so we don't need a
+    // second pass (or an allocating filter) to detect wave completion.
+    let alive = 0;
     for (let i = this.enemies.length - 1; i >= 0; i--) {
       const enemy = this.enemies[i];
       const shouldRemove = enemy.update(delta, playerPos);
       if (shouldRemove) {
         enemy.cleanup();
         this.enemies.splice(i, 1);
+      } else if (!enemy.dead) {
+        alive++;
       }
     }
+    this._aliveCount = alive;
 
     // Check if wave complete
-    if (this.state === 'active' && this.getAliveCount() === 0) {
+    if (this.state === 'active' && alive === 0) {
       this.state = 'complete';
       this.stateTimer = 3;
     }
@@ -213,7 +219,14 @@ export class WaveManager {
   }
 
   getAliveCount() {
-    return this.enemies.filter(e => !e.dead).length;
+    // Returns the cached count from the last update(). Falls back to a
+    // non-allocating loop for callers that query before update() has run.
+    if (this._aliveCount !== undefined) return this._aliveCount;
+    let n = 0;
+    for (let i = 0; i < this.enemies.length; i++) {
+      if (!this.enemies[i].dead) n++;
+    }
+    return n;
   }
 
   getTotalCount() {

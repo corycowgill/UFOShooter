@@ -92,11 +92,11 @@ function _spawnPickup(position, type) {
   _pickups.push({ mesh, life: PICKUP_LIFETIME, type: kind });
 }
 
-function _updatePickups(delta, playerPos) {
+function _updatePickups(delta, playerPos, nowSec) {
   for (let i = _pickups.length - 1; i >= 0; i--) {
     const p = _pickups[i];
     p.life -= delta;
-    p.mesh.position.y = 0.5 + Math.sin(performance.now() * 0.004 + i) * 0.15;
+    p.mesh.position.y = 0.5 + Math.sin(nowSec * 4 + i) * 0.15;
     p.mesh.rotation.y += delta * 2;
     if (p.life < 3) {
       p.mesh.visible = Math.sin(p.life * 10) > 0;
@@ -162,6 +162,10 @@ let _dashSoundPlayed = false;
 let _dmgDirTimers = { n: 0, s: 0, e: 0, w: 0 };
 let _seenEnemyTypes = new Set();
 let _calloutTimer = 0;
+// Count of unique alien types — lets the callout loop short-circuit once
+// every type has been announced. ALIEN_TYPES is declared in aliens.js and
+// imported at module top.
+const _totalAlienTypes = Object.keys(ALIEN_TYPES).length;
 let _weaponHeat = 0;
 
 const KILL_STREAK_NAMES = [
@@ -1095,11 +1099,20 @@ const _tmpFwd = new THREE.Vector3();
 const _tmpRight = new THREE.Vector3();
 const _tmpToE = new THREE.Vector3();
 const _UP = new THREE.Vector3(0, 1, 0);
+// Hoisted — these were object/array literals allocated every frame at the
+// damage-direction timer loop. The values are DOM elements assigned from
+// _domCache once, after DOM is ready.
+const _dmgDirEls = { n: null, s: null, e: null, w: null };
+const _DMG_DIR_KEYS = ['n', 's', 'e', 'w'];
+let _dmgDirElsBound = false;
 
 function animate() {
   requestAnimationFrame(animate);
   let delta = Math.min(clock.getDelta(), 0.05); // Cap delta
   _frameCounter++;
+  // Cache per-frame time — used by UFO hover, stars, neon, streetlights,
+  // weapon accent. Each performance.now() is cheap but 5+ calls/frame adds up.
+  const _nowSec = performance.now() * 0.001;
 
   if (state === GameState.MENU) {
     updateMenu(delta);
@@ -1251,7 +1264,7 @@ function animate() {
   }
 
   // Update health pickups
-  _updatePickups(delta, camera.position);
+  _updatePickups(delta, camera.position, _nowSec);
 
   // Check enemy collisions with player (dash = i-frames)
   const dashing = controls && controls.dashTimer > 0;
@@ -1284,32 +1297,29 @@ function animate() {
   if (currentLevelData && currentLevelData.ufo) {
     const ufo = currentLevelData.ufo;
     ufo.rotation.y += delta * 0.1;
-    const bt = performance.now() * 0.001;
     // Gentle hover bob
-    ufo.position.y = 80 + Math.sin(bt * 0.3) * 1.5 + Math.sin(bt * 0.7) * 0.5;
+    ufo.position.y = 80 + Math.sin(_nowSec * 0.3) * 1.5 + Math.sin(_nowSec * 0.7) * 0.5;
     // Tractor beam pulse
     const ud = ufo.userData;
     if (ud._beamMat) {
-      const pulse = 0.03 + 0.015 * Math.sin(bt * 1.5) + 0.008 * Math.sin(bt * 3.7);
+      const pulse = 0.03 + 0.015 * Math.sin(_nowSec * 1.5) + 0.008 * Math.sin(_nowSec * 3.7);
       ud._beamMat.opacity = pulse;
     }
   }
 
   // Animate twinkling stars
   if (currentLevelData && currentLevelData.starMats) {
-    const t = performance.now() * 0.001;
     for (const m of currentLevelData.starMats) {
-      if (m.uniforms && m.uniforms.uTime) m.uniforms.uTime.value = t;
+      if (m.uniforms && m.uniforms.uTime) m.uniforms.uTime.value = _nowSec;
     }
   }
 
   // Animate neon sign flicker (throttled — every 3rd frame is imperceptible)
   if (currentLevelData && currentLevelData.neonSigns && (_frameCounter % 3) === 0) {
-    const t = performance.now() * 0.001;
     for (const ns of currentLevelData.neonSigns) {
       const ud = ns.userData;
       const flicker = Math.random() < ud._neonFlickerChance;
-      const pulse = 0.7 + 0.3 * Math.sin(t * ud._neonSpeed + ud._neonPhase);
+      const pulse = 0.7 + 0.3 * Math.sin(_nowSec * ud._neonSpeed + ud._neonPhase);
       const alpha = flicker ? 0.1 : pulse;
       ud._neonMat.opacity = alpha * 0.9;
     }
@@ -1317,12 +1327,11 @@ function animate() {
 
   // Animate streetlight flicker (throttled — every 3rd frame)
   if (currentLevelData && currentLevelData.streetLights && (_frameCounter % 3) === 0) {
-    const t = performance.now() * 0.001;
     for (const sl of currentLevelData.streetLights) {
       const ud = sl.userData;
       if (!ud._streetHalo) continue;
       const flicker = Math.random() < ud._streetFlickerChance;
-      const pulse = 0.85 + 0.15 * Math.sin(t * 1.2 + ud._streetPhase);
+      const pulse = 0.85 + 0.15 * Math.sin(_nowSec * 1.2 + ud._streetPhase);
       const intensity = flicker ? 0.2 : pulse;
       ud._streetHalo.opacity = 0.55 * intensity;
       ud._streetCone.opacity = 0.045 * intensity;
@@ -1342,13 +1351,21 @@ function animate() {
     }
   }
 
-  // Damage direction timers
-  const _dmgDirEls = { n: _domCache.dmgDirN, s: _domCache.dmgDirS, e: _domCache.dmgDirE, w: _domCache.dmgDirW };
-  for (const dir of ['n', 's', 'e', 'w']) {
+  // Damage direction timers — lookup bound once, reused every frame
+  if (!_dmgDirElsBound && _domCache.dmgDirN) {
+    _dmgDirEls.n = _domCache.dmgDirN;
+    _dmgDirEls.s = _domCache.dmgDirS;
+    _dmgDirEls.e = _domCache.dmgDirE;
+    _dmgDirEls.w = _domCache.dmgDirW;
+    _dmgDirElsBound = true;
+  }
+  for (let di = 0; di < 4; di++) {
+    const dir = _DMG_DIR_KEYS[di];
     if (_dmgDirTimers[dir] > 0) {
       _dmgDirTimers[dir] -= delta;
       if (_dmgDirTimers[dir] <= 0) {
-        if (_dmgDirEls[dir]) _dmgDirEls[dir].classList.remove('active');
+        const el = _dmgDirEls[dir];
+        if (el) el.classList.remove('active');
       }
     }
   }
@@ -1360,14 +1377,20 @@ function animate() {
       if (_domCache.enemyCallout) _domCache.enemyCallout.classList.remove('active');
     }
   }
-  for (const enemy of waveManager.enemies) {
-    if (!enemy.dead && !_seenEnemyTypes.has(enemy.type)) {
-      _seenEnemyTypes.add(enemy.type);
-      const alienData = ALIEN_TYPES[enemy.type];
-      if (_domCache.enemyCallout && alienData) {
-        _domCache.enemyCallout.textContent = `▸ NEW THREAT: ${alienData.name.toUpperCase()}`;
-        _domCache.enemyCallout.classList.add('active');
-        _calloutTimer = 3;
+  // Skip the per-enemy loop once we've seen every type — no new callouts can
+  // fire, so the iteration was pure overhead (dozens of enemies per frame).
+  if (_seenEnemyTypes.size < _totalAlienTypes) {
+    const enemies = waveManager.enemies;
+    for (let i = 0, n = enemies.length; i < n; i++) {
+      const enemy = enemies[i];
+      if (!enemy.dead && !_seenEnemyTypes.has(enemy.type)) {
+        _seenEnemyTypes.add(enemy.type);
+        const alienData = ALIEN_TYPES[enemy.type];
+        if (_domCache.enemyCallout && alienData) {
+          _domCache.enemyCallout.textContent = `▸ NEW THREAT: ${alienData.name.toUpperCase()}`;
+          _domCache.enemyCallout.classList.add('active');
+          _calloutTimer = 3;
+        }
       }
     }
   }
@@ -1391,7 +1414,7 @@ function animate() {
     _weaponHeat = Math.max(0, _weaponHeat - delta * 1.5);
   }
   if (weapons._weaponAccentLight) {
-    weapons._weaponAccentLight.intensity = 0.35 + _weaponHeat * 0.8 + Math.sin(performance.now() * 0.003) * 0.12;
+    weapons._weaponAccentLight.intensity = 0.35 + _weaponHeat * 0.8 + Math.sin(_nowSec * 3) * 0.12;
     if (_weaponHeat > 0.5) {
       const r = 1, g = 1 - (_weaponHeat - 0.5) * 1.2, b = 1 - _weaponHeat;
       weapons._weaponAccentLight.color.setRGB(r, Math.max(0.2, g), Math.max(0, b));
