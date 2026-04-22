@@ -5,7 +5,7 @@ A browser-based first-person shooter built on [Three.js](https://threejs.org/) r
 **Play now:** [ufoshooter.onrender.com](https://ufoshooter.onrender.com)
 **Demo Video:** https://www.youtube.com/watch?v=Y6dMKn9i2tE
 
-No build step, no assets pipeline, no framework. Just a single `index.html` and a handful of ES modules. Everything — meshes, materials, audio, VFX — is procedural.
+No build step, no assets pipeline, no framework. Just a single `index.html`, a handful of ES modules, and two music tracks. Meshes, materials, sound effects, and VFX are all procedural. Background music was generated with [Google Lyria](https://deepmind.google/technologies/lyria/).
 
 ---
 
@@ -72,8 +72,11 @@ js/
 │                          #   GPU point fields, light pool, shared geometries)
 ├── vfx.js                 # damage numbers, hit markers, screen effects
 ├── hud.js                 # holographic HUD renderer
-├── audio.js               # procedural Web Audio synth (no audio files)
+├── audio.js               # Web Audio synth (procedural SFX + MP3 music playback)
 └── help.js                # bestiary/weapon guide with live 3D previews
+assets/
+├── Before_the_Steel_Breaks.mp3   # in-game music (generated with Google Lyria)
+└── Storm_at_the_Gate.mp3         # title screen music (generated with Google Lyria)
 ```
 
 ### Rendering pipeline
@@ -91,7 +94,7 @@ js/
 - **Levels.** Every building, car, tree, lamp post, traffic light, street prop, and piece of trim is generated from primitive geometries at init time. ~1000+ meshes per level.
 - **Aliens.** Each of the six types is built from 40–80 primitive meshes stitched into a group, with per-type materials, eye glow, insignia, armor plating, and animation params.
 - **Weapons.** First-person viewmodels built from boxes, cylinders, and glow cones — no imported models.
-- **Audio.** Every sound (laser, sword swing, explosion, footstep, alien death, menu drone) is synthesized on demand with `OscillatorNode` + `GainNode` envelopes in `audio.js`.
+- **Audio.** Sound effects (laser, sword swing, explosion, footstep, alien death) are synthesized on demand with `OscillatorNode` + `GainNode` envelopes in `audio.js`. Background music for the title screen and in-game levels is generated with [Google Lyria](https://deepmind.google/technologies/lyria/) and played as looping MP3 tracks via the Web Audio API.
 
 ### Alien animation
 

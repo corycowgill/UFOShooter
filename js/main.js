@@ -259,6 +259,7 @@ function _init() {
 
   // Audio
   audio = new AudioManager();
+  audio.startMenuMusic();
 
   // HUD
   hud = new HUD();
@@ -605,6 +606,7 @@ function startGame() {
   // Init audio on user interaction
   if (!audio.ctx) audio.init();
   audio.resume();
+  audio.stopMenuMusic();
 
   // Reset state
   state = GameState.PLAYING;
@@ -769,6 +771,7 @@ function returnToMenu() {
   audio.stopMusic();
   audio.stopAmbient();
   audio.stopHeartbeat();
+  audio.startMenuMusic();
   _hideOverlays();
   if (waveManager) waveManager.cleanup();
   if (particles) particles.cleanup();

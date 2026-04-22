@@ -7,6 +7,11 @@ export class AudioManager {
     this.sfxGain = null;
     this.musicPlaying = false;
     this.musicNodes = [];
+    this.bgMusic = null;
+    this.bgMusicSource = null;
+    this.menuMusic = null;
+    this.menuMusicSource = null;
+    this.menuMusicPlaying = false;
   }
 
   init() {
@@ -30,123 +35,90 @@ export class AudioManager {
     }
   }
 
-  // === EERIE ALIEN MUSIC ===
+  // === BACKGROUND MUSIC (MP3) ===
   startMusic() {
     if (this.musicPlaying) return;
     this.musicPlaying = true;
 
-    // Deep drone
-    const drone = this.ctx.createOscillator();
-    drone.type = 'sawtooth';
-    drone.frequency.value = 40;
-    const droneGain = this.ctx.createGain();
-    droneGain.gain.value = 0.15;
-    const droneFilter = this.ctx.createBiquadFilter();
-    droneFilter.type = 'lowpass';
-    droneFilter.frequency.value = 200;
-    drone.connect(droneFilter);
-    droneFilter.connect(droneGain);
-    droneGain.connect(this.musicGain);
-    drone.start();
+    // If we already have the decoded buffer, just play it
+    if (this.bgMusic) {
+      this._playBgMusic();
+      return;
+    }
 
-    // LFO modulating drone pitch
-    const lfo1 = this.ctx.createOscillator();
-    lfo1.type = 'sine';
-    lfo1.frequency.value = 0.05;
-    const lfo1Gain = this.ctx.createGain();
-    lfo1Gain.gain.value = 5;
-    lfo1.connect(lfo1Gain);
-    lfo1Gain.connect(drone.frequency);
-    lfo1.start();
-
-    // Eerie high pad
-    const pad = this.ctx.createOscillator();
-    pad.type = 'sine';
-    pad.frequency.value = 440;
-    const padGain = this.ctx.createGain();
-    padGain.gain.value = 0.04;
-    const padFilter = this.ctx.createBiquadFilter();
-    padFilter.type = 'bandpass';
-    padFilter.frequency.value = 800;
-    padFilter.Q.value = 5;
-    pad.connect(padFilter);
-    padFilter.connect(padGain);
-    padGain.connect(this.musicGain);
-    pad.start();
-
-    // LFO for pad
-    const lfo2 = this.ctx.createOscillator();
-    lfo2.type = 'sine';
-    lfo2.frequency.value = 0.1;
-    const lfo2Gain = this.ctx.createGain();
-    lfo2Gain.gain.value = 100;
-    lfo2.connect(lfo2Gain);
-    lfo2Gain.connect(pad.frequency);
-    lfo2.start();
-
-    // Creepy delay feedback
-    const delay = this.ctx.createDelay(2);
-    delay.delayTime.value = 1.5;
-    const feedback = this.ctx.createGain();
-    feedback.gain.value = 0.3;
-    const delayFilter = this.ctx.createBiquadFilter();
-    delayFilter.type = 'highpass';
-    delayFilter.frequency.value = 300;
-    padGain.connect(delay);
-    delay.connect(delayFilter);
-    delayFilter.connect(feedback);
-    feedback.connect(delay);
-    feedback.connect(this.musicGain);
-
-    // Sub bass pulse
-    const sub = this.ctx.createOscillator();
-    sub.type = 'sine';
-    sub.frequency.value = 30;
-    const subGain = this.ctx.createGain();
-    subGain.gain.value = 0.1;
-    const subLfo = this.ctx.createOscillator();
-    subLfo.type = 'sine';
-    subLfo.frequency.value = 0.25;
-    const subLfoGain = this.ctx.createGain();
-    subLfoGain.gain.value = 0.1;
-    subLfo.connect(subLfoGain);
-    subLfoGain.connect(subGain.gain);
-    sub.connect(subGain);
-    subGain.connect(this.musicGain);
-    sub.start();
-    subLfo.start();
-
-    // Random alien chirps
-    this._chirpInterval = setInterval(() => {
-      if (!this.musicPlaying) return;
-      this._alienChirp();
-    }, 4000 + Math.random() * 6000);
-
-    this.musicNodes = [drone, lfo1, pad, lfo2, sub, subLfo];
+    // Fetch and decode the MP3 file
+    fetch('assets/Before_the_Steel_Breaks.mp3')
+      .then(response => response.arrayBuffer())
+      .then(data => this.ctx.decodeAudioData(data))
+      .then(buffer => {
+        this.bgMusic = buffer;
+        if (this.musicPlaying) this._playBgMusic();
+      })
+      .catch(err => console.warn('Failed to load background music:', err));
   }
 
-  _alienChirp() {
-    const t = this.ctx.currentTime;
-    const osc = this.ctx.createOscillator();
-    osc.type = 'sine';
-    const startFreq = 800 + Math.random() * 2000;
-    osc.frequency.setValueAtTime(startFreq, t);
-    osc.frequency.exponentialRampToValueAtTime(startFreq * (Math.random() > 0.5 ? 2 : 0.5), t + 0.5);
-    const g = this.ctx.createGain();
-    g.gain.setValueAtTime(0, t);
-    g.gain.linearRampToValueAtTime(0.03, t + 0.05);
-    g.gain.linearRampToValueAtTime(0, t + 0.8);
-    osc.connect(g);
-    g.connect(this.musicGain);
-    osc.start(t);
-    osc.stop(t + 0.8);
+  _playBgMusic() {
+    if (this.bgMusicSource) {
+      try { this.bgMusicSource.stop(); } catch(e) {}
+    }
+    const source = this.ctx.createBufferSource();
+    source.buffer = this.bgMusic;
+    source.loop = true;
+    source.connect(this.musicGain);
+    source.start(0);
+    this.bgMusicSource = source;
   }
 
   stopMusic() {
     this.musicPlaying = false;
+    if (this.bgMusicSource) {
+      try { this.bgMusicSource.stop(); } catch(e) {}
+      this.bgMusicSource = null;
+    }
     this.musicNodes.forEach(n => { try { n.stop(); } catch(e) {} });
     this.musicNodes = [];
-    if (this._chirpInterval) clearInterval(this._chirpInterval);
+  }
+
+  // === MENU / TITLE SCREEN MUSIC ===
+  startMenuMusic() {
+    if (this.menuMusicPlaying) return;
+    if (!this.ctx) this.init();
+    this.resume();
+    this.menuMusicPlaying = true;
+
+    if (this.menuMusic) {
+      this._playMenuMusic();
+      return;
+    }
+
+    fetch('assets/Storm_at_the_Gate.mp3')
+      .then(response => response.arrayBuffer())
+      .then(data => this.ctx.decodeAudioData(data))
+      .then(buffer => {
+        this.menuMusic = buffer;
+        if (this.menuMusicPlaying) this._playMenuMusic();
+      })
+      .catch(err => console.warn('Failed to load menu music:', err));
+  }
+
+  _playMenuMusic() {
+    if (this.menuMusicSource) {
+      try { this.menuMusicSource.stop(); } catch(e) {}
+    }
+    const source = this.ctx.createBufferSource();
+    source.buffer = this.menuMusic;
+    source.loop = true;
+    source.connect(this.musicGain);
+    source.start(0);
+    this.menuMusicSource = source;
+  }
+
+  stopMenuMusic() {
+    this.menuMusicPlaying = false;
+    if (this.menuMusicSource) {
+      try { this.menuMusicSource.stop(); } catch(e) {}
+      this.menuMusicSource = null;
+    }
   }
 
   // === SOUND EFFECTS ===
