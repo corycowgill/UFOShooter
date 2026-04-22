@@ -515,6 +515,17 @@ function setupEventListeners() {
     }
   });
 
+  // Mouse wheel - cycle weapons
+  document.addEventListener('wheel', (e) => {
+    if (state !== GameState.PLAYING || !controls.isLocked || helpGuide.isOpen) return;
+    if (e.deltaY > 0) {
+      currentWeaponIdx = (currentWeaponIdx + 1) % weaponOrder.length;
+    } else if (e.deltaY < 0) {
+      currentWeaponIdx = (currentWeaponIdx - 1 + weaponOrder.length) % weaponOrder.length;
+    }
+    weapons.switchWeapon(weaponOrder[currentWeaponIdx]);
+  });
+
   // Prevent context menu
   document.addEventListener('contextmenu', (e) => e.preventDefault());
 
