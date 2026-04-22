@@ -38,6 +38,7 @@ export class AudioManager {
   // === BACKGROUND MUSIC (MP3) ===
   startMusic() {
     if (this.musicPlaying) return;
+    this.stopMenuMusic();
     this.musicPlaying = true;
 
     // If we already have the decoded buffer, just play it
@@ -82,6 +83,7 @@ export class AudioManager {
   // === MENU / TITLE SCREEN MUSIC ===
   startMenuMusic() {
     if (this.menuMusicPlaying) return;
+    if (this.musicPlaying) return;
     if (!this.ctx) this.init();
     this.resume();
     this.menuMusicPlaying = true;
