@@ -1,27 +1,42 @@
 // particles.js - Enhanced laser beams, explosions, muzzle flashes, sword slashes
 
-// Additive glow material: transparent + additive blending for bright HDR-feel
-// highlights on lasers, bolts, sparks, muzzle flashes. Depth-write off so they
-// stack correctly.
+// Glow material template cache. Three.js compiles a distinct WebGL shader
+// program for each unique material configuration (transparent, blending,
+// depthWrite, toneMapped flags). All glowMat calls share the same flag set,
+// so only ONE program is compiled. We cache a single template and clone()
+// from it — clones inherit the already-compiled program, avoiding the
+// 50-200ms synchronous getProgramInfoLog stall per material that the Chrome
+// trace showed consuming 12.5% of CPU during the first 20s of gameplay.
 //
-// intensity > 1 multiplies the color beyond [0,1] to produce real HDR output
-// that the UnrealBloomPass picks up above its threshold. EffectComposer runs
-// on HalfFloatType render targets so these super-bright values survive to the
-// bloom pass. toneMapped:false ensures the renderer passes the raw color
-// through without squashing.
+// clone() is cheap (~0.02ms) vs new material + compile (~50-200ms). Per-shot
+// instances are still needed because beams/explosions mutate opacity per-
+// instance during their lifetime.
+let _glowMatTemplate = null;
 function glowMat(color, opacity = 1.0, intensity = 1.0) {
-  const mat = new THREE.MeshBasicMaterial({
-    color,
-    transparent: true,
-    opacity,
-    blending: THREE.AdditiveBlending,
-    depthWrite: false,
-    toneMapped: false,
-  });
+  if (!_glowMatTemplate) {
+    _glowMatTemplate = new THREE.MeshBasicMaterial({
+      color: 0xffffff,
+      transparent: true,
+      opacity: 1,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      toneMapped: false,
+    });
+    _glowMatTemplate.__shared = true;
+  }
+  const mat = _glowMatTemplate.clone();
+  mat.color.setHex(color);
+  mat.opacity = opacity;
   if (intensity !== 1.0) {
     mat.color.multiplyScalar(intensity);
   }
   return mat;
+}
+
+// Expose the template for pre-warm (renderer.compile needs it in the scene).
+export function getGlowMatTemplate() {
+  if (!_glowMatTemplate) glowMat(0xffffff); // force template creation
+  return _glowMatTemplate;
 }
 
 // ---------------------------------------------------------------------------

@@ -1,7 +1,7 @@
 // vfx.js - Screen-space visual effects: shake, hit markers, damage numbers,
 //          kill feed, low-health vignette, alien death/spawn VFX, environment particles
 
-import { disposeTree, borrowLight, spawnParticle } from './particles.js';
+import { disposeTree, borrowLight, spawnParticle, getGlowMatTemplate } from './particles.js';
 
 // Shared geometries for spawn effects — same params every call, so allocate
 // once and reuse. Marked __shared so disposeTree skips them.
@@ -11,6 +11,71 @@ const _spawnInnerBeamGeo = new THREE.CylinderGeometry(0.05, 0.2, 12, 8, 1, true)
 _spawnInnerBeamGeo.__shared = true;
 const _spawnRingGeo = new THREE.TorusGeometry(0.8, 0.06, 6, 16);
 _spawnRingGeo.__shared = true;
+
+// ---------------------------------------------------------------------------
+// Shared VFX materials — cached at module level.
+//
+// Chrome trace showed getProgramInfoLog at 12.5% of CPU during the first 20s
+// of gameplay. Every death effect, spawn effect, scorch mark, and acid pool
+// was allocating a fresh MeshBasicMaterial, each triggering a synchronous
+// WebGL shader compile (~50-200ms per unique program). Caching these as
+// shared template materials that are cloned for per-instance opacity control
+// ensures the WebGL program compiles exactly once per unique configuration.
+// ---------------------------------------------------------------------------
+function _sharedMat(params) {
+  const m = new THREE.MeshBasicMaterial(params);
+  m.__shared = true;
+  return m;
+}
+const _vfxMat = {
+  // Death effects — need clone() for per-instance opacity animation
+  deathFlash: _sharedMat({ color: 0xffffff, transparent: true, opacity: 1 }),
+  // Death ring template — color set per-call, opacity animated per-instance
+  deathRing: _sharedMat({ color: 0x00ff00, transparent: true, opacity: 0.8 }),
+  // Spawn effects
+  spawnBeam: _sharedMat({ color: 0x00ff88, transparent: true, opacity: 0.4, side: THREE.DoubleSide }),
+  spawnInnerBeam: _sharedMat({ color: 0xaaffcc, transparent: true, opacity: 0.7 }),
+  spawnGroundRing: _sharedMat({ color: 0x00ff88, transparent: true, opacity: 0.8 }),
+  // Scorch marks — shared directly (opacity fades but slowly, < 15 instances)
+  scorchCenter: _sharedMat({ color: 0x111111, transparent: true, opacity: 0.5, depthWrite: false }),
+  scorchRing: _sharedMat({ color: 0x331100, transparent: true, opacity: 0.35, depthWrite: false }),
+  // Acid pools
+  acidPool: _sharedMat({ color: 0x88cc00, transparent: true, opacity: 0.45, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false }),
+  acidRim: _sharedMat({ color: 0xaaff00, transparent: true, opacity: 0.25, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false }),
+  // Puddles
+  puddle: _sharedMat({ color: 0x4488aa, transparent: true, opacity: 0.08, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }),
+};
+
+// Pre-warm VFX shader programs. Adds temporary meshes using all VFX material
+// types to the given scene so that renderer.compile() will force-compile their
+// WebGL programs. The meshes are removed immediately after compilation.
+// Includes every distinct material configuration used by particles.js and
+// vfx.js — each unique combination of (material type, transparent, blending,
+// depthWrite, wireframe, toneMapped, side) is a separate WebGL shader program.
+export function preWarmVFXMaterials(scene) {
+  const tmp = new THREE.Group();
+  const dummyGeo = new THREE.PlaneGeometry(0.001, 0.001);
+  // All cached VFX materials
+  for (const mat of Object.values(_vfxMat)) {
+    tmp.add(new THREE.Mesh(dummyGeo, mat));
+  }
+  // Additional shader program variants used by particles.js explosions:
+  // - glowMat template (additive + toneMapped:false — lasers, muzzle, sparks)
+  // - MeshBasicMaterial + transparent + wireframe (explosion shells)
+  // - MeshBasicMaterial + transparent only (standard VFX)
+  const _warmVariants = [
+    getGlowMatTemplate(),
+    new THREE.MeshBasicMaterial({ transparent: true, wireframe: true }),
+    new THREE.MeshBasicMaterial({ transparent: true, wireframe: true, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }),
+    new THREE.MeshBasicMaterial({ transparent: true }),
+  ];
+  for (const m of _warmVariants) {
+    m.__shared = true;
+    tmp.add(new THREE.Mesh(dummyGeo, m));
+  }
+  scene.add(tmp);
+  return tmp; // caller removes after renderer.compile()
+}
 
 export class VFXManager {
   constructor(camera, scene) {
@@ -281,16 +346,20 @@ export class VFXManager {
     }
 
     // Energy release flash — structural, stays as a mesh.
+    // Clone from pre-compiled template so the WebGL program is reused.
+    const flashMat = _vfxMat.deathFlash.clone();
     const flash = new THREE.Mesh(
       new THREE.SphereGeometry(0.5 * size, 8, 8),
-      new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 1 })
+      flashMat
     );
     group.add(flash);
 
     // Expanding energy ring — structural.
+    const ringMat = _vfxMat.deathRing.clone();
+    ringMat.color.setHex(color);
     const ring = new THREE.Mesh(
       new THREE.TorusGeometry(0.3 * size, 0.04, 6, 16),
-      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.8 })
+      ringMat
     );
     ring.rotation.x = Math.PI / 2;
     group.add(ring);
@@ -358,36 +427,19 @@ export class VFXManager {
     const group = new THREE.Group();
     group.position.copy(position);
 
-    // Teleport beam (vertical column of light) — shared geometry
-    const beam = new THREE.Mesh(
-      _spawnBeamGeo,
-      new THREE.MeshBasicMaterial({
-        color: 0x00ff88,
-        transparent: true,
-        opacity: 0.4,
-        side: THREE.DoubleSide,
-      })
-    );
+    // Teleport beam (vertical column of light) — shared geometry + cloned
+    // material from pre-compiled template (avoids per-spawn shader compile).
+    const beam = new THREE.Mesh(_spawnBeamGeo, _vfxMat.spawnBeam.clone());
     beam.position.y = 6;
     group.add(beam);
 
     // Inner beam (brighter) — shared geometry
-    const innerBeam = new THREE.Mesh(
-      _spawnInnerBeamGeo,
-      new THREE.MeshBasicMaterial({
-        color: 0xaaffcc,
-        transparent: true,
-        opacity: 0.7,
-      })
-    );
+    const innerBeam = new THREE.Mesh(_spawnInnerBeamGeo, _vfxMat.spawnInnerBeam.clone());
     innerBeam.position.y = 6;
     group.add(innerBeam);
 
     // Ground ring — shared geometry
-    const groundRing = new THREE.Mesh(
-      _spawnRingGeo,
-      new THREE.MeshBasicMaterial({ color: 0x00ff88, transparent: true, opacity: 0.8 })
-    );
+    const groundRing = new THREE.Mesh(_spawnRingGeo, _vfxMat.spawnGroundRing.clone());
     groundRing.rotation.x = -Math.PI / 2;
     groundRing.position.y = 0.05;
     group.add(groundRing);
@@ -941,12 +993,10 @@ export class VFXManager {
       this.scene.remove(old.mesh);
       disposeTree(old.mesh);
     }
+    // Clone from pre-compiled templates — avoids per-explosion shader compile.
     const scorch = new THREE.Mesh(
       new THREE.CircleGeometry(radius, 12),
-      new THREE.MeshBasicMaterial({
-        color: 0x111111, transparent: true, opacity: 0.5,
-        depthWrite: false,
-      })
+      _vfxMat.scorchCenter.clone()
     );
     scorch.rotation.x = -Math.PI / 2;
     scorch.position.set(position.x, 0.015, position.z);
@@ -956,10 +1006,7 @@ export class VFXManager {
     // Burn ring around the scorch
     const ring = new THREE.Mesh(
       new THREE.RingGeometry(radius * 0.8, radius * 1.1, 16),
-      new THREE.MeshBasicMaterial({
-        color: 0x331100, transparent: true, opacity: 0.35,
-        depthWrite: false,
-      })
+      _vfxMat.scorchRing.clone()
     );
     ring.rotation.x = -Math.PI / 2;
     ring.position.set(position.x, 0.016, position.z);
@@ -994,19 +1041,15 @@ export class VFXManager {
       disposeTree(old.group);
     }
     const group = new THREE.Group();
-    const poolMat = new THREE.MeshBasicMaterial({
-      color: 0x88cc00, transparent: true, opacity: 0.45,
-      depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false,
-    });
+    // Clone from pre-compiled templates — avoids per-pool shader compile.
+    const poolMat = _vfxMat.acidPool.clone();
+    poolMat.color.setHex(0x88cc00);
     poolMat.color.multiplyScalar(1.5);
     const pool = new THREE.Mesh(new THREE.CircleGeometry(radius, 16), poolMat);
     pool.rotation.x = -Math.PI / 2;
     pool.position.y = 0.02;
     group.add(pool);
-    const rimMat = new THREE.MeshBasicMaterial({
-      color: 0xaaff00, transparent: true, opacity: 0.25,
-      depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false,
-    });
+    const rimMat = _vfxMat.acidRim.clone();
     const rim = new THREE.Mesh(new THREE.RingGeometry(radius * 0.85, radius * 1.05, 16), rimMat);
     rim.rotation.x = -Math.PI / 2;
     rim.position.y = 0.025;
@@ -1095,11 +1138,7 @@ export class VFXManager {
       const x = Math.cos(angle) * r;
       const z = Math.sin(angle) * r;
       const size = 0.8 + Math.random() * 2.5;
-      const mat = new THREE.MeshBasicMaterial({
-        color: 0x4488aa, transparent: true, opacity: 0.08,
-        blending: THREE.AdditiveBlending, depthWrite: false,
-        toneMapped: false,
-      });
+      const mat = _vfxMat.puddle.clone();
       const mesh = new THREE.Mesh(new THREE.CircleGeometry(size, 10), mat);
       mesh.rotation.x = -Math.PI / 2;
       mesh.position.set(x, 0.012, z);

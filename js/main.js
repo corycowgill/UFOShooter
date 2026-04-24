@@ -7,7 +7,7 @@ import { WaveManager } from './waves.js';
 import { Player, PERKS } from './player.js';
 import { HUD } from './hud.js';
 import { HelpGuide } from './help.js';
-import { VFXManager } from './vfx.js';
+import { VFXManager, preWarmVFXMaterials } from './vfx.js';
 import { LEVELS } from './levels.js';
 import { ALIEN_TYPES, createAlienModel } from './aliens.js';
 import { disposeTree, initLightPool, initParticleFields, getActiveParticleCount, getActiveLightCount } from './particles.js';
@@ -715,14 +715,24 @@ function startGame() {
 
   // Pre-warm alien geometry, material, and shader caches so the first spawn
   // of each type doesn't stall. Creates one throwaway model per type —
-  // cGeom/cMat caches persist, merged geometry is discarded.
+  // cGeom/cMat caches persist, merged geometry is discarded. Models are
+  // temporarily added to the scene so renderer.compile() in loadLevel() will
+  // also pre-compile the alien MeshPhong + rim-light shader programs.
+  const _alienWarmGroup = new THREE.Group();
   for (const type of Object.keys(ALIEN_TYPES)) {
     const tmp = createAlienModel(type);
-    disposeTree(tmp);
+    _alienWarmGroup.add(tmp);
   }
+  scene.add(_alienWarmGroup);
 
-  // Load selected level
+  // Load selected level — renderer.compile() inside will pre-compile all
+  // shader programs including the alien models we just added.
   loadLevel(currentLevelIndex);
+
+  // Remove and dispose the throwaway alien models now that shaders are compiled.
+  // cGeom/cMat caches persist; only the throwaway merged meshes are freed.
+  scene.remove(_alienWarmGroup);
+  disposeTree(_alienWarmGroup);
 
   // Start music + ambient
   audio.startMusic();
@@ -793,6 +803,17 @@ function loadLevel(index) {
   // One-shot shadow map refresh — static world just finished building, so
   // bake shadows once and freeze the shadow cascade until the next level.
   renderer.shadowMap.needsUpdate = true;
+
+  // Pre-compile all WebGL shader programs for every material currently in the
+  // scene, plus VFX materials that are used dynamically during gameplay.
+  // Chrome trace analysis showed getProgramInfoLog consuming 12.5% of CPU in
+  // the first 20s — each unique material's first render triggers a synchronous
+  // shader compile (50-200ms stall). renderer.compile() forces all programs to
+  // build now, during the level load screen, instead of hitching gameplay.
+  // This eliminates the 745ms/723ms/535ms frame spikes seen in the trace.
+  const _vfxWarmGroup = preWarmVFXMaterials(scene);
+  renderer.compile(scene, camera);
+  scene.remove(_vfxWarmGroup);
 
   // Show level announcement
   hud.showWaveAnnouncement(waveManager.wave + 1, level.name, true);
