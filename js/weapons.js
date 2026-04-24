@@ -144,6 +144,10 @@ export class WeaponManager {
     // Callback: called with array of hits when a rocket detonates
     this.onRocketHit = null;
 
+    // Level colliders — set by main.js on level load. Used to stop hitscan
+    // beams and rocket projectiles on buildings/props.
+    this.colliders = [];
+
     // Weapon switch draw animation
     this._switchTimer = 0;
     this._switchDuration = 0.2;
@@ -2050,10 +2054,19 @@ export class WeaponManager {
         }
       }
 
-      // Detonate on enemy hit, ground hit, or max range
+      // Check building collision — detonate on impact with level geometry
+      let hitWall = false;
+      for (let c = 0, cn = this.colliders.length; c < cn; c++) {
+        if (this.colliders[c].box.containsPoint(p.position)) {
+          hitWall = true;
+          break;
+        }
+      }
+
+      // Detonate on enemy hit, ground hit, wall hit, or max range
       const hitGround = p.position.y <= 0.3;
       const outOfRange = p.distanceTraveled >= p.rangeSq;
-      if (hitEnemy || hitGround || outOfRange) {
+      if (hitEnemy || hitGround || hitWall || outOfRange) {
         this._detonateRocket(p, enemies);
         this.scene.remove(p.mesh);
         disposeTree(p.mesh);
@@ -2150,6 +2163,29 @@ export class WeaponManager {
       }
     }
 
+    // Check level geometry (buildings/props) — beam stops on first solid hit.
+    // Uses Ray.intersectBox on the collider AABBs which is very fast.
+    let wallDist = Infinity;
+    const _wallHitPt = new THREE.Vector3();
+    for (let i = 0, n = this.colliders.length; i < n; i++) {
+      const pt = ray.intersectBox(this.colliders[i].box, _wallHitPt);
+      if (pt) {
+        const d = origin.distanceTo(pt);
+        if (d < wallDist && d <= weapon.range) wallDist = d;
+      }
+    }
+
+    // If wall is closer than enemy, the shot hits the wall instead
+    if (wallDist < closestDist) {
+      const wallPt = this._tmpEnd.copy(origin).addScaledVector(dir, wallDist);
+      if (this.current === 'sniperRifle') {
+        this.particles.createSniperTracer(muzzlePos, wallPt, weapon.color);
+      } else {
+        this.particles.createLaserBeam(muzzlePos, wallPt, weapon.color, 0.1, weapon.beamWidth);
+      }
+      return { hit: false };
+    }
+
     if (closestHit) {
       // Draw beam to hit point - weapon-specific
       if (this.current === 'sniperRifle') {
@@ -2161,11 +2197,12 @@ export class WeaponManager {
       const dmgMul = this.player ? this.player.damageMultiplier : 1;
       return { hit: true, enemy: closestHit.enemy, damage: Math.floor(weapon.damage * dmgMul), point: closestHit.point, weaponKey: this.current };
     } else {
-      // Draw beam to max range
+      // Draw beam to max range or wall, whichever is closer
+      const maxDist = Math.min(weapon.range, wallDist);
       const endPoint = this._tmpEnd.set(
-        origin.x + dir.x * weapon.range,
-        origin.y + dir.y * weapon.range,
-        origin.z + dir.z * weapon.range
+        origin.x + dir.x * maxDist,
+        origin.y + dir.y * maxDist,
+        origin.z + dir.z * maxDist
       );
       if (this.current === 'sniperRifle') {
         this.particles.createSniperTracer(muzzlePos, endPoint, weapon.color);
@@ -2333,6 +2370,14 @@ export class WeaponManager {
         g.velocity.x *= 0.6;
         g.velocity.z *= 0.6;
         g.bounced = true;
+      }
+      // Bounce off buildings
+      for (let c = 0, cn = this.colliders.length; c < cn; c++) {
+        if (this.colliders[c].box.containsPoint(g.position)) {
+          g.velocity.multiplyScalar(-0.4);
+          g.bounced = true;
+          break;
+        }
       }
 
       g.mesh.position.copy(g.position);

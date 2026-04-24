@@ -434,6 +434,12 @@ canvas#gameCanvas { display: block; width: 100vw; height: 100vh; }
 }
 #main-menu .system-status .ok { color: var(--c-primary); }
 #main-menu .system-status .dim { color: var(--c-line); opacity: 0.6; }
+#main-menu .version-tag {
+  position: absolute; bottom: 18px; right: 24px;
+  font-size: 10px; color: var(--c-line); opacity: 0.45;
+  font-family: var(--font-body); letter-spacing: 3px;
+  text-transform: uppercase; z-index: 2;
+}
 @keyframes titlePulse {
   0%, 100% {
     text-shadow: 0 0 20px var(--c-primary), 0 0 40px var(--c-primary),
@@ -1366,6 +1372,7 @@ canvas#gameCanvas { display: block; width: 100vw; height: 100vh; }
   <button class="menu-btn" id="btn-start">START GAME</button>
   <button class="menu-btn" id="btn-select-level">SELECT LEVEL</button>
   <button class="menu-btn" id="btn-help">HELP / BESTIARY</button>
+  <div class="version-tag">v1.0.0</div>
 </div>
 
 <div id="level-select">

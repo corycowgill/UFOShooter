@@ -784,6 +784,8 @@ function loadLevel(index) {
   const level = LEVELS[currentLevelIndex];
   currentLevelData = level.builder(scene);
   waveManager.setSpawnPoints(currentLevelData.spawnPoints);
+  // Give weapons the level colliders so hitscan/rockets stop on buildings
+  if (weapons) weapons.colliders = currentLevelData.colliders || [];
 
   // Reset player position
   camera.position.set(0, 1.7, 30);

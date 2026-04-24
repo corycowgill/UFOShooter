@@ -238,39 +238,39 @@ export const ALIEN_TYPES = {
   },
   bloater: {
     name: 'Bloater',
-    hp: 100,
-    speed: 2,
-    damage: 40,
+    hp: 120,
+    speed: 2.5,
+    damage: 45,
     attackRange: 4,
     attackRate: 999, // Explodes instead of attacking repeatedly
     scoreValue: 200,
     color: 0xff2200,
     explosionRadius: 8,
-    description: 'Large, slow alien filled with volatile plasma. Approaches the player and detonates, dealing massive area damage. Can also explode on death.',
+    description: 'Large alien filled with volatile plasma. Lumbers toward you, then charges at terrifying speed when close. Detonates on contact.',
     behavior: 'explosive',
   },
   stalker: {
     name: 'Stalker',
-    hp: 40,
-    speed: 9,
-    damage: 25,
+    hp: 50,
+    speed: 10,
+    damage: 30,
     attackRange: 2.5,
-    attackRate: 0.8,
+    attackRate: 0.6,
     scoreValue: 150,
     color: 0x008888,
-    description: 'Semi-invisible predator that stalks from the shadows. Partially cloaked until it strikes with devastating claws.',
+    description: 'Invisible predator that circles its prey before lunging. Nearly undetectable until the killing strike.',
     behavior: 'stealth',
   },
   spitter: {
     name: 'Acid Spitter',
-    hp: 60,
-    speed: 3,
-    damage: 20,
-    attackRange: 50,
-    attackRate: 2.5,
+    hp: 65,
+    speed: 4,
+    damage: 18,
+    attackRange: 45,
+    attackRate: 2.0,
     scoreValue: 175,
     color: 0x88cc00,
-    description: 'Hunched reptilian alien with toxic acid glands. Stays at extreme range and fires high-damage acid projectiles.',
+    description: 'Aggressive reptilian with toxic acid glands. Fires burst volleys of acid that create lingering kill zones. Strafes aggressively between attacks.',
     behavior: 'sniper',
   },
   drone: {
@@ -3702,62 +3702,211 @@ export class Alien {
   }
 
   _bloaterBehavior(delta, dist, toPlayer) {
-    // Slow approach
-    const spd = this.data.speed * delta;
-    this.mesh.position.x += toPlayer.x * spd;
-    this.mesh.position.z += toPlayer.z * spd;
+    // --- Bloater AI: lumbering bomb that accelerates into a terrifying charge ---
+    // Phase 1 (>15m): Slow shamble toward player, weaving slightly
+    // Phase 2 (8-15m): Speed doubles, body swells, glow intensifies — warning
+    // Phase 3 (<8m): Full charge at 3x speed, rapid pulsing, screen-shake-worthy
 
-    // Pulse glow
+    const chargeDist = 8;
+    const warningDist = 15;
+    let speedMul, pulseRate, glowIntensity, swellScale;
+
+    if (dist < chargeDist) {
+      // Phase 3: full charge
+      speedMul = 3.0;
+      pulseRate = 12;
+      glowIntensity = 0.7;
+      swellScale = 1.25;
+    } else if (dist < warningDist) {
+      // Phase 2: warning — ramping up
+      const t = 1 - (dist - chargeDist) / (warningDist - chargeDist); // 0→1
+      speedMul = 1.0 + t * 1.5;
+      pulseRate = 3 + t * 8;
+      glowIntensity = 0.2 + t * 0.4;
+      swellScale = 1.0 + t * 0.2;
+    } else {
+      // Phase 1: slow shamble with slight weave
+      speedMul = 1.0;
+      pulseRate = 3;
+      glowIntensity = 0.2;
+      swellScale = 1.0;
+    }
+
+    const spd = this.data.speed * speedMul * delta;
+    // Shamble weave in phases 1-2 (perpendicular drift)
+    const weave = dist > chargeDist ? Math.sin(this.pulseTime * 2.5) * 1.2 * delta : 0;
+    this.mesh.position.x += toPlayer.x * spd + (-toPlayer.z) * weave;
+    this.mesh.position.z += toPlayer.z * spd + toPlayer.x * weave;
+
+    // Pulse glow — intensifies as bloater charges
     const pulseMat = this.mesh.children[1]; // inner glow sphere
     if (pulseMat && pulseMat.material) {
-      pulseMat.material.opacity = 0.2 + Math.sin(this.pulseTime * 3) * 0.15;
+      pulseMat.material.opacity = glowIntensity + Math.sin(this.pulseTime * pulseRate) * 0.15;
     }
-    // Scale pulse
-    const scale = 1 + Math.sin(this.pulseTime * 2) * 0.05;
-    this.mesh.children[0].scale.set(scale, scale, scale);
+    // Swell body as it charges — telegraphs the impending detonation
+    const pulse = swellScale + Math.sin(this.pulseTime * pulseRate) * 0.05 * swellScale;
+    this.mesh.children[0].scale.set(pulse, pulse, pulse);
   }
 
   _stalkerBehavior(delta, dist, toPlayer, playerPos) {
-    // Rush at player with zigzag, cloaked
-    this._tmpVec.set(-toPlayer.z, 0, toPlayer.x)
-      .multiplyScalar(Math.sin(this.pulseTime * 5) * 2 * delta);
-    const moveSpeed = this.data.speed * delta;
-    this.mesh.position.x += toPlayer.x * moveSpeed + this._tmpVec.x;
-    this.mesh.position.z += toPlayer.z * moveSpeed + this._tmpVec.z;
+    // --- Stalker AI: invisible flanker that circles, then lunges ---
+    // Phase 1 (>20m): Circle strafe while closing in — nearly invisible
+    // Phase 2 (10-20m): Tighten orbit, flickering cloak, picking moment
+    // Phase 3 (<10m): Explosive lunge directly at player at 2x speed
+    // After a lunge miss (>3s in phase 3), resets to circling at 25m
 
-    // Cloaking effect — only write materials when opacity tier changes
-    const cloakOpacity = dist < 8 ? 0.8 : dist < 20 ? 0.3 : 0.1;
-    if (cloakOpacity !== this._lastCloakOpacity) {
-      this._lastCloakOpacity = cloakOpacity;
+    // Initialize stalker state on first call
+    if (this._stalkPhase === undefined) {
+      this._stalkPhase = 'circle';  // 'circle' or 'lunge'
+      this._stalkAngle = Math.random() * Math.PI * 2; // orbit angle
+      this._stalkDir = Math.random() > 0.5 ? 1 : -1;  // CW or CCW
+      this._lungeTimer = 0;
+    }
+
+    const moveSpeed = this.data.speed * delta;
+
+    if (this._stalkPhase === 'circle') {
+      // Orbit around the player while gradually closing distance
+      this._stalkAngle += this._stalkDir * 3.5 * delta; // orbit speed
+
+      // Desired orbit radius — shrinks over time
+      const orbitRadius = dist > 20 ? dist - moveSpeed * 2 : Math.max(10, dist - moveSpeed * 0.5);
+      const targetX = playerPos.x + Math.cos(this._stalkAngle) * orbitRadius;
+      const targetZ = playerPos.z + Math.sin(this._stalkAngle) * orbitRadius;
+
+      // Move toward orbit position
+      const dx = targetX - this.mesh.position.x;
+      const dz = targetZ - this.mesh.position.z;
+      const orbDist = Math.sqrt(dx * dx + dz * dz);
+      if (orbDist > 0.5) {
+        const factor = Math.min(1, moveSpeed * 1.5 / orbDist);
+        this.mesh.position.x += dx * factor;
+        this.mesh.position.z += dz * factor;
+      }
+
+      // Transition to lunge when orbit gets tight enough
+      if (dist < 12) {
+        this._stalkPhase = 'lunge';
+        this._lungeTimer = 0;
+      }
+    } else {
+      // Lunge phase — explosive rush directly at player
+      const lungeSpeed = moveSpeed * 2.2;
+      this.mesh.position.x += toPlayer.x * lungeSpeed;
+      this.mesh.position.z += toPlayer.z * lungeSpeed;
+      this._lungeTimer += delta;
+
+      // If lunge takes too long (missed), disengage and re-circle
+      if (this._lungeTimer > 3.0 && dist > 5) {
+        this._stalkPhase = 'circle';
+        this._stalkAngle = Math.atan2(
+          this.mesh.position.z - playerPos.z,
+          this.mesh.position.x - playerPos.x
+        );
+        // Jump out to orbit distance
+        const retreatSpd = moveSpeed * 1.5;
+        this.mesh.position.x -= toPlayer.x * retreatSpd;
+        this.mesh.position.z -= toPlayer.z * retreatSpd;
+      }
+    }
+
+    // Cloaking — much more aggressive visibility changes
+    let cloakOpacity;
+    if (this._stalkPhase === 'lunge' && dist < 8) {
+      cloakOpacity = 0.9; // Nearly fully visible during lunge strike
+    } else if (this._stalkPhase === 'lunge') {
+      // Flickering during lunge approach
+      cloakOpacity = 0.4 + Math.sin(this.pulseTime * 20) * 0.25;
+    } else if (dist < 15) {
+      // Shimmer at mid-range — unsettling flicker
+      cloakOpacity = 0.15 + Math.sin(this.pulseTime * 8) * 0.1;
+    } else {
+      cloakOpacity = 0.06; // Nearly invisible while circling far out
+    }
+
+    // Quantize to avoid per-frame material writes
+    const quantized = Math.round(cloakOpacity * 20) / 20;
+    if (quantized !== this._lastCloakOpacity) {
+      this._lastCloakOpacity = quantized;
       for (let i = 0, len = this._allMaterials.length; i < len; i++) {
         const mat = this._allMaterials[i];
         mat.transparent = true;
-        mat.opacity = cloakOpacity;
+        mat.opacity = quantized;
       }
     }
   }
 
   _spitterBehavior(delta, dist, toPlayer, playerPos) {
-    // Stay far away, like a sniper
-    const preferredDist = 35;
-    if (dist > preferredDist + 5) {
-      const spd = this.data.speed * delta;
-      this.mesh.position.x += toPlayer.x * spd;
-      this.mesh.position.z += toPlayer.z * spd;
-    } else if (dist < preferredDist - 5) {
-      const spd = -this.data.speed * delta;
-      this.mesh.position.x += toPlayer.x * spd;
-      this.mesh.position.z += toPlayer.z * spd;
-    }
-    // Slow strafe
-    const strafeMag = Math.sin(this.pulseTime * 1.5) * 1.5 * delta;
-    this.mesh.position.x += -toPlayer.z * strafeMag;
-    this.mesh.position.z += toPlayer.x * strafeMag;
+    // --- Spitter AI: aggressive area-denial with burst volleys and repositioning ---
+    // Maintains preferred range (22m) but repositions aggressively between volleys.
+    // Fires 3-round burst volleys with lead prediction on moving targets.
+    // Creates acid pool kill zones that pressure the player's movement.
 
-    // Shoot acid
+    const preferredDist = 22; // Closer than before — more dangerous
+    const tooClose = 12;
+    const tooFar = 30;
+
+    // Initialize spitter state
+    if (this._spitState === undefined) {
+      this._spitState = 'reposition'; // 'reposition' or 'firing'
+      this._spitReposTimer = 0;
+      this._spitBurstCount = 0;
+      this._spitBurstDelay = 0;
+      this._strafeDir = Math.random() > 0.5 ? 1 : -1;
+    }
+
+    const spd = this.data.speed * delta;
+
+    // Movement — aggressive repositioning with evasive strafing
+    if (dist < tooClose) {
+      // Too close — backpedal fast while strafing
+      const retreatSpd = spd * 2.0;
+      this.mesh.position.x -= toPlayer.x * retreatSpd;
+      this.mesh.position.z -= toPlayer.z * retreatSpd;
+      // Hard strafe while retreating
+      const strafeMag = this._strafeDir * 4.0 * delta;
+      this.mesh.position.x += -toPlayer.z * strafeMag;
+      this.mesh.position.z += toPlayer.x * strafeMag;
+    } else if (dist > tooFar) {
+      // Too far — close in at increased speed
+      this.mesh.position.x += toPlayer.x * spd * 1.5;
+      this.mesh.position.z += toPlayer.z * spd * 1.5;
+    } else {
+      // In preferred zone — aggressive lateral strafing to dodge return fire
+      this._spitReposTimer += delta;
+      // Change strafe direction every 1.5-2.5 seconds
+      if (this._spitReposTimer > 1.5 + Math.sin(this.pulseTime) * 0.5) {
+        this._spitReposTimer = 0;
+        this._strafeDir *= -1;
+      }
+      const strafeMag = this._strafeDir * 5.0 * delta;
+      this.mesh.position.x += -toPlayer.z * strafeMag;
+      this.mesh.position.z += toPlayer.x * strafeMag;
+      // Slight drift toward preferred distance
+      if (dist > preferredDist + 3) {
+        this.mesh.position.x += toPlayer.x * spd * 0.5;
+        this.mesh.position.z += toPlayer.z * spd * 0.5;
+      } else if (dist < preferredDist - 3) {
+        this.mesh.position.x -= toPlayer.x * spd * 0.5;
+        this.mesh.position.z -= toPlayer.z * spd * 0.5;
+      }
+    }
+
+    // Attack — burst volleys of 3 acid globs with short delays
     this.attackCooldown -= delta;
-    if (this.attackCooldown <= 0 && dist < this.data.attackRange) {
+    if (this._spitBurstCount > 0) {
+      // Mid-burst: fire remaining shots with short delay
+      this._spitBurstDelay -= delta;
+      if (this._spitBurstDelay <= 0 && dist < this.data.attackRange) {
+        this._spitBurstDelay = 0.3; // 300ms between burst shots
+        this._spitBurstCount--;
+        this._shootAtPlayer(playerPos);
+      }
+    } else if (this.attackCooldown <= 0 && dist < this.data.attackRange) {
+      // Start a new burst volley
       this.attackCooldown = this.data.attackRate;
+      this._spitBurstCount = 2; // 2 more after the first = 3-round burst
+      this._spitBurstDelay = 0.3;
       this._shootAtPlayer(playerPos);
     }
   }
