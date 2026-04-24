@@ -124,17 +124,19 @@ function _mergeAlienGroup(group) {
     const key = mat.uuid;
     let bucket = buckets.get(key);
     if (!bucket) {
-      bucket = { material: mat, items: [] };
+      bucket = { material: mat, items: [], meshes: [] };
       buckets.set(key, bucket);
     }
     // Use local matrix relative to the group
     child.updateMatrix();
     bucket.items.push({ geo, matrix: child.matrix.clone() });
-    toRemove.push(child);
+    bucket.meshes.push(child);
   }
 
   for (const bucket of buckets.values()) {
     if (bucket.items.length < 2) continue;
+    // Only remove originals when we actually create a merged replacement
+    for (const m of bucket.meshes) toRemove.push(m);
 
     let total = 0;
     for (const it of bucket.items) {
